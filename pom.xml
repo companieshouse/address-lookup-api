@@ -23,7 +23,7 @@
         <skip.integration.tests>false</skip.integration.tests>
 
         <!--companies house-->
-        <structured-logging.version>3.0.40</structured-logging.version>
+        <structured-logging.version>3.0.47</structured-logging.version>
 
         <!--sonar configuration-->
         <sonar.token>${CODE_ANALYSIS_TOKEN}</sonar.token>

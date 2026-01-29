@@ -5,7 +5,7 @@ data "vault_generic_secret" "stack_secrets" {
 
 data "vault_generic_secret" "service_secrets" {
   count = local.secrets_required ? 1 : 0
-  path = "applications/${var.aws_profile}/${var.environment}/${local.stack_name}-stack/${local.service_name}"
+  path  = "applications/${var.aws_profile}/${var.environment}/${local.stack_name}-stack/${local.service_name}"
 }
 
 data "aws_kms_key" "kms_key" {
@@ -33,7 +33,7 @@ data "aws_lb" "service_lb" {
 
 data "aws_lb_listener" "service_lb_listener" {
   load_balancer_arn = data.aws_lb.service_lb.arn
-  port = 443
+  port              = 443
 }
 
 data "aws_lb" "secondary_lb" {
@@ -42,7 +42,7 @@ data "aws_lb" "secondary_lb" {
 
 data "aws_lb_listener" "secondary_lb_listener" {
   load_balancer_arn = data.aws_lb.secondary_lb.arn
-  port = 443
+  port              = 443
 }
 
 data "aws_lb" "internal_lb" {
@@ -51,7 +51,7 @@ data "aws_lb" "internal_lb" {
 
 data "aws_lb_listener" "internal_lb_listener" {
   load_balancer_arn = data.aws_lb.internal_lb.arn
-  port = 443
+  port              = 443
 }
 
 data "aws_ecs_cluster" "ecs_cluster" {

@@ -147,7 +147,7 @@ variable "log_level" {
 }
 variable "address_lookup_service_version" {
   type        = string
-  description = "The version of the address-lookup-service container to run."
+  description = "The version of the address-lookup-api container to run."
 }
 variable "eric_version" {
   type        = string

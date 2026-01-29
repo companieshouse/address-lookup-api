@@ -30,7 +30,7 @@ class AddressLookupApplicationIT {
 
     @Test
     void shouldReturn200FromGetHealthEndpoint() throws Exception {
-        this.mockMvc.perform(get("/address-lookup-service/healthcheck")
+        this.mockMvc.perform(get("/address-lookup-api/healthcheck")
                         .header(REQUEST_ID.value(), "request_id"))
                 .andDo(print())
                 .andExpect(status().isOk())

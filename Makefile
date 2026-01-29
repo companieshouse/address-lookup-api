@@ -1,4 +1,4 @@
-artifact_name       := address-lookup-service
+artifact_name       := address-lookup-api
 version             := "unversioned"
 
 .PHONY: all

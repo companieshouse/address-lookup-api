@@ -1,10 +1,10 @@
-# address-lookup-service
+# address-lookup-api
 Provides address lookup and validation to be used by CHIPS and frontend CH services. Addresses to be validated using a live API provided by Ordinance Survey, with a cache in a Postgres database and a backup solution of data stored in the Postgres db.
 
 ## Building and Running Locally using Docker
 
 1. Clone [Docker CHS Development](https://github.com/companieshouse/docker-chs-development) and follow the steps in the README.
-2. Enable the service using the command `chs-dev services enable address-lookup-service`
+2. Enable the service using the command `chs-dev services enable address-lookup-api`
 3. Boot up the services' containers on docker using tilt `chs-dev up`.
 
 ## Building the docker image

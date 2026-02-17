@@ -16,14 +16,16 @@
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
-        <spring.boot.version>3.5.9</spring.boot.version>
-        <jib-maven-plugin.version>3.4.6</jib-maven-plugin.version>
+        <spring.boot.version>3.5.10</spring.boot.version>
+        <jib-maven-plugin.version>3.5.1</jib-maven-plugin.version>
+        <commons-lang-plugin.version>3.20.0</commons-lang-plugin.version>
+        <tomcat-embed-plugin.version>11.0.15</tomcat-embed-plugin.version>
 
         <skip.unit.tests>false</skip.unit.tests>
         <skip.integration.tests>false</skip.integration.tests>
 
         <!--companies house-->
-        <structured-logging.version>3.0.47</structured-logging.version>
+        <structured-logging.version>3.0.49</structured-logging.version>
 
         <!--sonar configuration-->
         <sonar.token>${CODE_ANALYSIS_TOKEN}</sonar.token>
@@ -82,13 +84,13 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>3.20.0</version>
+            <version>${commons-lang-plugin.version}</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.tomcat.embed</groupId>
             <artifactId>tomcat-embed-core</artifactId>
-            <version>11.0.15</version>
+            <version>${tomcat-embed-plugin.version}</version>
         </dependency>
 
         <dependency>

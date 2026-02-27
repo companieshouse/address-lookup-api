@@ -12,7 +12,7 @@ locals {
   lb_listener_paths = [
     "/address-lookup-api/*"
   ]
-  healthcheck_path           = "/healthcheck" # healthcheck path for address-lookup-api
+  healthcheck_path           = "/address-lookup-api/healthcheck" # healthcheck path for address-lookup-api
   healthcheck_matcher        = "200"
   vpc_name                   = local.stack_secrets["vpc_name"]
   s3_config_bucket           = data.vault_generic_secret.shared_s3.data["config_bucket_name"]

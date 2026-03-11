@@ -41,7 +41,7 @@ module "ecs-service" {
   # Docker container details
   docker_registry   = var.docker_registry
   docker_repo       = local.docker_repo
-  container_version = var.address_lookup_service_version
+  container_version = var.address_lookup_api_version
   container_port    = local.container_port
 
   # Service configuration

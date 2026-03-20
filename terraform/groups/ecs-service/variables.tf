@@ -145,7 +145,7 @@ variable "log_level" {
   type        = string
   description = "The log level for services to use: trace, debug, info or error"
 }
-variable "address_lookup_service_version" {
+variable "address_lookup_api_version" {
   type        = string
   description = "The version of the address-lookup-api container to run."
 }

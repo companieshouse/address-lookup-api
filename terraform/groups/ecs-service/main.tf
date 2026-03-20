@@ -29,7 +29,7 @@ module "ecs-service" {
   task_execution_role_arn = data.aws_iam_role.ecs_cluster_iam_role.arn
 
   # Load balancer configuration
-  lb_listener_arn           = data.aws_lb_listener.internal_lb_listener
+  lb_listener_arn           = data.aws_lb_listener.internal_lb_listener.arn
   lb_listener_rule_priority = local.lb_listener_rule_priority
   lb_listener_paths         = local.lb_listener_paths
 
@@ -41,7 +41,7 @@ module "ecs-service" {
   # Docker container details
   docker_registry   = var.docker_registry
   docker_repo       = local.docker_repo
-  container_version = var.address_lookup_service_version
+  container_version = var.address_lookup_api_version
   container_port    = local.container_port
 
   # Service configuration

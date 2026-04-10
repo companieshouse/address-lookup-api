@@ -18,7 +18,7 @@
         <maven.compiler.target>21</maven.compiler.target>
         <spring.boot.version>3.5.11</spring.boot.version>
         <commons-lang-plugin.version>3.20.0</commons-lang-plugin.version>
-        <tomcat-embed-plugin.version>11.0.18</tomcat-embed-plugin.version>
+        <tomcat-embed-plugin.version>11.0.21</tomcat-embed-plugin.version>
         <jib-maven-plugin.version>3.5.1</jib-maven-plugin.version>
 
         <skip.unit.tests>false</skip.unit.tests>

@@ -13,9 +13,9 @@ data "aws_subnets" "data" {
 }
 
 data "vault_generic_secret" "aurora" {
-  path  = "applications/${var.aws_profile}/${var.environment}/${local.stack_name}-stack/${local.service_name}"
+  path = "applications/${var.aws_profile}/${var.environment}/${local.stack_name}-stack/${local.service_name}"
 }
 
 data "vault_generic_secret" "stack_secrets" {
-  path  = "applications/${var.aws_profile}/${var.environment}/${local.stack_name}-stack"
+  path = "applications/${var.aws_profile}/${var.environment}/${local.stack_name}-stack"
 }

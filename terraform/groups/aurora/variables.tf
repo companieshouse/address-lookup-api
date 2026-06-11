@@ -9,13 +9,13 @@ variable "environment" {
 }
 
 variable "aws_region" {
-    type = string
-    description = "The region in which to provision resources"
-    default = "eu-west-2"
+  type        = string
+  description = "The region in which to provision resources"
+  default     = "eu-west-2"
 }
 
 variable "instances" {
-  type = map(object({}))
+  type        = map(object({}))
   description = "Map of instance configurations for the Aurora cluster"
   default = {
     primary = {}

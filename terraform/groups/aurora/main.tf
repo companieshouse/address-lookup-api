@@ -20,11 +20,11 @@ terraform {
 module "aurora_postgres" {
   source = "git@github.com:companieshouse/terraform-modules//aws/aurora?ref=1.0.386"
 
-  service = local.service_name
-  environment = var.environment
-  engine = "aurora-postgresql"
+  service        = local.service_name
+  environment    = var.environment
+  engine         = "aurora-postgresql"
   engine_version = "15.3"
-  vpc_id = data.aws_vpc.vpc.id
+  vpc_id         = data.aws_vpc.vpc.id
 
   master_username = local.master_username
   master_password = local.master_password
@@ -32,8 +32,8 @@ module "aurora_postgres" {
 
   source_code_url = "https://github.com/companieshouse/address-lookup-api.git"
   platform_owner  = "development"
-  group = "aurora"
+  group           = "aurora"
 
   subnet_ids = data.aws_subnets.data.ids
-  instances = var.instances
+  instances  = var.instances
 }

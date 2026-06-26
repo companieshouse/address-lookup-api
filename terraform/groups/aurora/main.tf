@@ -18,7 +18,7 @@ terraform {
 }
 
 module "aurora_postgres" {
-  source = "git@github.com:companieshouse/terraform-modules//aws/aurora?ref=1.0.386"
+  source = "git@github.com:companieshouse/terraform-modules//aws/aurora?ref=1.0.394"
 
   service        = local.service_name
   environment    = var.environment

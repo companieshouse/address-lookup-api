@@ -1,5 +1,5 @@
 locals {
-  service_name = "address-rds"
+  service_name = "addressdb"
   stack_name   = "common-services"
 
   data_subnet_pattern = data.vault_generic_secret.aurora.data["data_subnet_pattern"]

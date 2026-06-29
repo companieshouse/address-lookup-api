@@ -7,18 +7,18 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = ">= 5.0, < 6.0"
+      version = ">= 6.0, < 7.0"
     }
     vault = {
       source  = "hashicorp/vault"
-      version = ">= 4.0, < 5.0"
+      version = ">= 5.0, < 6.0"
     }
   }
   backend "s3" {}
 }
 
 module "aurora_postgres" {
-  source = "git@github.com:companieshouse/terraform-modules//aws/aurora?ref=1.0.394"
+  source = "git@github.com:companieshouse/terraform-modules//aws/aurora?ref=1.0.395"
 
   service        = local.service_name
   environment    = var.environment
@@ -29,11 +29,22 @@ module "aurora_postgres" {
   master_username = local.master_username
   master_password = local.master_password
 
-
-  source_code_url = "https://github.com/companieshouse/address-lookup-api.git"
-  platform_owner  = "development"
-  group           = "aurora"
-
   subnet_ids = data.aws_subnets.data.ids
   instances  = var.instances
+
+  iac_tags   = module.iac_tags.tags
+  owner_tags = module.owner_tags.tags
+}
+
+module "iac_tags" {
+  source = "git@github.com:companieshouse/terraform-modules//aws/tagging/iac?ref=1.0.395"
+
+  group           = "aurora"
+  source_code_url = "https://github.com/companieshouse/address-lookup-api.git"
+}
+
+module "owner_tags" {
+  source = "git@github.com:companieshouse/terraform-modules//aws/tagging/owner?ref=1.0.395"
+
+  platform_owner = "development"
 }

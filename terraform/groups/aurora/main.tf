@@ -33,7 +33,7 @@ module "aurora_postgres" {
   subnet_ids = data.aws_subnets.data.ids
   instances  = var.instances
 
-  maintenance_day = "sun"
+  maintenance_day        = "sun"
   maintenance_start_hour = 0
 
   iac_tags   = module.iac_tags.tags

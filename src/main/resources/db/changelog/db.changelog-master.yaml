@@ -1,0 +1,918 @@
+databaseChangeLog:
+  - changeSet:
+      id: create-tables-address-lookup
+      author: ksayle
+      changes:
+        - createTable:
+            tableName: add_gb_builtaddress
+            columns:
+              - column:
+                  name: uprn
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    - constraint:
+                        primaryKey: true,
+                        primaryKeyName: "add_gb_builtaddress_pk"
+                        nullable: false
+              - column:
+                  name: version_date
+                  type: DATE
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: version_available_from_date
+                  type: TIMESTAMP
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: version_available_to_date
+                  type: TIMESTAMP
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: change_type
+                  type: VARCHAR2(50)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: theme
+                  type: VARCHAR2(40)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: description
+                  type: VARCHAR2(50)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: organisation_name
+                  type: VARCHAR2(100)
+              - column:
+                  name: po_box_number
+                  type: VARCHAR2(13)
+              - column:
+                  name: subname
+                  type: VARCHAR2(500)
+              - column:
+                  name: name
+                  type: VARCHAR2(110)
+              - column:
+                  name: number
+                  type: VARCHAR2(13)
+              - column:
+                  name: street_name
+                  type: VARCHAR2(100)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: locality
+                  type: VARCHAR2(35)
+              - column:
+                  name: town_name
+                  type: VARCHAR2(35)
+              - column:
+                  name: island_name
+                  type: VARCHAR2(50)
+              - column:
+                  name: postcode
+                  type: VARCHAR2(8)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: full_address
+                  type: VARCHAR2(1000)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: country
+                  type: VARCHAR2(16)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: alternate_language
+                  type: VARCHAR2(3)
+              - column:
+                  name: alternate_language_subname
+                  type: VARCHAR2(500)
+              - column:
+                  name: alternate_name
+                  type: VARCHAR2(110)
+              - column:
+                  name: alternate_number
+                  type: VARCHAR2(13)
+              - column:
+                  name: alternate_street_name
+                  type: VARCHAR2(100)
+              - column:
+                  name: alternate_locality
+                  type: VARCHAR2(35)
+              - column:
+                  name: alternate_town_name
+                  type: VARCHAR2(35)
+              - column:
+                  name: alternate_island_name
+                  type: VARCHAR2(50)
+              - column:
+                  name: alternate_postcode
+                  type: VARCHAR2(8)
+              - column:
+                  name: alternate_full_address
+                  type: VARCHAR2(100)
+              - column:
+                  name: floor_level
+                  type: VARCHAR2(30)
+              - column:
+                  name: lowest_floor_level
+                  type: NUMERIC(3,1)
+              - column:
+                  name: highest_floor_level
+                  type: NUMERIC(3,1)
+              - column:
+                  name: classification_code
+                  type: VARCHAR2(6)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: classification_description
+                  type: VARCHAR2(230)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: primary_classification_description
+                  type: VARCHAR2(120)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: secondary_classification_description
+                  type: VARCHAR2(120)
+              - column:
+                  name: tertiary_classification_description
+                  type: VARCHAR2(120)
+              - column:
+                  name: quaternary_classification_description
+                  type: VARCHAR2(120)
+              - column:
+                  name: build_status
+                  type: VARCHAR2(18)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: build_status_date
+                  type: DATE
+              - column:
+                  name: address_status
+                  type: VARCHAR2(11)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: postcode_source
+                  type: VARCHAR2(148)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: parent_uprn
+                  type: BIGINT
+              - column:
+                  name: root_uprn
+                  type: BIGINT
+              - column:
+                  name: hierarchy_level
+                  type: INTEGER
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: usrn
+                  type: INTEGER
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: usrn_match_indicator
+                  type: VARCHAR2(17)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: local_custodian_code
+                  type: INTEGER
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: local_custodian_description
+                  type: VARCHAR2(35)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: lower_tier_local_authority_gss_code
+                  type: VARCHAR2(9)
+              - column:
+                  name: easting
+                  type: NUMERIC(8,2)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: northing
+                  type: NUMERIC(8,2)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: latitude
+                  type: NUMERIC(9,7)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: longitude
+                  type: NUMERIC(9,7)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: location
+                  type: VARCHAR2(30)
+              - column:
+                  name: positional_accuracy
+                  type: VARCHAR2(25)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: effective_start_date
+                  type: DATE
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: effective_end_date
+                  type: DATE
+        - createTable:
+            tableName: add_isl_builtaddress
+            columns:
+              - column:
+                  name: uprn
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    - constraint:
+                        primaryKey: true,
+                        primaryKeyName: "add_isl_builtaddress_pk"
+                        nullable: false
+              - column:
+                  name: version_date
+                  type: DATE
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: version_available_from_date
+                  type: TIMESTAMP
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: version_available_to_date
+                  type: TIMESTAMP
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: change_type
+                  type: VARCHAR2(50)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: theme
+                  type: VARCHAR2(40)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: description
+                  type: VARCHAR2(50)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: organisation_name
+                  type: VARCHAR2(100)
+              - column:
+                  name: po_box_number
+                  type: VARCHAR2(13)
+              - column:
+                  name: subname
+                  type: VARCHAR2(500)
+              - column:
+                  name: name
+                  type: VARCHAR2(110)
+              - column:
+                  name: number
+                  type: VARCHAR2(13)
+              - column:
+                  name: street_name
+                  type: VARCHAR2(100)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: locality
+                  type: VARCHAR2(35)
+              - column:
+                  name: town_name
+                  type: VARCHAR2(35)
+              - column:
+                  name: island_name
+                  type: VARCHAR2(50)
+              - column:
+                  name: postcode
+                  type: VARCHAR2(8)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: full_address
+                  type: VARCHAR2(1000)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: country
+                  type: VARCHAR2(16)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: alternate_language
+                  type: VARCHAR2(3)
+              - column:
+                  name: alternate_language_subname
+                  type: VARCHAR2(500)
+              - column:
+                  name: alternate_name
+                  type: VARCHAR2(110)
+              - column:
+                  name: alternate_number
+                  type: VARCHAR2(13)
+              - column:
+                  name: alternate_street_name
+                  type: VARCHAR2(100)
+              - column:
+                  name: alternate_locality
+                  type: VARCHAR2(35)
+              - column:
+                  name: alternate_town_name
+                  type: VARCHAR2(35)
+              - column:
+                  name: alternate_island_name
+                  type: VARCHAR2(50)
+              - column:
+                  name: alternate_postcode
+                  type: VARCHAR2(8)
+              - column:
+                  name: alternate_full_address
+                  type: VARCHAR2(100)
+              - column:
+                  name: floor_level
+                  type: VARCHAR2(30)
+              - column:
+                  name: lowest_floor_level
+                  type: NUMERIC(3,1)
+              - column:
+                  name: highest_floor_level
+                  type: NUMERIC(3,1)
+              - column:
+                  name: classification_code
+                  type: VARCHAR2(6)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: classification_description
+                  type: VARCHAR2(230)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: primary_classification_description
+                  type: VARCHAR2(120)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: secondary_classification_description
+                  type: VARCHAR2(120)
+              - column:
+                  name: tertiary_classification_description
+                  type: VARCHAR2(120)
+              - column:
+                  name: quaternary_classification_description
+                  type: VARCHAR2(120)
+              - column:
+                  name: build_status
+                  type: VARCHAR2(18)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: build_status_date
+                  type: DATE
+              - column:
+                  name: address_status
+                  type: VARCHAR2(11)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: postcode_source
+                  type: VARCHAR2(148)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: parent_uprn
+                  type: BIGINT
+              - column:
+                  name: root_uprn
+                  type: BIGINT
+              - column:
+                  name: hierarchy_level
+                  type: INTEGER
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: usrn
+                  type: INTEGER
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: usrn_match_indicator
+                  type: VARCHAR2(17)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: local_custodian_code
+                  type: INTEGER
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: local_custodian_description
+                  type: VARCHAR2(35)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: lower_tier_local_authority_gss_code
+                  type: VARCHAR2(9)
+              - column:
+                  name: easting
+                  type: NUMERIC(8,2)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: northing
+                  type: NUMERIC(8,2)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: latitude
+                  type: NUMERIC(9,7)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: longitude
+                  type: NUMERIC(9,7)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: location
+                  type: VARCHAR2(30)
+              - column:
+                  name: positional_accuracy
+                  type: VARCHAR2(25)
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: effective_start_date
+                  type: DATE
+                  constraints:
+                    - constraint:
+                        nullable: false
+              - column:
+                  name: effective_end_date
+                  type: DATE
+        -  createTable:
+             tableName: add_gb_royalmailaddress
+             columns:
+               - column:
+                   name: udprn
+                   type: BIGINT
+                   autoIncrement: true
+                   constraints:
+                     - constraint:
+                         primaryKey: true,
+                         primaryKeyName: "add_gb_royalmailaddress_pk"
+                         nullable: false
+               - column:
+                   name: version_date
+                   type: DATE
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: version_available_from_date
+                   type: TIMESTAMP
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: version_available_to_date
+                   type: TIMESTAMP
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: change_type
+                   type: VARCHAR2(50)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: theme
+                   type: VARCHAR2(40)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: description
+                   type: VARCHAR2(50)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: organisation_name
+                   type: VARCHAR2(60)
+               - column:
+                   name: department_name
+                   type: VARCHAR2(60)
+               - column:
+                   name: sub_building_name
+                   type: VARCHAR2(30)
+               - column:
+                   name: building_name
+                   type: VARCHAR2(50)
+               - column:
+                   name: building_number
+                   type: INTEGER
+               - column:
+                   name: dependent_thoroughfare
+                   type: VARCHAR2(80)
+               - column:
+                   name: thoroughfare
+                   type: VARCHAR2(80)
+               - column:
+                   name: double_dependent_locality
+                   type: VARCHAR2(35)
+               - column:
+                   name: dependent_locality
+                   type: VARCHAR2(35)
+               - column:
+                   name: post_town
+                   type: VARCHAR2(30)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: postcode
+                   type: VARCHAR2(8)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: postcode_type
+                   type: VARCHAR2(10)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: delivery_point_suffix
+                   type: VARCHAR2(2)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: welsh_dependent_thoroughfare
+                   type: VARCHAR2(80)
+               - column:
+                   name: welsh_thoroughfare
+                   type: VARCHAR2(80)
+               - column:
+                   name: welsh_double_dependent_locality
+                   type: VARCHAR2(35)
+               - column:
+                   name: welsh_dependent_locality
+                   type: VARCHAR2(35)
+               - column:
+                   name: welsh_post_town
+                   type: VARCHAR2(30)
+               - column:
+                   name: po_box_number
+                   type: VARCHAR2(13)
+               - column:
+                   name: update_date
+                   type: DATE
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: entry_date
+                   type: DATE
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: easting
+                   type: NUMERIC(8,2)
+               - column:
+                   name: northing
+                   type: NUMERIC(8,2)
+               - column:
+                   name: latitude
+                   type: NUMERIC(9,7)
+               - column:
+                   name: longitude
+                   type: NUMERIC(9,7)
+               - column:
+                   name: location
+                   type: VARCHAR2(30)
+               - column:
+                   name: positional_accuracy
+                   type: VARCHAR2(25)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: geometry_allocation_method
+                   type: VARCHAR2(25)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: unmatched_reason
+                   type: VARCHAR2(100)
+               - column:
+                   name: unmatched_reason_date
+                   type: DATE
+               - column:
+                   name: uprn
+                   type: BIGINT
+                   constraints:
+                     - constraint:
+                         nullable: false
+                         foreignKeyName: royalmail_built_fk
+                         references: add_gb_builtaddress(uprn)
+               - column:
+                   name: matched_address_feature_type
+                   type: VARCHAR2(25)
+               - column:
+                   name: match_type
+                   type: VARCHAR2(20)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: match_date
+                   type: DATE
+               - column:
+                   name: match_method
+                   type: VARCHAR2(10)
+               - column:
+                   name: matching_organisation
+                   type: VARCHAR2(25)
+        -  createTable:
+             tableName: add_isl_royalmailaddress
+             columns:
+               - column:
+                   name: udprn
+                   type: BIGINT
+                   autoIncrement: true
+                   constraints:
+                     - constraint:
+                         primaryKey: true,
+                         primaryKeyName: "add_isl_royalmailaddress_pk"
+                         nullable: false
+               - column:
+                   name: version_date
+                   type: DATE
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: version_available_from_date
+                   type: TIMESTAMP
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: version_available_to_date
+                   type: TIMESTAMP
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: change_type
+                   type: VARCHAR2(50)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: theme
+                   type: VARCHAR2(40)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: description
+                   type: VARCHAR2(50)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: organisation_name
+                   type: VARCHAR2(60)
+               - column:
+                   name: department_name
+                   type: VARCHAR2(60)
+               - column:
+                   name: sub_building_name
+                   type: VARCHAR2(30)
+               - column:
+                   name: building_name
+                   type: VARCHAR2(50)
+               - column:
+                   name: building_number
+                   type: INTEGER
+               - column:
+                   name: dependent_thoroughfare
+                   type: VARCHAR2(80)
+               - column:
+                   name: thoroughfare
+                   type: VARCHAR2(80)
+               - column:
+                   name: double_dependent_locality
+                   type: VARCHAR2(35)
+               - column:
+                   name: dependent_locality
+                   type: VARCHAR2(35)
+               - column:
+                   name: post_town
+                   type: VARCHAR2(30)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: postcode
+                   type: VARCHAR2(8)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: postcode_type
+                   type: VARCHAR2(10)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: delivery_point_suffix
+                   type: VARCHAR2(2)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: welsh_dependent_thoroughfare
+                   type: VARCHAR2(80)
+               - column:
+                   name: welsh_thoroughfare
+                   type: VARCHAR2(80)
+               - column:
+                   name: welsh_double_dependent_locality
+                   type: VARCHAR2(35)
+               - column:
+                   name: welsh_dependent_locality
+                   type: VARCHAR2(35)
+               - column:
+                   name: welsh_post_town
+                   type: VARCHAR2(30)
+               - column:
+                   name: po_box_number
+                   type: VARCHAR2(13)
+               - column:
+                   name: update_date
+                   type: DATE
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: entry_date
+                   type: DATE
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: easting
+                   type: NUMERIC(8,2)
+               - column:
+                   name: northing
+                   type: NUMERIC(8,2)
+               - column:
+                   name: latitude
+                   type: NUMERIC(9,7)
+               - column:
+                   name: longitude
+                   type: NUMERIC(9,7)
+               - column:
+                   name: location
+                   type: VARCHAR2(30)
+               - column:
+                   name: positional_accuracy
+                   type: VARCHAR2(25)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: geometry_allocation_method
+                   type: VARCHAR2(25)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: unmatched_reason
+                   type: VARCHAR2(100)
+               - column:
+                   name: unmatched_reason_date
+                   type: DATE
+               - column:
+                   name: uprn
+                   type: BIGINT
+                   constraints:
+                     - constraint:
+                         nullable: false
+                         foreignKeyName: royalmail_built_fk
+                         references: add_isl_builtaddress(uprn)
+               - column:
+                   name: matched_address_feature_type
+                   type: VARCHAR2(25)
+               - column:
+                   name: match_type
+                   type: VARCHAR2(20)
+                   constraints:
+                     - constraint:
+                         nullable: false
+               - column:
+                   name: match_date
+                   type: DATE
+               - column:
+                   name: match_method
+                   type: VARCHAR2(10)
+               - column:
+                   name: matching_organisation
+                   type: VARCHAR2(25)
+        - rollback:
+            - dropTable:
+                - tableName: add_gb_builtaddress
+            - dropTable:
+                - tableName: add_isl_builtaddress
+            - dropTable:
+                - tableName: add_gb_royalmailaddress
+            - dropTable:
+                - tableName: add_isl_royalmailaddress

@@ -9,7 +9,7 @@
     </parent>
 
     <artifactId>address-lookup-api</artifactId>
-    <version>latest</version>
+    <version>unversioned</version>
     <name>address-lookup-api</name>
     <packaging>jar</packaging>
 
@@ -77,6 +77,10 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>uk.gov.companieshouse</groupId>
@@ -108,6 +112,18 @@
             <scope>test</scope>
         </dependency>
 
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- H2 In-Memory Database -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>2.2.224</version> <!-- Use the latest version -->
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <repositories>
@@ -155,6 +171,18 @@
                 <groupId>org.sonarsource.scanner.maven</groupId>
                 <artifactId>sonar-maven-plugin</artifactId>
                 <version>${sonar-maven-plugin.version}</version>
+            </plugin>
+            <plugin>
+                <groupId>org.liquibase</groupId>
+                <artifactId>liquibase-maven-plugin</artifactId>
+                <version>4.23.2</version>
+                <configuration>
+                    <changeLogFile>src/main/resources/db/changelog/db.changelog-master.yaml</changeLogFile>
+                    <url>jdbc:h2:mem:testdb</url>
+                    <username>sa</username>
+                    <password>sa</password>
+                    <driver>org.h2.Driver</driver>
+                </configuration>
             </plugin>
         </plugins>
     </build>

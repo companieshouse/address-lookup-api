@@ -41,10 +41,6 @@ public class AddressLookupService {
                 .map(legacyAddressMapper::toLegacyAddressWithoutPremise);
     }
 
-    // private String normalizePostcode(String postcode) {
-    //     return postcode.replaceAll("\\s+", "").toUpperCase(Locale.ROOT);
-    // }
-
     private List<RoyalMailAddressLookup> findByPostcode(String postcode) {
         return royalMailAddressLookupRepository.findByNormalizedPostcode(postcode);
     }

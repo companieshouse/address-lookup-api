@@ -24,27 +24,23 @@ public class AddressLookupController {
 
     @GetMapping("/addresses")
     public AddressLookupResponse lookupAddress(@RequestParam("postcode") String postcode) {
-        validatePostcode(postcode);
         List<RoyalMailAddressDto> addresses = addressLookupService.lookupByPostcode(postcode);
         return new AddressLookupResponse(postcode, addresses.size(), addresses);
     }
 
     @GetMapping("/multiple-addresses")
     public List<LegacyAddress> lookupMultipleAddresses(@RequestParam("postcode") String postcode) {
-        validatePostcode(postcode);
+        if (postcode.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Address not found");
+        }
+
         return addressLookupService.lookupLegacyAddressesByPostcode(postcode);
     }
 
     @GetMapping("/postcode")
     public LegacyAddress lookupPostcode(@RequestParam("postcode") String postcode) {
-        validatePostcode(postcode);
         return addressLookupService.lookupLegacyAddressByPostcode(postcode)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Address not found"));
     }
 
-    private void validatePostcode(String postcode) {
-        if (postcode == null || postcode.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Postcode is required");
-        }
-    }
 }

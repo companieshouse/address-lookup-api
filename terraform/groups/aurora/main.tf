@@ -13,6 +13,10 @@ terraform {
       source  = "hashicorp/vault"
       version = ">= 5.0, < 6.0"
     }
+    postgresql = {
+      source = "cyrilgdn/postgresql"
+      version = "~> 1.27"
+    }
   }
   backend "s3" {}
 }
@@ -38,6 +42,25 @@ module "aurora_postgres" {
 
   iac_tags   = module.iac_tags.tags
   owner_tags = module.owner_tags.tags
+}
+
+provider postgresql {
+  host             = module.aurora_postgres.cluster_endpoint
+  port             = 5432
+  database         = local.database_name
+  username         = local.master_username
+  password         = local.master_password
+  sslmode          = "require"
+  connect_timeout  = 30
+  expected_version = "18.3"
+}
+
+resource "postgresql_extension" "postgis" {
+  database = local.database_name
+  name     = "postgis"
+  version  = "3.6.1"
+
+  depends_on = [module.aurora_postgres]
 }
 
 module "iac_tags" {

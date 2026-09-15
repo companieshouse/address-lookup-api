@@ -13,10 +13,6 @@ terraform {
       source  = "hashicorp/vault"
       version = ">= 5.0, < 6.0"
     }
-    postgresql = {
-      source = "cyrilgdn/postgresql"
-      version = "~> 1.27"
-    }
   }
   backend "s3" {}
 }
@@ -34,6 +30,19 @@ module "aurora_postgres" {
   master_username = local.master_username
   master_password = local.master_password
 
+  cluster_parameter_group_settings = [
+    {
+      name         = "rds.force_ssl"
+      value        = "1"
+      apply_method = "pending-reboot"
+    },
+    {
+      name         = "rds.allowed_extensions"
+      value        = "postgis"
+      apply_method = "immediate"
+    }
+  ]
+
   subnet_ids = data.aws_subnets.data.ids
   instances  = var.instances
 
@@ -42,26 +51,6 @@ module "aurora_postgres" {
 
   iac_tags   = module.iac_tags.tags
   owner_tags = module.owner_tags.tags
-}
-
-provider postgresql {
-  host             = module.aurora_postgres.cluster_endpoint
-  port             = 5432
-  database         = local.database_name
-  username         = local.master_username
-  password         = local.master_password
-  superuser        = false
-  sslmode          = "require"
-  connect_timeout  = 30
-  expected_version = "18.3"
-}
-
-resource "postgresql_extension" "postgis" {
-  database = local.database_name
-  name     = "postgis"
-  version  = "3.6.1"
-
-  depends_on = [module.aurora_postgres]
 }
 
 module "iac_tags" {

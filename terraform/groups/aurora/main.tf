@@ -50,6 +50,7 @@ provider postgresql {
   database         = local.database_name
   username         = local.master_username
   password         = local.master_password
+  superuser        = false
   sslmode          = "require"
   connect_timeout  = 30
   expected_version = "18.3"

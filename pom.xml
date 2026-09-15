@@ -19,6 +19,7 @@
             <spring.boot.version>4.1.1</spring.boot.version>
             <spring-framework.version>6.2.20</spring-framework.version>
             <spring-data-bom.version>2025.0.14</spring-data-bom.version>
+        <tomcat.version>11.0.25</tomcat.version>
         <commons-lang-plugin.version>3.20.0</commons-lang-plugin.version>
         <jackson.version>2.22.1</jackson.version>
             <log4j.version>2.25.5</log4j.version>
@@ -47,6 +48,26 @@
                 <version>${spring.boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-core</artifactId>
+                <version>${tomcat.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-el</artifactId>
+                <version>${tomcat.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-websocket</artifactId>
+                <version>${tomcat.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat</groupId>
+                <artifactId>tomcat-annotations-api</artifactId>
+                <version>${tomcat.version}</version>
             </dependency>
             <dependency>
                     <groupId>com.fasterxml.jackson.core</groupId>

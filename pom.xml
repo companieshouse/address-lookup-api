@@ -17,11 +17,10 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
             <spring.boot.version>3.5.16</spring.boot.version>
+            <spring-framework.version>6.2.20</spring-framework.version>
+            <spring-data-bom.version>2025.0.14</spring-data-bom.version>
         <commons-lang-plugin.version>3.20.0</commons-lang-plugin.version>
-            <tomcat-embed-plugin.version>11.0.25</tomcat-embed-plugin.version>
-        <jackson.version>2.22.0</jackson.version>
-        <jackson.core.version>2.22.0</jackson.core.version>
-            <jackson.annotations.version>2.22</jackson.annotations.version>
+        <jackson.version>2.22.1</jackson.version>
             <log4j.version>2.25.5</log4j.version>
             <postgresql.version>42.7.13</postgresql.version>
         <jib-maven-plugin.version>3.5.1</jib-maven-plugin.version>
@@ -51,13 +50,8 @@
             </dependency>
             <dependency>
                     <groupId>com.fasterxml.jackson.core</groupId>
-                    <artifactId>jackson-annotations</artifactId>
-                <version>${jackson.annotations.version}</version>
-            </dependency>
-            <dependency>
-                    <groupId>com.fasterxml.jackson.core</groupId>
                     <artifactId>jackson-core</artifactId>
-                <version>${jackson.core.version}</version>
+                <version>${jackson.version}</version>
                 </dependency>
                 <dependency>
                     <groupId>com.fasterxml.jackson.core</groupId>
@@ -142,18 +136,6 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
             <version>${commons-lang-plugin.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.tomcat.embed</groupId>
-                <artifactId>tomcat-embed-core</artifactId>
-            <version>${tomcat-embed-plugin.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.tomcat.embed</groupId>
-            <artifactId>tomcat-embed-websocket</artifactId>
-            <version>${tomcat-embed-plugin.version}</version>
         </dependency>
 
         <dependency>

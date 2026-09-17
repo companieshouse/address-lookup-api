@@ -25,7 +25,7 @@ test: test-integration test-unit
 .PHONY: test-unit
 test-unit:
 	@# Help: Run unit tests
-	mvn test -Dskip.integration.tests=true
+	mvn verify -Dskip.integration.tests=true
 
 .PHONY: test-integration
 test-integration:

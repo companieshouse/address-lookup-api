@@ -35,7 +35,7 @@
 
         <!--sonar configuration-->
         <sonar.coverage.jacoco.xmlReportPaths>
-            ${project.build.directory}/site/jacoco/jacoco.xml
+            ${project.build.directory}/site/jacoco/jacoco.xml,${project.basedir}/../source-code/target/site/jacoco/jacoco.xml
         </sonar.coverage.jacoco.xmlReportPaths>
         <sonar.jacoco.reports>${project.build.directory}/site</sonar.jacoco.reports>
     </properties>

@@ -51,6 +51,9 @@ CREATE TABLE add_gb_royalmailaddress (
     PRIMARY KEY (udprn)
 );
 
+--reollback DROP TABLE add_gb_royalmailaddress;
+
+
 --changeset address-lookup-api:003-create-add-gb-builtaddress
 CREATE TABLE add_gb_builtaddress (
     uprn bigint not null,
@@ -113,6 +116,9 @@ CREATE TABLE add_gb_builtaddress (
     PRIMARY KEY (uprn)
 );
 
+--rollback DROP TABLE add_gb_builtaddress;
+
+
 --changeset address-lookup-api:004-create-add-isl-royalmailaddress
 CREATE TABLE add_isl_royalmailaddress (
     udprn integer not null,
@@ -160,6 +166,9 @@ CREATE TABLE add_isl_royalmailaddress (
     matchingorganisation varchar(25),
     PRIMARY KEY (udprn)
 );
+
+--rollback DROP TABLE add_isl_royalmailaddress;
+
 
 --changeset address-lookup-api:005-create-add-isl-builtaddress
 CREATE TABLE add_isl_builtaddress (
@@ -223,6 +232,17 @@ CREATE TABLE add_isl_builtaddress (
     PRIMARY KEY (uprn)
 );
 
+--rollback DROP TABLE add_isl_builtaddress;
+
 --changeset address-lookup-api:006-create-add-gb-royalmailaddress-postcode-index
 CREATE INDEX idx_royalmailaddress_postcode_normalized
 ON add_gb_royalmailaddress (upper(replace(postcode, ' ', '')));
+
+--rollback DROP INDEX idx_royalmailaddress_postcode_normalized;
+
+
+--changeset address-lookup-api:007-create-add-isl-royalmailaddress-postcode-index
+CREATE INDEX idx_isl_royalmailaddress_postcode_normalized
+ON add_isl_royalmailaddress (upper(replace(postcode, ' ', '')));
+
+--rollback DROP INDEX idx_isl_royalmailaddress_postcode_normalized;

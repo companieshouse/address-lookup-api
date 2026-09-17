@@ -5,7 +5,8 @@ databaseChangeLog:
       changes:
         - loadData:
             file: db/changelog/data/gb_builtaddress.csv
-            tableName: add_gb_builtaddress
+            tableName: add_gb_builtaddress_v3
+            schemaName: os_data
             separator: ","
             quotchar: '"'
             nullPlaceholder: "NULL"

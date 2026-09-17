@@ -5,7 +5,8 @@ databaseChangeLog:
       changes:
         - loadData:
             file: db/changelog/data/isl_builtaddress.csv
-            tableName: add_isl_builtaddress
+            tableName: add_isl_builtaddress_v3
+            schemaName: os_data
             separator: ","
             quotchar: '"'
             nullPlaceholder: "NULL"

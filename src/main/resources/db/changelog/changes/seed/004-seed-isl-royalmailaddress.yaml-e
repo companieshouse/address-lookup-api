@@ -6,7 +6,7 @@ databaseChangeLog:
         - loadData:
             file: db/changelog/data/isl_royalmailaddress.csv
             tableName: add_isl_royalmailaddress_v1
-            schemaName: os_data
+            schema: os_data
             separator: ","
             quotchar: '"'
             nullPlaceholder: "NULL"

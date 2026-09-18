@@ -1,4 +1,4 @@
-package uk.gov.companieshouse.addresslookup.releasecore.domain;
+package uk.gov.companieshouse.release.model;
 
 import java.time.LocalDate;
 

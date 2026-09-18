@@ -39,7 +39,7 @@ public interface LegacyAddressMapper {
                 .filter(part -> !part.isBlank())
                 .collect(Collectors.joining(", "));
 
-        return value.isBlank() ? null : value;
+        return value.isBlank() ? "" : value;
     }
 
     default String toLegacyCountry(String country) {

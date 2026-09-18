@@ -1,10 +1,11 @@
 package uk.gov.companieshouse.addresslookup.repository;
 
-import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import uk.gov.companieshouse.addresslookup.entity.RoyalMailAddressLookup;
+
+import java.util.List;
 
 public interface RoyalMailAddressLookupRepository extends JpaRepository<RoyalMailAddressLookup, String> {
 

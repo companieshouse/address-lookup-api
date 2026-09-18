@@ -1,11 +1,11 @@
 package uk.gov.companieshouse.addresslookup.lamda.discovery;
 
-import com.amazonaws.services.lambda.runtime.*;
-
-import java.util.Map;
-
+import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.RequestHandler;
 import uk.gov.companieshouse.addresslookup.lamda.shared.workflow.DiscoveryService;
 import uk.gov.companieshouse.addresslookup.lamda.shared.workflow.FailureRecorder;
+
+import java.util.Map;
 
 public final class Handler implements RequestHandler<Map<String, Object>, String> {
     @Override

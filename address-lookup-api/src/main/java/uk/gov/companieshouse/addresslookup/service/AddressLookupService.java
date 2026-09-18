@@ -1,7 +1,6 @@
 package uk.gov.companieshouse.addresslookup.service;
 
-import java.util.List;
-import java.util.Optional;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import uk.gov.companieshouse.addresslookup.entity.RoyalMailAddressLookup;
 import uk.gov.companieshouse.addresslookup.mapper.LegacyAddressMapper;
@@ -9,6 +8,10 @@ import uk.gov.companieshouse.addresslookup.mapper.RoyalMailAddressMapper;
 import uk.gov.companieshouse.addresslookup.model.LegacyAddress;
 import uk.gov.companieshouse.addresslookup.model.RoyalMailAddressDto;
 import uk.gov.companieshouse.addresslookup.repository.RoyalMailAddressLookupRepository;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 
 @Service
 public class AddressLookupService {

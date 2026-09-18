@@ -1,12 +1,14 @@
 package uk.gov.companieshouse.addresslookup.lamda.shared.os;
 
-import java.net.*;
-import java.net.http.*;
-import java.io.InputStream;
-import java.io.IOException;
-import java.time.Duration;
-
 import com.fasterxml.jackson.databind.JsonNode;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 
 import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.JSON;
 import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.check;

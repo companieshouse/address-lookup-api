@@ -5,7 +5,7 @@ import uk.gov.companieshouse.addresslookup.lamda.shared.runtime.Connections;
 import uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport;
 import uk.gov.companieshouse.addresslookup.releasecore.persistence.ControlRepository;
 
-import java.util.*;
+import java.util.Map;
 
 import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.detail;
 

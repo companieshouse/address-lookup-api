@@ -1,11 +1,13 @@
 package uk.gov.companieshouse.addresslookup.lamda.shared.runtime;
 
-import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.util.*;
-import java.security.*;
+import java.security.MessageDigest;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.util.HexFormat;
+import java.util.Map;
 
 public final class RuntimeSupport {
     public static final ObjectMapper JSON = new ObjectMapper();

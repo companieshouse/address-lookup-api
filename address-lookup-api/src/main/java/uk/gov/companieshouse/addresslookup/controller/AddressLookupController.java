@@ -1,6 +1,5 @@
 package uk.gov.companieshouse.addresslookup.controller;
 
-import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -11,6 +10,8 @@ import uk.gov.companieshouse.addresslookup.model.AddressLookupResponse;
 import uk.gov.companieshouse.addresslookup.model.LegacyAddress;
 import uk.gov.companieshouse.addresslookup.model.RoyalMailAddressDto;
 import uk.gov.companieshouse.addresslookup.service.AddressLookupService;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/address-lookup-api")

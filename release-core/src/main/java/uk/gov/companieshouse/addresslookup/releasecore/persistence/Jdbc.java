@@ -1,9 +1,10 @@
 package uk.gov.companieshouse.addresslookup.releasecore.persistence;
 
 import java.sql.Connection;
-import java.sql.SQLException;
 import java.sql.PreparedStatement;
-import java.util.*;
+import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
 
 /** Small JDBC binding helpers; callers own the transaction. */
 public final class Jdbc {

@@ -1,12 +1,13 @@
 package uk.gov.companieshouse.addresslookup.mapper;
 
-import java.util.Objects;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import uk.gov.companieshouse.addresslookup.entity.RoyalMailAddressLookup;
 import uk.gov.companieshouse.addresslookup.model.LegacyAddress;
+
+import java.util.Objects;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Mapper(componentModel = "spring")
 public interface LegacyAddressMapper {

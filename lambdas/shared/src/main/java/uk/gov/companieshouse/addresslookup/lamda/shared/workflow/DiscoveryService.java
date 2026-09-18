@@ -2,19 +2,7 @@ package uk.gov.companieshouse.addresslookup.lamda.shared.workflow;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
-
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
-import java.util.TreeSet;
-import java.util.UUID;
-
 import software.amazon.awssdk.services.s3.S3Client;
-
 import uk.gov.companieshouse.addresslookup.lamda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lamda.shared.runtime.Connections;
 import uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport;
@@ -22,12 +10,10 @@ import uk.gov.companieshouse.addresslookup.releasecore.domain.DatasetCatalog;
 import uk.gov.companieshouse.addresslookup.releasecore.domain.OrderSummary;
 import uk.gov.companieshouse.addresslookup.releasecore.persistence.ControlRepository;
 
-import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.JSON;
-import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.check;
-import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.detail;
-import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.env;
-import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.required;
-import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.sha;
+import java.time.LocalDate;
+import java.util.*;
+
+import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.*;
 
 /** One event-driven workflow step; database changes commit together. */
 public final class DiscoveryService {

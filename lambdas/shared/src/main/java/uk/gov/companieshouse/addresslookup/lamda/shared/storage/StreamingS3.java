@@ -1,14 +1,16 @@
 package uk.gov.companieshouse.addresslookup.lamda.shared.storage;
 
-import java.io.InputStream;
-import java.security.*;
-import java.util.*;
-import java.util.function.LongSupplier;
-
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.*;
+import software.amazon.awssdk.services.s3.model.CompletedPart;
 import uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport;
+
+import java.io.InputStream;
+import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.HexFormat;
+import java.util.Map;
+import java.util.function.LongSupplier;
 
 import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.JSON;
 import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.check;

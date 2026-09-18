@@ -25,10 +25,6 @@ public interface LegacyAddressMapper {
 
     default String toPremise(RoyalMailAddressLookup address) {
         return join(
-                address.getOrganisationName(),
-                address.getDepartmentName(),
-                address.getSubBuildingName(),
-                address.getBuildingName(),
                 address.getBuildingNumber() == null ? null : address.getBuildingNumber().toString());
     }
 

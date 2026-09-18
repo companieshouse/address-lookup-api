@@ -5,7 +5,8 @@ databaseChangeLog:
       changes:
         - loadData:
             file: db/changelog/data/gb_royalmailaddress.csv
-            tableName: add_gb_royalmailaddress
+            schemaName: os_data
+            tableName: add_gb_royalmailaddress_v1
             separator: ","
             quotchar: '"'
             nullPlaceholder: "NULL"

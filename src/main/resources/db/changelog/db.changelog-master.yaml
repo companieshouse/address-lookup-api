@@ -2,4 +2,10 @@ databaseChangeLog:
   - include:
       file: db/changelog/changes/creation/001-create-address-tables.sql
   - include:
-      file: db/changelog/changes/creation/002-create-address-lookup-view.sql
+      file: db/changelog/changes/creation/002-create-os_control-schema.sql
+  - include:
+      file: db/changelog/changes/creation/003-create-os-data-schema-and-tables.sql
+  - include:
+      file: db/changelog/changes/creation/004-create-os-stage-schema-and-tables.sql
+  - include:
+      file: db/changelog/changes/creation/005-create-address-lookup-view.sql

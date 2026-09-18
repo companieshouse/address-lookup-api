@@ -14,13 +14,13 @@ $$ LANGUAGE plpgsql;
 
 --changeset address-lookup-api:002-create-local-seed-geometry-trigger
 CREATE TRIGGER set_royalmail_address_geometry_before_insert
-BEFORE INSERT ON add_gb_royalmailaddress
+BEFORE INSERT ON os_data.add_gb_royalmailaddress_v1
 FOR EACH ROW
 EXECUTE FUNCTION set_royalmail_address_geometry();
 
 --changeset address-lookup-api:003-create-local-seed-builtaddress-geometry-trigger
 CREATE TRIGGER set_builtaddress_geometry_before_insert
-BEFORE INSERT ON add_gb_builtaddress
+BEFORE INSERT ON os_data.add_gb_builtaddress_v3
 FOR EACH ROW
 EXECUTE FUNCTION set_royalmail_address_geometry();
 
@@ -38,12 +38,12 @@ $$ LANGUAGE plpgsql;
 
 --changeset address-lookup-api:005-create-local-seed-isl-royalmail-address-geometry-trigger
 CREATE TRIGGER set_isl_royalmail_address_geometry_before_insert
-BEFORE INSERT ON add_isl_royalmailaddress
+BEFORE INSERT ON os_data.add_isl_royalmailaddress_v1
 FOR EACH ROW
 EXECUTE FUNCTION set_isl_royalmail_address_geometry();
 
 --changeset address-lookup-api:006-create-local-seed-isl-builtaddress-geometry-trigger
 CREATE TRIGGER set_isl_builtaddress_geometry_before_insert
-BEFORE INSERT ON add_isl_builtaddress
+BEFORE INSERT ON os_data.add_isl_builtaddress_v3
 FOR EACH ROW
 EXECUTE FUNCTION set_isl_royalmail_address_geometry();

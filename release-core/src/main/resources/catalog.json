@@ -1,0 +1,1034 @@
+[
+  {
+    "name": "add_gb_builtaddress",
+    "version": "3.0",
+    "physical": "add_gb_builtaddress_v3",
+    "key": "uprn",
+    "columns": [
+      {
+        "name": "uprn",
+        "type": "numeric(12,0)",
+        "required": true
+      },
+      {
+        "name": "versiondate",
+        "type": "timestamp(0) without time zone",
+        "required": true
+      },
+      {
+        "name": "versionavailablefromdate",
+        "type": "timestamp(6) without time zone",
+        "required": true
+      },
+      {
+        "name": "versionavailabletodate",
+        "type": "timestamp(6) without time zone",
+        "required": false
+      },
+      {
+        "name": "changetype",
+        "type": "varchar(50)",
+        "required": true
+      },
+      {
+        "name": "theme",
+        "type": "varchar(40)",
+        "required": true
+      },
+      {
+        "name": "description",
+        "type": "varchar(50)",
+        "required": true
+      },
+      {
+        "name": "organisationname",
+        "type": "varchar(100)",
+        "required": false
+      },
+      {
+        "name": "poboxnumber",
+        "type": "varchar(13)",
+        "required": false
+      },
+      {
+        "name": "subname",
+        "type": "varchar(500)",
+        "required": false
+      },
+      {
+        "name": "name",
+        "type": "varchar(110)",
+        "required": false
+      },
+      {
+        "name": "number",
+        "type": "varchar(13)",
+        "required": false
+      },
+      {
+        "name": "streetname",
+        "type": "varchar(100)",
+        "required": true
+      },
+      {
+        "name": "locality",
+        "type": "varchar(35)",
+        "required": false
+      },
+      {
+        "name": "townname",
+        "type": "varchar(35)",
+        "required": false
+      },
+      {
+        "name": "islandname",
+        "type": "varchar(50)",
+        "required": false
+      },
+      {
+        "name": "postcode",
+        "type": "varchar(8)",
+        "required": true
+      },
+      {
+        "name": "fulladdress",
+        "type": "varchar(1000)",
+        "required": true
+      },
+      {
+        "name": "country",
+        "type": "varchar(16)",
+        "required": true
+      },
+      {
+        "name": "alternatelanguagesubname",
+        "type": "varchar(500)",
+        "required": false
+      },
+      {
+        "name": "alternatelanguagename",
+        "type": "varchar(110)",
+        "required": false
+      },
+      {
+        "name": "alternatelanguagenumber",
+        "type": "varchar(13)",
+        "required": false
+      },
+      {
+        "name": "alternatelanguagestreetname",
+        "type": "varchar(100)",
+        "required": false
+      },
+      {
+        "name": "alternatelanguagelocality",
+        "type": "varchar(35)",
+        "required": false
+      },
+      {
+        "name": "alternatelanguagetownname",
+        "type": "varchar(35)",
+        "required": false
+      },
+      {
+        "name": "alternatelanguageislandname",
+        "type": "varchar(50)",
+        "required": false
+      },
+      {
+        "name": "alternatelanguage",
+        "type": "varchar(3)",
+        "required": false
+      },
+      {
+        "name": "alternatelanguagefulladdress",
+        "type": "varchar(1000)",
+        "required": false
+      },
+      {
+        "name": "floorlevel",
+        "type": "varchar(30)",
+        "required": false
+      },
+      {
+        "name": "lowestfloorlevel",
+        "type": "numeric(3,1)",
+        "required": false
+      },
+      {
+        "name": "highestfloorlevel",
+        "type": "numeric(3,1)",
+        "required": false
+      },
+      {
+        "name": "classificationcode",
+        "type": "varchar(6)",
+        "required": true
+      },
+      {
+        "name": "classificationdescription",
+        "type": "varchar(230)",
+        "required": true
+      },
+      {
+        "name": "primaryclassificationdescription",
+        "type": "varchar(120)",
+        "required": true
+      },
+      {
+        "name": "secondaryclassificationdescription",
+        "type": "varchar(120)",
+        "required": false
+      },
+      {
+        "name": "tertiaryclassificationdescription",
+        "type": "varchar(120)",
+        "required": false
+      },
+      {
+        "name": "quaternaryclassificationdescription",
+        "type": "varchar(120)",
+        "required": false
+      },
+      {
+        "name": "buildstatus",
+        "type": "varchar(18)",
+        "required": true
+      },
+      {
+        "name": "buildstatusdate",
+        "type": "timestamp(0) without time zone",
+        "required": false
+      },
+      {
+        "name": "addressstatus",
+        "type": "varchar(11)",
+        "required": true
+      },
+      {
+        "name": "postcodesource",
+        "type": "varchar(148)",
+        "required": true
+      },
+      {
+        "name": "parentuprn",
+        "type": "numeric(12,0)",
+        "required": false
+      },
+      {
+        "name": "rootuprn",
+        "type": "numeric(12,0)",
+        "required": false
+      },
+      {
+        "name": "hierarchylevel",
+        "type": "numeric(3,0)",
+        "required": true
+      },
+      {
+        "name": "usrn",
+        "type": "numeric(8,0)",
+        "required": true
+      },
+      {
+        "name": "usrnmatchindicator",
+        "type": "varchar(17)",
+        "required": true
+      },
+      {
+        "name": "localcustodiancode",
+        "type": "numeric(4,0)",
+        "required": true
+      },
+      {
+        "name": "localcustodiandescription",
+        "type": "varchar(35)",
+        "required": true
+      },
+      {
+        "name": "lowertierlocalauthoritygsscode",
+        "type": "varchar(9)",
+        "required": false
+      },
+      {
+        "name": "easting",
+        "type": "numeric(8,2)",
+        "required": true
+      },
+      {
+        "name": "northing",
+        "type": "numeric(9,2)",
+        "required": true
+      },
+      {
+        "name": "latitude",
+        "type": "numeric(9,7)",
+        "required": true
+      },
+      {
+        "name": "longitude",
+        "type": "numeric(9,7)",
+        "required": true
+      },
+      {
+        "name": "geometry",
+        "type": "geometry",
+        "required": true
+      },
+      {
+        "name": "positionalaccuracy",
+        "type": "varchar(25)",
+        "required": true
+      },
+      {
+        "name": "effectivestartdate",
+        "type": "timestamp(0) without time zone",
+        "required": true
+      },
+      {
+        "name": "effectiveenddate",
+        "type": "timestamp(0) without time zone",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "add_gb_royalmailaddress",
+    "version": "1.0",
+    "physical": "add_gb_royalmailaddress_v1",
+    "key": "udprn",
+    "columns": [
+      {
+        "name": "udprn",
+        "type": "numeric(8,0)",
+        "required": true
+      },
+      {
+        "name": "versiondate",
+        "type": "timestamp(0) without time zone",
+        "required": true
+      },
+      {
+        "name": "versionavailablefromdate",
+        "type": "timestamp(6) without time zone",
+        "required": true
+      },
+      {
+        "name": "versionavailabletodate",
+        "type": "timestamp(6) without time zone",
+        "required": false
+      },
+      {
+        "name": "changetype",
+        "type": "varchar(50)",
+        "required": true
+      },
+      {
+        "name": "theme",
+        "type": "varchar(40)",
+        "required": true
+      },
+      {
+        "name": "description",
+        "type": "varchar(50)",
+        "required": true
+      },
+      {
+        "name": "organisationname",
+        "type": "varchar(60)",
+        "required": false
+      },
+      {
+        "name": "departmentname",
+        "type": "varchar(60)",
+        "required": false
+      },
+      {
+        "name": "subbuildingname",
+        "type": "varchar(30)",
+        "required": false
+      },
+      {
+        "name": "buildingname",
+        "type": "varchar(50)",
+        "required": false
+      },
+      {
+        "name": "buildingnumber",
+        "type": "numeric(4,0)",
+        "required": false
+      },
+      {
+        "name": "dependentthoroughfare",
+        "type": "varchar(80)",
+        "required": false
+      },
+      {
+        "name": "thoroughfare",
+        "type": "varchar(80)",
+        "required": false
+      },
+      {
+        "name": "doubledependentlocality",
+        "type": "varchar(35)",
+        "required": false
+      },
+      {
+        "name": "dependentlocality",
+        "type": "varchar(35)",
+        "required": false
+      },
+      {
+        "name": "posttown",
+        "type": "varchar(30)",
+        "required": true
+      },
+      {
+        "name": "postcode",
+        "type": "varchar(8)",
+        "required": true
+      },
+      {
+        "name": "postcodetype",
+        "type": "varchar(10)",
+        "required": true
+      },
+      {
+        "name": "deliverypointsuffix",
+        "type": "varchar(2)",
+        "required": true
+      },
+      {
+        "name": "welshdependentthoroughfare",
+        "type": "varchar(80)",
+        "required": false
+      },
+      {
+        "name": "welshthoroughfare",
+        "type": "varchar(80)",
+        "required": false
+      },
+      {
+        "name": "welshdoubledependentlocality",
+        "type": "varchar(35)",
+        "required": false
+      },
+      {
+        "name": "welshdependentlocality",
+        "type": "varchar(35)",
+        "required": false
+      },
+      {
+        "name": "welshposttown",
+        "type": "varchar(30)",
+        "required": false
+      },
+      {
+        "name": "poboxnumber",
+        "type": "varchar(13)",
+        "required": false
+      },
+      {
+        "name": "updatedate",
+        "type": "timestamp(0) without time zone",
+        "required": true
+      },
+      {
+        "name": "entrydate",
+        "type": "timestamp(0) without time zone",
+        "required": true
+      },
+      {
+        "name": "easting",
+        "type": "numeric(8,2)",
+        "required": true
+      },
+      {
+        "name": "northing",
+        "type": "numeric(9,2)",
+        "required": true
+      },
+      {
+        "name": "latitude",
+        "type": "numeric(9,7)",
+        "required": true
+      },
+      {
+        "name": "longitude",
+        "type": "numeric(9,7)",
+        "required": true
+      },
+      {
+        "name": "geometry",
+        "type": "geometry",
+        "required": true
+      },
+      {
+        "name": "positionalaccuracy",
+        "type": "varchar(25)",
+        "required": true
+      },
+      {
+        "name": "geometryallocationmethod",
+        "type": "varchar(25)",
+        "required": true
+      },
+      {
+        "name": "unmatchedreason",
+        "type": "varchar(100)",
+        "required": false
+      },
+      {
+        "name": "unmatchedreasondate",
+        "type": "timestamp(0) without time zone",
+        "required": false
+      },
+      {
+        "name": "uprn",
+        "type": "numeric(12,0)",
+        "required": false
+      },
+      {
+        "name": "matchedaddressfeaturetype",
+        "type": "varchar(25)",
+        "required": false
+      },
+      {
+        "name": "matchtype",
+        "type": "varchar(20)",
+        "required": true
+      },
+      {
+        "name": "matchdate",
+        "type": "timestamp(0) without time zone",
+        "required": false
+      },
+      {
+        "name": "matchmethod",
+        "type": "varchar(10)",
+        "required": false
+      },
+      {
+        "name": "matchingorganisation",
+        "type": "varchar(25)",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "add_isl_builtaddress",
+    "version": "3.0",
+    "physical": "add_isl_builtaddress_v3",
+    "key": "uprn",
+    "columns": [
+      {
+        "name": "uprn",
+        "type": "numeric(12,0)",
+        "required": true
+      },
+      {
+        "name": "versiondate",
+        "type": "timestamp(0) without time zone",
+        "required": true
+      },
+      {
+        "name": "versionavailablefromdate",
+        "type": "timestamp(6) without time zone",
+        "required": true
+      },
+      {
+        "name": "versionavailabletodate",
+        "type": "timestamp(6) without time zone",
+        "required": false
+      },
+      {
+        "name": "changetype",
+        "type": "varchar(50)",
+        "required": true
+      },
+      {
+        "name": "theme",
+        "type": "varchar(40)",
+        "required": true
+      },
+      {
+        "name": "description",
+        "type": "varchar(50)",
+        "required": true
+      },
+      {
+        "name": "organisationname",
+        "type": "varchar(100)",
+        "required": false
+      },
+      {
+        "name": "poboxnumber",
+        "type": "varchar(13)",
+        "required": false
+      },
+      {
+        "name": "subname",
+        "type": "varchar(500)",
+        "required": false
+      },
+      {
+        "name": "name",
+        "type": "varchar(110)",
+        "required": false
+      },
+      {
+        "name": "number",
+        "type": "varchar(13)",
+        "required": false
+      },
+      {
+        "name": "streetname",
+        "type": "varchar(100)",
+        "required": true
+      },
+      {
+        "name": "locality",
+        "type": "varchar(35)",
+        "required": false
+      },
+      {
+        "name": "townname",
+        "type": "varchar(35)",
+        "required": false
+      },
+      {
+        "name": "islandname",
+        "type": "varchar(50)",
+        "required": false
+      },
+      {
+        "name": "postcode",
+        "type": "varchar(8)",
+        "required": true
+      },
+      {
+        "name": "fulladdress",
+        "type": "varchar(1000)",
+        "required": true
+      },
+      {
+        "name": "country",
+        "type": "varchar(16)",
+        "required": true
+      },
+      {
+        "name": "alternatelanguagesubname",
+        "type": "varchar(500)",
+        "required": false
+      },
+      {
+        "name": "alternatelanguagename",
+        "type": "varchar(110)",
+        "required": false
+      },
+      {
+        "name": "alternatelanguagenumber",
+        "type": "varchar(13)",
+        "required": false
+      },
+      {
+        "name": "alternatelanguagestreetname",
+        "type": "varchar(100)",
+        "required": false
+      },
+      {
+        "name": "alternatelanguagelocality",
+        "type": "varchar(35)",
+        "required": false
+      },
+      {
+        "name": "alternatelanguagetownname",
+        "type": "varchar(35)",
+        "required": false
+      },
+      {
+        "name": "alternatelanguageislandname",
+        "type": "varchar(50)",
+        "required": false
+      },
+      {
+        "name": "alternatelanguage",
+        "type": "varchar(3)",
+        "required": false
+      },
+      {
+        "name": "alternatelanguagefulladdress",
+        "type": "varchar(1000)",
+        "required": false
+      },
+      {
+        "name": "floorlevel",
+        "type": "varchar(30)",
+        "required": false
+      },
+      {
+        "name": "lowestfloorlevel",
+        "type": "numeric(3,1)",
+        "required": false
+      },
+      {
+        "name": "highestfloorlevel",
+        "type": "numeric(3,1)",
+        "required": false
+      },
+      {
+        "name": "classificationcode",
+        "type": "varchar(6)",
+        "required": true
+      },
+      {
+        "name": "classificationdescription",
+        "type": "varchar(230)",
+        "required": true
+      },
+      {
+        "name": "primaryclassificationdescription",
+        "type": "varchar(120)",
+        "required": true
+      },
+      {
+        "name": "secondaryclassificationdescription",
+        "type": "varchar(120)",
+        "required": false
+      },
+      {
+        "name": "tertiaryclassificationdescription",
+        "type": "varchar(120)",
+        "required": false
+      },
+      {
+        "name": "quaternaryclassificationdescription",
+        "type": "varchar(120)",
+        "required": false
+      },
+      {
+        "name": "buildstatus",
+        "type": "varchar(18)",
+        "required": true
+      },
+      {
+        "name": "buildstatusdate",
+        "type": "timestamp(0) without time zone",
+        "required": false
+      },
+      {
+        "name": "addressstatus",
+        "type": "varchar(11)",
+        "required": true
+      },
+      {
+        "name": "postcodesource",
+        "type": "varchar(148)",
+        "required": true
+      },
+      {
+        "name": "parentuprn",
+        "type": "numeric(12,0)",
+        "required": false
+      },
+      {
+        "name": "rootuprn",
+        "type": "numeric(12,0)",
+        "required": false
+      },
+      {
+        "name": "hierarchylevel",
+        "type": "numeric(3,0)",
+        "required": true
+      },
+      {
+        "name": "usrn",
+        "type": "numeric(8,0)",
+        "required": true
+      },
+      {
+        "name": "usrnmatchindicator",
+        "type": "varchar(17)",
+        "required": true
+      },
+      {
+        "name": "localcustodiancode",
+        "type": "numeric(4,0)",
+        "required": true
+      },
+      {
+        "name": "localcustodiandescription",
+        "type": "varchar(35)",
+        "required": true
+      },
+      {
+        "name": "lowertierlocalauthoritygsscode",
+        "type": "varchar(9)",
+        "required": false
+      },
+      {
+        "name": "easting",
+        "type": "numeric(8,2)",
+        "required": false
+      },
+      {
+        "name": "northing",
+        "type": "numeric(9,2)",
+        "required": false
+      },
+      {
+        "name": "latitude",
+        "type": "numeric(9,7)",
+        "required": true
+      },
+      {
+        "name": "longitude",
+        "type": "numeric(9,7)",
+        "required": true
+      },
+      {
+        "name": "geometry",
+        "type": "geometry",
+        "required": true
+      },
+      {
+        "name": "positionalaccuracy",
+        "type": "varchar(25)",
+        "required": true
+      },
+      {
+        "name": "effectivestartdate",
+        "type": "timestamp(0) without time zone",
+        "required": true
+      },
+      {
+        "name": "effectiveenddate",
+        "type": "timestamp(0) without time zone",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "add_isl_royalmailaddress",
+    "version": "1.0",
+    "physical": "add_isl_royalmailaddress_v1",
+    "key": "udprn",
+    "columns": [
+      {
+        "name": "udprn",
+        "type": "numeric(8,0)",
+        "required": true
+      },
+      {
+        "name": "versiondate",
+        "type": "timestamp(0) without time zone",
+        "required": true
+      },
+      {
+        "name": "versionavailablefromdate",
+        "type": "timestamp(6) without time zone",
+        "required": true
+      },
+      {
+        "name": "versionavailabletodate",
+        "type": "timestamp(6) without time zone",
+        "required": false
+      },
+      {
+        "name": "changetype",
+        "type": "varchar(50)",
+        "required": true
+      },
+      {
+        "name": "theme",
+        "type": "varchar(40)",
+        "required": true
+      },
+      {
+        "name": "description",
+        "type": "varchar(50)",
+        "required": true
+      },
+      {
+        "name": "organisationname",
+        "type": "varchar(60)",
+        "required": false
+      },
+      {
+        "name": "departmentname",
+        "type": "varchar(60)",
+        "required": false
+      },
+      {
+        "name": "subbuildingname",
+        "type": "varchar(30)",
+        "required": false
+      },
+      {
+        "name": "buildingname",
+        "type": "varchar(50)",
+        "required": false
+      },
+      {
+        "name": "buildingnumber",
+        "type": "numeric(4,0)",
+        "required": false
+      },
+      {
+        "name": "dependentthoroughfare",
+        "type": "varchar(80)",
+        "required": false
+      },
+      {
+        "name": "thoroughfare",
+        "type": "varchar(80)",
+        "required": false
+      },
+      {
+        "name": "doubledependentlocality",
+        "type": "varchar(35)",
+        "required": false
+      },
+      {
+        "name": "dependentlocality",
+        "type": "varchar(35)",
+        "required": false
+      },
+      {
+        "name": "posttown",
+        "type": "varchar(30)",
+        "required": true
+      },
+      {
+        "name": "postcode",
+        "type": "varchar(8)",
+        "required": true
+      },
+      {
+        "name": "postcodetype",
+        "type": "varchar(10)",
+        "required": true
+      },
+      {
+        "name": "deliverypointsuffix",
+        "type": "varchar(2)",
+        "required": true
+      },
+      {
+        "name": "welshdependentthoroughfare",
+        "type": "varchar(80)",
+        "required": false
+      },
+      {
+        "name": "welshthoroughfare",
+        "type": "varchar(80)",
+        "required": false
+      },
+      {
+        "name": "welshdoubledependentlocality",
+        "type": "varchar(35)",
+        "required": false
+      },
+      {
+        "name": "welshdependentlocality",
+        "type": "varchar(35)",
+        "required": false
+      },
+      {
+        "name": "welshposttown",
+        "type": "varchar(30)",
+        "required": false
+      },
+      {
+        "name": "poboxnumber",
+        "type": "varchar(13)",
+        "required": false
+      },
+      {
+        "name": "updatedate",
+        "type": "timestamp(0) without time zone",
+        "required": true
+      },
+      {
+        "name": "entrydate",
+        "type": "timestamp(0) without time zone",
+        "required": true
+      },
+      {
+        "name": "easting",
+        "type": "numeric(8,2)",
+        "required": false
+      },
+      {
+        "name": "northing",
+        "type": "numeric(9,2)",
+        "required": false
+      },
+      {
+        "name": "latitude",
+        "type": "numeric(9,7)",
+        "required": true
+      },
+      {
+        "name": "longitude",
+        "type": "numeric(9,7)",
+        "required": true
+      },
+      {
+        "name": "geometry",
+        "type": "geometry",
+        "required": true
+      },
+      {
+        "name": "positionalaccuracy",
+        "type": "varchar(25)",
+        "required": true
+      },
+      {
+        "name": "geometryallocationmethod",
+        "type": "varchar(25)",
+        "required": true
+      },
+      {
+        "name": "unmatchedreason",
+        "type": "varchar(100)",
+        "required": false
+      },
+      {
+        "name": "unmatchedreasondate",
+        "type": "timestamp(0) without time zone",
+        "required": false
+      },
+      {
+        "name": "uprn",
+        "type": "numeric(12,0)",
+        "required": false
+      },
+      {
+        "name": "matchedaddressfeaturetype",
+        "type": "varchar(25)",
+        "required": false
+      },
+      {
+        "name": "matchtype",
+        "type": "varchar(20)",
+        "required": true
+      },
+      {
+        "name": "matchdate",
+        "type": "timestamp(0) without time zone",
+        "required": false
+      },
+      {
+        "name": "matchmethod",
+        "type": "varchar(10)",
+        "required": false
+      },
+      {
+        "name": "matchingorganisation",
+        "type": "varchar(25)",
+        "required": false
+      }
+    ]
+  }
+]

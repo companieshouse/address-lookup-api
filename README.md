@@ -9,7 +9,7 @@ Provides address lookup and validation to be used by CHIPS and frontend CH servi
 
 ## Building the docker image
 ```
-mvn package -Dskip.unit.tests=true -Dskip.integration.tests=true jib:dockerBuild
+mvn -pl address-lookup-api -am package -Dskip.unit.tests=true -Dskip.integration.tests=true jib:dockerBuild
 ```
 
 ## Running locally
@@ -20,7 +20,7 @@ Postgres database from `compose.yaml`. The `local` profile uses
 table from `gb_royalmailaddress.csv`.
 
 ```bash
-mvn spring-boot:run -Dspring-boot.run.profiles=local
+mvn -pl address-lookup-api spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
 Look up addresses by postcode:

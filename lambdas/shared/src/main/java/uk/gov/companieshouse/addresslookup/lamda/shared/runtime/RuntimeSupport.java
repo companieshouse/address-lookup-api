@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.security.MessageDigest;
-import java.sql.Connection;
-import java.sql.DriverManager;
 import java.util.HexFormat;
 import java.util.Map;
 
@@ -24,15 +22,6 @@ public final class RuntimeSupport {
 
     public static String sha(byte[] bytes) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
-    }
-
-    public static Connection connect() throws Exception {
-        Connection connection = DriverManager.getConnection(
-                env("SPRING_DATASOURCE_URL"),
-                env("SPRING_DATASOURCE_USERNAME"),
-                env("SPRING_DATASOURCE_PASSWORD"));
-        connection.setAutoCommit(false);
-        return connection;
     }
 
     public static JsonNode detail(Map<String, Object> e) {

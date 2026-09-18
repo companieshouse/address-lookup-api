@@ -15,6 +15,7 @@
 
     <modules>
         <module>release-core</module>
+        <module>release-model</module>
         <module>address-lookup-api</module>
         <module>lambdas/shared</module>
         <module>lambdas/discovery</module>
@@ -22,8 +23,6 @@
         <module>lambdas/scan</module>
         <module>lambdas/unzip</module>
         <module>lambdas/import</module>
-        <module>lambdas/promotion</module>
-        <module>lambdas/dispatch</module>
     </modules>
 
     <properties>

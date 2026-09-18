@@ -4,48 +4,41 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
 import software.amazon.awssdk.services.s3.S3Client;
 import uk.gov.companieshouse.addresslookup.lamda.shared.os.OsClient;
-import uk.gov.companieshouse.addresslookup.lamda.shared.runtime.Connections;
-import uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport;
-import uk.gov.companieshouse.addresslookup.releasecore.domain.DatasetCatalog;
-import uk.gov.companieshouse.addresslookup.releasecore.domain.OrderSummary;
-import uk.gov.companieshouse.addresslookup.releasecore.persistence.ControlRepository;
-
+import uk.gov.companieshouse.addresslookup.lamda.shared.storage.ReleaseStore;
+import uk.gov.companieshouse.release.model.DatasetCatalog;
+import uk.gov.companieshouse.release.model.OrderSummary;
 import java.time.LocalDate;
 import java.util.*;
+import java.util.UUID;
 
 import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.*;
+import static uk.gov.companieshouse.addresslookup.lamda.shared.workflow.WorkflowSupport.api;
 
 /** One event-driven workflow step; database changes commit together. */
 public final class DiscoveryService {
-    private final Context context;
-    private final Connections connections;
-
-    public DiscoveryService(Context context) {
-        this(context, RuntimeSupport::connect);
-    }
-
-    public DiscoveryService(Context context, Connections connections) {
-        this.context = context;
-        this.connections = connections;
-    }
-
+    public DiscoveryService(Context context) {}
     public String discover(Map<String, Object> event) throws Exception {
-        JsonNode input = detail(event);
-        String mode = required(input, "mode");
-        check(Set.of("FULL", "COU").contains(mode), "Unknown mode");
-        JsonNode packages = JSON.readTree(env("OS_PACKAGES"));
-        OsClient os = new OsClient();
-        try (var c = connections.open()) {
-            var repository = new ControlRepository(c);
-            repository.lockRelease();
-            if (repository.activeCount() > 0)
-                return "ACTIVE_RELEASE_EXISTS";
-            var water = repository.watermark();
-            LocalDate previous = water == null ? null : ((java.sql.Date) water.get("valid_from")).toLocalDate();
-            check(!mode.equals("COU") || previous != null, "COU requires a FULL baseline");
+        JsonNode input = detail(event); String mode = required(input,"mode");
+        check(Set.of("FULL","COU").contains(mode),"Unknown mode");
+        JsonNode packages = JSON.readTree(env("OS_PACKAGES")); OsClient os = new OsClient();
+        try (var s3 = S3Client.create()) {
+            var store = new ReleaseStore(s3); String bucket = env("SOURCE_BUCKET");
+            LocalDate previous = null;
+            for (String key : store.keys(bucket,"acquisitions/")) {
+                JsonNode existing = store.read(bucket,key); boolean complete = true;
+                for (var t : DatasetCatalog.tables()) {
+                    if (store.receipt(bucket,required(existing,"runId"),t.name(),"download") == null) {
+                        Commands.send("DOWNLOAD",key,t.name()); complete = false;
+                    }
+                }
+                if (!complete) return "ACQUISITION_IN_PROGRESS";
+                LocalDate date = LocalDate.parse(required(existing,"target"));
+                if (previous == null || date.isAfter(previous)) previous = date;
+            }
+            check(!mode.equals("COU") || previous != null,"COU requires an acquired FULL baseline");
             var candidates = new LinkedHashMap<String, TreeMap<LocalDate, JsonNode>>();
             for (var t : DatasetCatalog.tables()) {
-                String url = WorkflowSupport.api(required(packages, t.name()));
+                String url = api(required(packages, t.name()));
                 List<JsonNode> versions = new ArrayList<>();
                 if (mode.equals("FULL")) {
                     String version = required(input.path("versions"), t.name());
@@ -99,27 +92,16 @@ public final class DiscoveryService {
             manifest.put("mode", mode);
             manifest.put("target", target.toString());
             for (var entry : candidates.entrySet()) manifest.set(entry.getKey(), entry.getValue().get(target));
-            String payload = JSON.writeValueAsString(manifest), digest = sha(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            String request = mode + ":" + target + ":" + digest;
-            if (repository.requestCount(request) > 0)
-                return "ALREADY_REGISTERED";
-            check(repository.targetCount(target) == 0, "Target already registered with different content; reconcile before retry");
-            UUID id = UUID.randomUUID();
-            repository.createRun(id, target);
-            repository.createWorkflow(id, request, mode, previous, target, digest, payload);
-            for (var t : DatasetCatalog.tables()) {
-                JsonNode candidate = manifest.get(t.name());
-                check(repository.schemaCount(t.name(), t.version()) == 1, "Deployed schema mismatch");
-                repository.createFile(id, t.name(), candidate.get("summary").toString(), required(candidate.get("zip"), "url"), required(candidate.get("zip"), "md5"), env("S3_BUCKET"));
-                WorkflowSupport.enqueue(c, id, t.name(), "DOWNLOAD");
-            }
-            // Retain the source metadata alongside objects. Unique key is never reused by another run.
-            try (var s3 = S3Client.create()) {
-                s3.putObject(b -> b.bucket(env("S3_BUCKET")).key("metadata/" + id + "/manifest.json").ifNoneMatch("*"), software.amazon.awssdk.core.sync.RequestBody.fromString(payload));
-            }
-            c.commit();
+            if (previous != null) manifest.put("previous",previous.toString());
+            // Do not use expiring download URLs as release identity.
+            var identity = manifest.deepCopy();
+            for (var t : DatasetCatalog.tables()) ((com.fasterxml.jackson.databind.node.ObjectNode) identity.path(t.name()).path("zip")).remove("url");
+            UUID id = UUID.nameUUIDFromBytes(identity.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            manifest.put("runId",id.toString());
+            String key = ReleaseStore.planKey(manifest);
+            store.immutable(bucket,key,manifest);
+            for (var t : DatasetCatalog.tables()) Commands.send("DOWNLOAD",key,t.name());
             return id.toString();
         }
     }
-
 }

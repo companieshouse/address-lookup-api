@@ -2,19 +2,14 @@ package uk.gov.companieshouse.addresslookup.lamda.shared.runtime;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import uk.gov.companieshouse.release.model.ReleaseJson;
 
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Map;
 
 public final class RuntimeSupport {
-    public static final ObjectMapper JSON = new ObjectMapper();
-
-    public static String env(String key) {
-        String v = System.getenv(key);
-        if (v == null || v.isBlank()) throw new IllegalArgumentException("Missing " + key);
-        return v;
-    }
+    public static final ObjectMapper JSON = ReleaseJson.MAPPER;
 
     public static void check(boolean value, String message) {
         if (!value) throw new IllegalArgumentException(message);

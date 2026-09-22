@@ -1,14 +1,17 @@
 package uk.gov.companieshouse.addresslookup;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.context.WebApplicationContext;
-
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static uk.gov.companieshouse.logging.util.LogContextProperties.REQUEST_ID;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.context.WebApplicationContext;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 @AutoConfigureMockMvc
 @SpringBootTest(
@@ -20,6 +23,9 @@ import static uk.gov.companieshouse.logging.util.LogContextProperties.REQUEST_ID
         })
 @Testcontainers
 class AddressLookupApplicationIT {
+
+    @Autowired
+    protected MockMvc mockMvc;
 
     @Autowired
     private WebApplicationContext context;

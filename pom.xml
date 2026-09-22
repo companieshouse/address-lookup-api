@@ -30,11 +30,14 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <spring.boot.version>3.5.11</spring.boot.version>
         <commons-lang-plugin.version>3.20.0</commons-lang-plugin.version>
+        <spring.boot.version>4.1.1</spring.boot.version>
+        <spring-framework.version>6.2.20</spring-framework.version>
+        <spring-data-bom.version>2025.0.14</spring-data-bom.version>
+        <tomcat-embed-plugin.version>11.0.18</tomcat-embed-plugin.version>
         <jackson.version>2.22.1</jackson.version>
-            <log4j.version>2.25.5</log4j.version>
-            <postgresql.version>42.7.13</postgresql.version>
+        <log4j.version>2.25.5</log4j.version>
+        <postgresql.version>42.7.13</postgresql.version>
         <jib-maven-plugin.version>3.5.1</jib-maven-plugin.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <aws-lambda-java-core.version>1.2.3</aws-lambda-java-core.version>
@@ -45,6 +48,7 @@
         <jackson-databind.version>2.18.3</jackson-databind.version>
         <skip.unit.tests>false</skip.unit.tests>
         <skip.integration.tests>false</skip.integration.tests>
+        <org.testcontainers.version>2.0.5</org.testcontainers.version>
 
         <!--companies house-->
         <structured-logging.version>3.0.51</structured-logging.version>
@@ -64,6 +68,13 @@
                 <version>${spring.boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${org.testcontainers.version}</version>
+                <type>pom</type>
+                <scope>test</scope>
             </dependency>
             <dependency>
                 <groupId>com.amazonaws</groupId>

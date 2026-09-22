@@ -1,6 +1,7 @@
 package uk.gov.companieshouse.addresslookup.releasecore.aurora;
 
 import org.postgresql.PGConnection;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Propagation;

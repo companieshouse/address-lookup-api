@@ -59,6 +59,11 @@ deps:
 	@# Help: Install dependencies
 	brew install kafka
 
+.PHONY: dependency-check
+dependency-check: build package
+	mvn install -DskipTests
+	dependency-check-runner --repo-name=document-generator
+
 .PHONY: lint
 lint: lint/docker-compose sonar
 	@# Help: Run all lint/* targets and sonar

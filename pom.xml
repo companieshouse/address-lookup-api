@@ -14,8 +14,8 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>release-core</module>
         <module>release-model</module>
+        <module>release-core</module>
         <module>address-lookup-api</module>
         <module>lambdas/shared</module>
         <module>lambdas/discovery</module>

@@ -1,0 +1,51 @@
+package uk.gov.companieshouse.addresslookup.service;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import uk.gov.companieshouse.addresslookup.entity.RoyalMailAddressLookup;
+import uk.gov.companieshouse.addresslookup.mapper.LegacyAddressMapper;
+import uk.gov.companieshouse.addresslookup.mapper.RoyalMailAddressMapper;
+import uk.gov.companieshouse.addresslookup.model.LegacyAddress;
+import uk.gov.companieshouse.addresslookup.model.RoyalMailAddressDto;
+import uk.gov.companieshouse.addresslookup.repository.RoyalMailAddressLookupRepository;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+
+@Service
+public class AddressLookupService {
+
+    private final RoyalMailAddressLookupRepository royalMailAddressLookupRepository;
+    private final LegacyAddressMapper legacyAddressMapper;
+    private final RoyalMailAddressMapper royalMailAddressMapper;
+
+    public AddressLookupService(RoyalMailAddressLookupRepository royalMailAddressLookupRepository,
+            LegacyAddressMapper legacyAddressMapper,
+            RoyalMailAddressMapper royalMailAddressMapper) {
+        this.royalMailAddressLookupRepository = royalMailAddressLookupRepository;
+        this.legacyAddressMapper = legacyAddressMapper;
+        this.royalMailAddressMapper = royalMailAddressMapper;
+    }
+
+    public List<RoyalMailAddressDto> lookupByPostcode(String postcode) {
+        return royalMailAddressMapper.toDtos(findByPostcode(postcode));
+    }
+
+    public List<LegacyAddress> lookupLegacyAddressesByPostcode(String postcode) {
+        return findByPostcode(postcode).stream()
+                .map(legacyAddressMapper::toLegacyAddress)
+                .toList();
+    }
+
+    public Optional<LegacyAddress> lookupLegacyAddressByPostcode(String postcode) {
+        return findByPostcode(postcode).stream()
+                .findFirst()
+                .map(legacyAddressMapper::toLegacyAddressWithoutPremise);
+    }
+
+    private List<RoyalMailAddressLookup> findByPostcode(String postcode) {
+        return royalMailAddressLookupRepository.findByNormalizedPostcode(postcode);
+    }
+
+}

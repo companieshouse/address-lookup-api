@@ -8,27 +8,47 @@
         <version>2.1.2</version>
     </parent>
 
-    <artifactId>address-lookup-api</artifactId>
+    <artifactId>address-lookup-parent</artifactId>
     <version>latest</version>
-    <name>address-lookup-api</name>
-    <packaging>jar</packaging>
+    <name>address-lookup-parent</name>
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>release-core</module>
+        <module>release-model</module>
+        <module>address-lookup-api</module>
+        <module>lambdas/shared</module>
+        <module>lambdas/discovery</module>
+        <module>lambdas/download</module>
+        <module>lambdas/scan</module>
+        <module>lambdas/unzip</module>
+        <module>lambdas/import</module>
+    </modules>
 
     <properties>
+        <maven.compiler.release>21</maven.compiler.release>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
-            <spring.boot.version>4.1.1</spring.boot.version>
-            <spring-framework.version>6.2.20</spring-framework.version>
-            <spring-data-bom.version>2025.0.14</spring-data-bom.version>
-        <tomcat.version>11.0.25</tomcat.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <commons-lang-plugin.version>3.20.0</commons-lang-plugin.version>
+        <spring.boot.version>4.1.1</spring.boot.version>
+        <spring-framework.version>6.2.20</spring-framework.version>
+        <spring-data-bom.version>2025.0.14</spring-data-bom.version>
+        <tomcat-embed-plugin.version>11.0.18</tomcat-embed-plugin.version>
         <jackson.version>2.22.1</jackson.version>
-            <log4j.version>2.25.5</log4j.version>
-            <postgresql.version>42.7.13</postgresql.version>
+        <log4j.version>2.25.5</log4j.version>
+        <postgresql.version>42.7.13</postgresql.version>
         <jib-maven-plugin.version>3.5.1</jib-maven-plugin.version>
         <mapstruct.version>1.6.3</mapstruct.version>
-
+        <aws-lambda-java-core.version>1.2.3</aws-lambda-java-core.version>
+        <aws-sdk.version>2.31.54</aws-sdk.version>
+        <junit-jupiter.version>5.11.4</junit-jupiter.version>
+        <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
+        <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
+        <jackson-databind.version>2.18.3</jackson-databind.version>
         <skip.unit.tests>false</skip.unit.tests>
         <skip.integration.tests>false</skip.integration.tests>
+        <org.testcontainers.version>2.0.5</org.testcontainers.version>
 
         <!--companies house-->
         <structured-logging.version>3.0.51</structured-logging.version>
@@ -50,142 +70,57 @@
                 <scope>import</scope>
             </dependency>
             <dependency>
-                <groupId>org.apache.tomcat.embed</groupId>
-                <artifactId>tomcat-embed-core</artifactId>
-                <version>${tomcat.version}</version>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${org.testcontainers.version}</version>
+                <type>pom</type>
+                <scope>test</scope>
             </dependency>
             <dependency>
-                <groupId>org.apache.tomcat.embed</groupId>
-                <artifactId>tomcat-embed-el</artifactId>
-                <version>${tomcat.version}</version>
+                <groupId>com.amazonaws</groupId>
+                <artifactId>aws-lambda-java-core</artifactId>
+                <version>${aws-lambda-java-core.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.apache.tomcat.embed</groupId>
-                <artifactId>tomcat-embed-websocket</artifactId>
-                <version>${tomcat.version}</version>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>s3</artifactId>
+                <version>${aws-sdk.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.apache.tomcat</groupId>
-                <artifactId>tomcat-annotations-api</artifactId>
-                <version>${tomcat.version}</version>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>eventbridge</artifactId>
+                <version>${aws-sdk.version}</version>
             </dependency>
             <dependency>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                    <artifactId>jackson-core</artifactId>
-                <version>${jackson.version}</version>
-                </dependency>
-                <dependency>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                    <artifactId>jackson-databind</artifactId>
-                    <version>${jackson.version}</version>
-                </dependency>
-                <dependency>
-                    <groupId>org.apache.logging.log4j</groupId>
-                    <artifactId>log4j-api</artifactId>
-                    <version>${log4j.version}</version>
-                </dependency>
-                <dependency>
-                    <groupId>org.apache.logging.log4j</groupId>
-                    <artifactId>log4j-to-slf4j</artifactId>
-                    <version>${log4j.version}</version>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson-databind.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>${junit-jupiter.version}</version>
+                <scope>test</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
 
-    <dependencies>
-        <!-- start fixes to vulnerable transitive dependencies-->
-        <!-- CVE-2025-68161(6.3) -->
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-api</artifactId>
-        </dependency>
-        <!-- GHSA-72hv-8253-57qq (8.7) -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-core</artifactId>
-        </dependency>
-        <!-- end fixes to vulnerable transitive dependencies -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-aspectj</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-jpa</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-liquibase</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
-            <version>${postgresql.version}</version>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-docker-compose</artifactId>
-            <scope>runtime</scope>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>org.mapstruct</groupId>
-            <artifactId>mapstruct</artifactId>
-            <version>${mapstruct.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>uk.gov.companieshouse</groupId>
-            <artifactId>structured-logging</artifactId>
-            <version>${structured-logging.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
-            <version>${commons-lang-plugin.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webmvc-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-testcontainers</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>testcontainers-postgresql</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>testcontainers-junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-    </dependencies>
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${maven-compiler-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${maven-surefire-plugin.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
 
     <repositories>
         <repository>
@@ -193,93 +128,4 @@
             <url>https://repo.maven.apache.org/maven2</url>
         </repository>
     </repositories>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <version>${spring.boot.version}</version>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>repackage</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <configuration>
-                    <annotationProcessorPaths>
-                        <path>
-                            <groupId>org.mapstruct</groupId>
-                            <artifactId>mapstruct-processor</artifactId>
-                            <version>${mapstruct.version}</version>
-                        </path>
-                    </annotationProcessorPaths>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>com.google.cloud.tools</groupId>
-                <artifactId>jib-maven-plugin</artifactId>
-                <version>${jib-maven-plugin.version}</version>
-                <configuration>
-                    <from>
-                        <image>416670754337.dkr.ecr.eu-west-2.amazonaws.com/ci-corretto-build-21:latest</image>
-                    </from>
-                    <to>
-                        <image>416670754337.dkr.ecr.eu-west-2.amazonaws.com/address-lookup-api:latest</image>
-                    </to>
-                    <container>
-                        <expandClasspathDependencies>true</expandClasspathDependencies>
-                    </container>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>report</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>report</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.5</version>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-failsafe-plugin</artifactId>
-                <version>3.2.5</version>
-                <configuration>
-                    <argLine>@{argLine}</argLine>
-                    <classesDirectory>${project.build.outputDirectory}</classesDirectory>
-                    <testClassesDirectory>${project.build.testOutputDirectory}</testClassesDirectory>
-                    <skipITs>${skip.integration.tests}</skipITs>
-                </configuration>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>integration-test</goal>
-                            <goal>verify</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.sonarsource.scanner.maven</groupId>
-                <artifactId>sonar-maven-plugin</artifactId>
-                <version>${sonar-maven-plugin.version}</version>
-            </plugin>
-        </plugins>
-    </build>
-
 </project>

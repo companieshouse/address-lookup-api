@@ -53,6 +53,13 @@ public final class ReleaseStore {
     }
   }
 
+  /** Stores mutable operational state. Immutable release descriptions must use {@link #immutable}. */
+  public void write(String bucket, String key, JsonNode value) {
+    s3.putObject(
+        PutObjectRequest.builder().bucket(bucket).key(key).contentType("application/json").build(),
+        RequestBody.fromString(value.toString()));
+  }
+
   public List<String> keys(String bucket, String prefix) {
     var keys = new ArrayList<String>();
     String token = null;

@@ -19,7 +19,11 @@ final class Commands {
   }
 
   void send(String action, String planKey, String dataset) throws Exception {
-    String detail = json.writeValueAsString(Map.of("planKey", planKey, "dataset", dataset));
+    send(action, Map.of("planKey", planKey, "dataset", dataset));
+  }
+
+  void send(String action, Map<String, ?> payload) throws Exception {
+    String detail = json.writeValueAsString(payload);
     var response =
         events.putEvents(
             b ->
@@ -32,6 +36,6 @@ final class Commands {
                         .build()));
     check(
         response.failedEntryCount() == 0,
-        "EventBridge rejected command; S3 reconciliation will retry");
+        "EventBridge rejected event; S3 reconciliation will retry");
   }
 }

@@ -41,7 +41,7 @@
         <jib-maven-plugin.version>3.5.1</jib-maven-plugin.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <aws-lambda-java-core.version>1.2.3</aws-lambda-java-core.version>
-        <aws-sdk.version>2.31.54</aws-sdk.version>
+        <aws-sdk.version>2.31.78</aws-sdk.version>
         <junit-jupiter.version>5.11.4</junit-jupiter.version>
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
         <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>

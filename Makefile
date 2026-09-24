@@ -62,7 +62,7 @@ deps:
 .PHONY: dependency-check
 dependency-check: build package
 	mvn install -DskipTests
-	dependency-check-runner --repo-name=document-generator
+	dependency-check-runner --repo-name=address-lookup-api
 
 .PHONY: lint
 lint: lint/docker-compose sonar

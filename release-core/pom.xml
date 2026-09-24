@@ -32,29 +32,4 @@
             <artifactId>jackson-databind</artifactId>
         </dependency>
     </dependencies>
-
-    <build>
-        <pluginManagement>
-            <plugins>
-                <plugin>
-                    <groupId>org.owasp</groupId>
-                    <artifactId>dependency-check-maven</artifactId>
-                    <version>13.0.0</version>
-                    <configuration>
-                        <suppressionFiles>
-                            <suppressionFile>suppression.xml</suppressionFile>
-                        </suppressionFiles>
-                    </configuration>
-                    <executions>
-                        <execution>
-                            <goals>
-                                <goal>check</goal>
-                            </goals>
-                        </execution>
-                    </executions>
-                </plugin>
-            </plugins>
-        </pluginManagement>
-    </build>
-
 </project>

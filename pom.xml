@@ -41,7 +41,7 @@
         <jib-maven-plugin.version>3.5.1</jib-maven-plugin.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <aws-lambda-java-core.version>1.2.3</aws-lambda-java-core.version>
-        <aws-sdk.version>2.31.78</aws-sdk.version>
+        <aws-sdk.version>2.55.2</aws-sdk.version>
         <junit-jupiter.version>5.11.4</junit-jupiter.version>
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
         <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
@@ -49,6 +49,7 @@
         <skip.unit.tests>false</skip.unit.tests>
         <skip.integration.tests>false</skip.integration.tests>
         <org.testcontainers.version>2.0.5</org.testcontainers.version>
+        <io.netty.version>4.2.18.Final</io.netty.version>
 
         <!--companies house-->
         <structured-logging.version>3.0.51</structured-logging.version>
@@ -69,6 +70,13 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+<!--            &lt;!&ndash; Source: https://mvnrepository.com/artifact/io.netty/netty-bom &ndash;&gt;-->
+<!--            <dependency>-->
+<!--                <groupId>io.netty</groupId>-->
+<!--                <artifactId>netty-bom</artifactId>-->
+<!--                <version>${io.netty.version}</version>-->
+<!--                <type>pom</type>-->
+<!--            </dependency>-->
             <dependency>
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>

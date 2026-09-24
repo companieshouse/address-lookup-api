@@ -9,7 +9,7 @@
     </parent>
 
     <artifactId>address-lookup-parent</artifactId>
-    <version>latest</version>
+    <version>unversioned</version>
     <name>address-lookup-parent</name>
     <packaging>pom</packaging>
 

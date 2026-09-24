@@ -5,7 +5,7 @@
     <parent>
         <groupId>uk.gov.companieshouse</groupId>
         <artifactId>address-lookup-parent</artifactId>
-        <version>latest</version>
+        <version>unversioned</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 

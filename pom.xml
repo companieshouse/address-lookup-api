@@ -49,6 +49,7 @@
         <skip.unit.tests>false</skip.unit.tests>
         <skip.integration.tests>false</skip.integration.tests>
         <org.testcontainers.version>2.0.5</org.testcontainers.version>
+        <io.netty.version>4.2.18.Final</io.netty.version>
 
         <!--companies house-->
         <structured-logging.version>3.0.51</structured-logging.version>

@@ -48,9 +48,17 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- Liquibase runs only under the local profile; application.properties disables it -->
         <dependency>
-            <groupId>org.liquibase</groupId>
-            <artifactId>liquibase-core</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-liquibase</artifactId>
+        </dependency>
+        <!-- Changelogs for local runs and tests only; Aurora is migrated by lambdas/schema-migrator -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>address-lookup-db-schema</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>

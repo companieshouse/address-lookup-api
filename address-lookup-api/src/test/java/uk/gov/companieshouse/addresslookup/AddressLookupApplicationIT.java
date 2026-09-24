@@ -19,7 +19,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
                 "spring.docker.compose.enabled=false",
-                "spring.liquibase.change-log=classpath:db/changelog/db.changelog-local.yaml"
+                "spring.liquibase.enabled=true",
+                "spring.liquibase.change-log=classpath:db/changelog/db.changelog-local.yaml",
+                "spring.liquibase.contexts=local"
         })
 @Testcontainers
 class AddressLookupApplicationIT {

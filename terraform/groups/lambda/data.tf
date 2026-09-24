@@ -6,6 +6,12 @@ data "vault_generic_secret" "service_secrets" {
   path = local.service_secrets_path
 }
 
+# The Aurora master credentials, as written by the aurora group's operators.
+# Only the schema migrator receives them, via Parameter Store.
+data "vault_generic_secret" "database_secrets" {
+  path = local.database_secrets_path
+}
+
 data "aws_caller_identity" "aws_identity" {}
 
 data "aws_partition" "current" {}
@@ -505,3 +511,41 @@ data "aws_iam_policy_document" "import" {
     resources = ["${aws_s3_bucket.scanned.arn}/reconciliation/*"]
   }
 }
+
+# ---------------------------------------------------------------------------
+# Schema migrator
+# ---------------------------------------------------------------------------
+
+data "aws_iam_policy_document" "schema_migrator" {
+  # Released changelog archives only; not the service or Lambda artefacts
+  # alongside them in the release bucket.
+  statement {
+    sid     = "ReadReleasedChangelogs"
+    effect  = "Allow"
+    actions = ["s3:GetObject"]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:s3:::${var.release_bucket_name}/${var.lambda_artifact_key_prefix}/address-lookup-db-schema-*.zip"
+    ]
+  }
+
+  # Decrypt the two SecureString parameters, and only through Parameter Store.
+  statement {
+    sid       = "DecryptDatabaseCredentials"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt"]
+    resources = [module.schema_migrator_kms.key_arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["ssm.${var.aws_region}.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:EncryptionContext:PARAMETER_ARN"
+      values   = local.schema_migrator_parameter_arns
+    }
+  }
+}
+

@@ -26,7 +26,7 @@ variable "release_bucket_name" {
 
 variable "lambda_version" {
   type        = string
-  description = "The version of the address-lookup Lambda artefacts to deploy. All five functions are released together from the same reactor build and therefore share a version."
+  description = "The version of the address-lookup Lambda artefacts to deploy. All six functions, including the schema migrator, are released together from the same reactor build and therefore share a version."
 }
 
 variable "lambda_artifact_key_prefix" {

@@ -27,3 +27,8 @@ output "importer_security_group_id" {
   description = "Security group authorised to reach the Aurora cluster"
   value       = module.lambda["import"].security_group_id
 }
+
+output "schema_migrator_function_name" {
+  description = "The function Concourse invokes to apply a released db-schema changelog to Aurora"
+  value       = module.schema_migrator.lambda_function_name
+}

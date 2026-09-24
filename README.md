@@ -38,8 +38,10 @@ curl "http://localhost:8080/address-lookup-api/multiple-addresses?postcode=WF2%2
 The local database is exposed on port `5433` to avoid clashing with any existing
 Postgres running on the default `5432` port.
 
-Without the `local` profile, Liquibase uses `db.changelog-master.yaml`, which
-creates the schema without loading seed data. Provide `SPRING_DATASOURCE_URL`,
+The changelogs live in [`db-schema/`](db-schema/README.md). Without the `local`
+profile the service does not run Liquibase at all: Aurora is migrated only by
+the schema migrator Lambda (`lambdas/schema-migrator`) from a released
+`db-schema` artefact. Provide `SPRING_DATASOURCE_URL`,
 `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD` when connecting to
 an externally hosted database.
 
@@ -52,7 +54,7 @@ an externally hosted database.
 | HUMAN_LOG             | A boolean value to enable more readable log messages.                      | 1                                     |
 | ADDRESS_LOOKUP_URL    | The URL of the elasticsearch 6 cluster.                                    | http://elasticsearch:4001             |
 | DOCKER_COMPOSE_ENABLED | Whether Spring Boot should start local Docker Compose services.             | false                                 |
-| SPRING_DATASOURCE_URL | JDBC URL for the address lookup Postgres database.                          | jdbc:postgresql://localhost:5433/address_lookup |
+| SPRING_DATASOURCE_URL | JDBC URL for the address lookup Postgres database.                          | jdbc:postgresql://localhost:5433/address_lookup | <!-- trufflehog:ignore -->
 | SPRING_DATASOURCE_USERNAME | Username for the address lookup Postgres database.                    | postgres                              |
 | SPRING_DATASOURCE_PASSWORD | Password for the address lookup Postgres database.                    | postgres                              |
 

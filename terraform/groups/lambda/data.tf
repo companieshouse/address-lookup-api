@@ -129,15 +129,30 @@ data "aws_iam_policy_document" "guardduty_malware_protection_trust" {
       variable = "aws:SourceAccount"
       values   = [data.aws_caller_identity.aws_identity.account_id]
     }
+
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:${data.aws_partition.current.partition}:guardduty:${var.aws_region}:${data.aws_caller_identity.aws_identity.account_id}:malware-protection-plan/*"]
+    }
   }
 }
 
+# Follows the role policy template in the GuardDuty user guide, as does
+# file-transfer-stack. Object access is limited to the quarantine/ prefixes the
+# protection plans cover, plus the validation object GuardDuty writes when a
+# plan is created.
 data "aws_iam_policy_document" "guardduty_malware_protection" {
   statement {
     sid    = "AllowManagedRuleToSendS3EventsToGuardDuty"
     effect = "Allow"
 
-    actions = ["events:PutRule"]
+    actions = [
+      "events:PutRule",
+      "events:DeleteRule",
+      "events:PutTargets",
+      "events:RemoveTargets"
+    ]
 
     resources = [
       "arn:${data.aws_partition.current.partition}:events:${var.aws_region}:${data.aws_caller_identity.aws_identity.account_id}:rule/DO-NOT-DELETE-AmazonGuardDutyMalwareProtectionS3*"
@@ -155,20 +170,13 @@ data "aws_iam_policy_document" "guardduty_malware_protection" {
     effect = "Allow"
 
     actions = [
-      "events:DeleteRule",
-      "events:PutTargets",
-      "events:RemoveTargets"
+      "events:DescribeRule",
+      "events:ListTargetsByRule"
     ]
 
     resources = [
       "arn:${data.aws_partition.current.partition}:events:${var.aws_region}:${data.aws_caller_identity.aws_identity.account_id}:rule/DO-NOT-DELETE-AmazonGuardDutyMalwareProtectionS3*"
     ]
-
-    condition {
-      test     = "StringEquals"
-      variable = "events:ManagedBy"
-      values   = ["malware-protection-plan.guardduty.amazonaws.com"]
-    }
   }
 
   statement {
@@ -208,8 +216,10 @@ data "aws_iam_policy_document" "guardduty_malware_protection" {
     ]
 
     resources = [
-      "${aws_s3_bucket.source.arn}/*",
-      "${aws_s3_bucket.scanned.arn}/*"
+      "${aws_s3_bucket.source.arn}/quarantine/*",
+      "${aws_s3_bucket.scanned.arn}/quarantine/*",
+      "${aws_s3_bucket.source.arn}/malware-protection-resource-validation-object",
+      "${aws_s3_bucket.scanned.arn}/malware-protection-resource-validation-object"
     ]
   }
 
@@ -225,8 +235,10 @@ data "aws_iam_policy_document" "guardduty_malware_protection" {
     ]
 
     resources = [
-      "${aws_s3_bucket.source.arn}/*",
-      "${aws_s3_bucket.scanned.arn}/*"
+      "${aws_s3_bucket.source.arn}/quarantine/*",
+      "${aws_s3_bucket.scanned.arn}/quarantine/*",
+      "${aws_s3_bucket.source.arn}/malware-protection-resource-validation-object",
+      "${aws_s3_bucket.scanned.arn}/malware-protection-resource-validation-object"
     ]
   }
 
@@ -240,6 +252,46 @@ data "aws_iam_policy_document" "guardduty_malware_protection" {
       "${aws_s3_bucket.source.arn}/malware-protection-resource-validation-object",
       "${aws_s3_bucket.scanned.arn}/malware-protection-resource-validation-object"
     ]
+  }
+
+  statement {
+    sid    = "AllowDecryptForMalwareScan"
+    effect = "Allow"
+
+    actions = [
+      "kms:GenerateDataKey",
+      "kms:Decrypt"
+    ]
+
+    resources = [module.acquisition_kms.key_arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "kms:ViaService"
+      values   = ["s3.${var.aws_region}.amazonaws.com"]
+    }
+  }
+}
+
+# Every function reads or writes objects under the acquisition key. Access is
+# only usable through S3, so the key cannot be used to decrypt anything else.
+data "aws_iam_policy_document" "acquisition_kms" {
+  statement {
+    sid    = "UseAcquisitionKeyThroughS3"
+    effect = "Allow"
+
+    actions = [
+      "kms:Decrypt",
+      "kms:GenerateDataKey"
+    ]
+
+    resources = [module.acquisition_kms.key_arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["s3.${var.aws_region}.amazonaws.com"]
+    }
   }
 }
 

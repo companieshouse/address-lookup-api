@@ -84,7 +84,8 @@ locals {
         OS_PACKAGES   = local.os_packages
       }
       policies = [
-        data.aws_iam_policy_document.discovery.json
+        data.aws_iam_policy_document.discovery.json,
+        data.aws_iam_policy_document.acquisition_kms.json
       ]
       event_rules = [
         {
@@ -108,7 +109,8 @@ locals {
         MAX_ZIP_BYTES = tostring(var.max_zip_bytes)
       }
       policies = [
-        data.aws_iam_policy_document.download.json
+        data.aws_iam_policy_document.download.json,
+        data.aws_iam_policy_document.acquisition_kms.json
       ]
       event_rules = [
         {
@@ -137,7 +139,8 @@ locals {
         ACQUISITION_SWEEP_LIMIT = tostring(var.acquisition_sweep_limit)
       }
       policies = [
-        data.aws_iam_policy_document.scan.json
+        data.aws_iam_policy_document.scan.json,
+        data.aws_iam_policy_document.acquisition_kms.json
       ]
       event_rules = [
         {
@@ -181,7 +184,8 @@ locals {
         MAX_EXTRACTED_BYTES = tostring(var.max_extracted_bytes)
       }
       policies = [
-        data.aws_iam_policy_document.unzip.json
+        data.aws_iam_policy_document.unzip.json,
+        data.aws_iam_policy_document.acquisition_kms.json
       ]
       event_rules = [
         {
@@ -212,7 +216,8 @@ locals {
         SPRING_MAIN_BANNERMODE = "off"
       }
       policies = [
-        data.aws_iam_policy_document.import.json
+        data.aws_iam_policy_document.import.json,
+        data.aws_iam_policy_document.acquisition_kms.json
       ]
       event_rules = [
         {

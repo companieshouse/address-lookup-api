@@ -3,6 +3,11 @@ variable "aws_profile" {
   description = "The AWS profile to use for authentication, defined in environments vars."
 }
 
+variable "aws_account" {
+  type        = string
+  description = "The AWS account name, e.g. development, staging or live. Used to locate the account's shared S3 access logging bucket."
+}
+
 variable "environment" {
   type        = string
   description = "The environment name, defined in environments vars."

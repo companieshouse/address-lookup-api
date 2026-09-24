@@ -19,6 +19,7 @@ specific way. This group creates them.
 | `SCANNED_BUCKET`, versioned | `aws_s3_bucket.scanned` plus `aws_s3_bucket_versioning.scanned` |
 | `EVENT_BUS` carrying `os.acquisition` commands | `aws_cloudwatch_event_bus.acquisition` |
 | Objects tagged `GuardDutyMalwareScanStatus` | `aws_guardduty_malware_protection_plan.source` / `.scanned` |
+| Objects encrypted with a key GuardDuty may use | `module.acquisition_kms` (customer managed key) |
 | `OS_API_KEY`, `DB_USER`, `DB_PASSWORD` | HashiCorp Vault, read at apply time |
 | `JDBC_URL` | derived from the cluster created by `terraform/groups/aurora` |
 | "OnFailure DLQ" referenced in `ScanResultsService` | `aws_sqs_queue.dead_letter` plus an alarm |
@@ -86,6 +87,27 @@ Each function's policy grants only the S3 prefixes it reads and writes.
 exact key before reading it rather than relying on the difference between a 404
 and a 403.
 
+### Encryption
+
+Both buckets use SSE-KMS with a customer managed key from
+`terraform-modules//aws/kms`. GuardDuty Malware Protection can scan objects
+under a customer managed key as long as the protection plan's role is allowed
+to use it. It cannot scan objects under the AWS managed `aws/s3` key. The key
+policy delegates to the account, and access comes from IAM: the GuardDuty role
+and each function's execution role get `kms:Decrypt` and
+`kms:GenerateDataKey`, usable only through S3 (`kms:ViaService`).
+
+## How this follows Companies House conventions
+
+| Resource | Convention followed | Reference |
+| -------- | ------------------- | --------- |
+| S3 buckets | Plain `aws_s3_bucket*` resources (there is no shared bucket module), with public access blocked, `BucketOwnerEnforced` ownership, a TLS-only bucket policy, and server access logging through `terraform-modules//aws/s3_access_logging` to the account's `<aws_account>-<region>-s3-access-logs.ch.gov.uk` bucket | `file-transfer-stack`, `call-centre-data-terraform`, `cdn-terraform` |
+| GuardDuty Malware Protection | Plain `aws_guardduty_malware_protection_plan` resources with a dedicated role whose policy follows the GuardDuty user guide template, and a customer managed key the role may use | `file-transfer-stack/groups/s3-av` (the only other use in the organisation) |
+| KMS | `terraform-modules//aws/kms` | `identity-verification-api`, `notifications-service-stack` |
+| EventBridge rules | Created through the `lambda_cloudwatch_event_rules` input of `terraform-modules//aws/lambda` | `s3-av-scanner`, `payment-reconciler` (plain rules) |
+| EventBridge bus | Plain `aws_cloudwatch_event_bus`. No other repository in the organisation creates a custom bus and there is no shared module for one | none |
+| SQS | Plain `aws_sqs_queue` resources | `efs-document-processor` |
+
 ## Deployment
 
 Applied by the `address-lookup-api` pipeline in `companieshouse/ci-pipelines`
@@ -131,9 +153,12 @@ and must include `os_api_key`, `importer_db_user` and `importer_db_password`.
 
 | Name | Source | Version |
 |------|--------|---------|
+| <a name="module_acquisition_kms"></a> [acquisition\_kms](#module\_acquisition\_kms) | git@github.com:companieshouse/terraform-modules//aws/kms | 1.0.434 |
 | <a name="module_iac_tags"></a> [iac\_tags](#module\_iac\_tags) | git@github.com:companieshouse/terraform-modules//aws/tagging/iac | 1.0.434 |
 | <a name="module_lambda"></a> [lambda](#module\_lambda) | git@github.com:companieshouse/terraform-modules.git//aws/lambda | 1.0.434 |
 | <a name="module_owner_tags"></a> [owner\_tags](#module\_owner\_tags) | git@github.com:companieshouse/terraform-modules//aws/tagging/owner | 1.0.434 |
+| <a name="module_scanned_s3_access_logging"></a> [scanned\_s3\_access\_logging](#module\_scanned\_s3\_access\_logging) | git@github.com:companieshouse/terraform-modules//aws/s3_access_logging | 1.0.434 |
+| <a name="module_source_s3_access_logging"></a> [source\_s3\_access\_logging](#module\_source\_s3\_access\_logging) | git@github.com:companieshouse/terraform-modules//aws/s3_access_logging | 1.0.434 |
 
 ## Resources
 
@@ -163,6 +188,7 @@ and must include `os_api_key`, `importer_db_user` and `importer_db_password`.
 | [aws_sqs_queue_policy.dead_letter](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sqs_queue_policy) | resource |
 | [aws_vpc_security_group_ingress_rule.importer_to_aurora](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
 | [aws_caller_identity.aws_identity](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
+| [aws_iam_policy_document.acquisition_kms](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.dead_letter_queue_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.discovery](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.download](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
@@ -186,6 +212,7 @@ and must include `os_api_key`, `importer_db_user` and `importer_db_password`.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_acquisition_sweep_limit"></a> [acquisition\_sweep\_limit](#input\_acquisition\_sweep\_limit) | Maximum number of acquisition plans the scan Lambda reconciles per invocation | `number` | `20` | no |
+| <a name="input_aws_account"></a> [aws\_account](#input\_aws\_account) | The AWS account name, e.g. development, staging or live. Used to locate the account's shared S3 access logging bucket. | `string` | n/a | yes |
 | <a name="input_aws_profile"></a> [aws\_profile](#input\_aws\_profile) | The AWS profile to use for authentication, defined in environments vars. | `string` | n/a | yes |
 | <a name="input_aws_region"></a> [aws\_region](#input\_aws\_region) | The region in which to provision resources | `string` | `"eu-west-2"` | no |
 | <a name="input_discovery_schedule_expression"></a> [discovery\_schedule\_expression](#input\_discovery\_schedule\_expression) | Schedule on which the discovery Lambda looks for a new Ordnance Survey supply | `string` | `"cron(0 2 ? * MON *)"` | no |

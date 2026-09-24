@@ -40,15 +40,15 @@ resource "aws_s3_bucket_versioning" "scanned" {
   }
 }
 
-# SSE-S3 rather than KMS: GuardDuty Malware Protection cannot scan objects
-# encrypted with an AWS managed KMS key, and the content is public Ordnance
-# Survey supply rather than Companies House data.
+# Encrypted with the customer managed key in kms.tf. Bucket keys cut the number
+# of KMS requests made while large objects are streamed in parts.
 resource "aws_s3_bucket_server_side_encryption_configuration" "source" {
   bucket = aws_s3_bucket.source.id
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = module.acquisition_kms.key_arn
     }
     bucket_key_enabled = true
   }
@@ -59,7 +59,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "scanned" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = module.acquisition_kms.key_arn
     }
     bucket_key_enabled = true
   }
@@ -177,4 +178,22 @@ resource "aws_s3_bucket_lifecycle_configuration" "scanned" {
       days_after_initiation = 7
     }
   }
+}
+
+# Server access logs go to the account's shared access logging bucket, created
+# by aws-common-infrastructure-terraform, as for every other bucket in the org.
+module "source_s3_access_logging" {
+  source = "git@github.com:companieshouse/terraform-modules//aws/s3_access_logging?ref=1.0.434"
+
+  aws_account           = var.aws_account
+  aws_region            = var.aws_region
+  source_s3_bucket_name = aws_s3_bucket.source.id
+}
+
+module "scanned_s3_access_logging" {
+  source = "git@github.com:companieshouse/terraform-modules//aws/s3_access_logging?ref=1.0.434"
+
+  aws_account           = var.aws_account
+  aws_region            = var.aws_region
+  source_s3_bucket_name = aws_s3_bucket.scanned.id
 }

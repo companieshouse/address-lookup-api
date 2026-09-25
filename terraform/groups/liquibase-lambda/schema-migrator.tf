@@ -1,18 +1,3 @@
-# The schema migrator: the only path by which the Aurora schema changes.
-#
-#   merge --> Concourse --> release bucket (address-lookup-db-schema-<v>.zip)
-#                  |
-#                  +--invoke--> schema migrator --> Parameter Store (credentials)
-#                                     |         --> release bucket (changelog)
-#                                     +--Liquibase--> Aurora (DATABASECHANGELOG is the history)
-#
-# Nobody connects to the database to change it. The function has no event
-# sources and no resource policy: it runs only when Concourse invokes it with
-# a released version and that release's SHA-256.
-#
-# CREATE EXTENSION postgis needs rds_superuser, which today only the cluster's
-# master user has, so the migrator uses the master credentials from Vault.
-
 locals {
   schema_migrator_name = "${local.name_prefix}-schema-migrator"
 
@@ -45,7 +30,7 @@ module "schema_migrator_secrets" {
   name_prefix = local.schema_migrator_parameter_prefix
   kms_key_id  = module.schema_migrator_kms.key_id
 
-  secrets = nonsensitive({
+  secrets = sensitive({
     db_username = data.vault_generic_secret.database_secrets.data["master_username"]
     db_password = data.vault_generic_secret.database_secrets.data["master_password"]
   })
@@ -56,7 +41,7 @@ module "schema_migrator_secrets" {
 # lambda_maximum_retry_attempts, lambda_ssm_parameter_arns). 1.0.434 predates
 # it; update this ref to the tag that release is given.
 module "schema_migrator" {
-  source = "git@github.com:companieshouse/terraform-modules.git//aws/lambda?ref=1.0.435"
+  source = "git@github.com:companieshouse/terraform-modules.git//aws/lambda?ref=ALS-51/Liquibase-Lambda-Impl"
 
   environment    = var.environment
   function_name  = local.schema_migrator_name

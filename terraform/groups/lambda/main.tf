@@ -21,7 +21,8 @@ terraform {
 # (schema-migrator.tf), the single path by which the Aurora schema changes.
 
 module "iac_tags" {
-  source = "git@github.com:companieshouse/terraform-modules//aws/tagging/iac?ref=1.0.434"
+  source = "git@github.com:companieshouse/terraform-modules//aws/tagging/iac?ref=ALS-51/Liquibase-Lambda-Impl"
+  # source = "git@github.com:companieshouse/terraform-modules//aws/tagging/iac?ref=1.0.434"
 
   group           = "lambda"
   source_code_url = "https://github.com/companieshouse/address-lookup-api.git"

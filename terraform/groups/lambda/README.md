@@ -14,7 +14,7 @@ runbook are in [`db-schema/README.md`](../../../db-schema/README.md).
                                     +--Liquibase--> Aurora (DATABASECHANGELOG is the history)
 ```
 
-## Liquibase Schema migrator
+## Schema migrator
 
 | Concern | How it is handled here |
 | ------- | ---------------------- |

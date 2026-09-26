@@ -1,4 +1,11 @@
 databaseChangeLog:
+  # Applied to Aurora only by the schema migrator Lambda. See db-schema/README.md.
+  - property:
+      name: postgis.version
+      value: 3.6.1
+      global: true
+  - include:
+      file: db/changelog/changes/creation/000-create-postgis-extension.sql
   - include:
       file: db/changelog/changes/creation/001-create-address-tables.sql
   - include:

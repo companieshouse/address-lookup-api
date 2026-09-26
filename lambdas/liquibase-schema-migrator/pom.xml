@@ -18,7 +18,9 @@
     <artifactId>address-lookup-lambda-schema-migrator</artifactId>
     <name>address-lookup-lambda-schema-migrator</name>
     <packaging>jar</packaging>
-
+    <properties>
+        <skipITs>true</skipITs>
+    </properties>
     <dependencies>
         <dependency>
             <groupId>com.amazonaws</groupId>

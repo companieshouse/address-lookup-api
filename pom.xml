@@ -24,7 +24,7 @@
         <module>lambdas/scan</module>
         <module>lambdas/unzip</module>
         <module>lambdas/import</module>
-        <module>lambdas/schema-migrator</module>
+        <module>lambdas/liquibase-schema-migrator</module>
     </modules>
 
     <properties>

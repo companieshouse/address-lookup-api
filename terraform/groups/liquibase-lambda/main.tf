@@ -19,15 +19,15 @@ terraform {
 
 
 module "secrets" {
-  source = "git@github.com:companieshouse/terraform-modules//aws/parameter-store?ref=1.0.427"
+  source = "git@github.com:companieshouse/terraform-modules//aws/parameter-store?ref=1.0.434"
 
   name_prefix = local.liquibase_parameter_prefix
   kms_key_id  = data.aws_kms_key.kms_key.id
 
-  secrets = nonsensitive({
+  secrets = {
     db_username = data.vault_generic_secret.database_secrets.data["master_username"]
     db_password = data.vault_generic_secret.database_secrets.data["master_password"]
-  })
+  }
 }
 
 

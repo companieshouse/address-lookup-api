@@ -24,7 +24,7 @@ module "liquibase_secrets" {
   name_prefix = local.liquibase_parameter_prefix
   kms_key_id  = data.aws_kms_key.kms_key.id
 
-  secrets = sensitive({
+  secrets = nonsensitive({
     db_username = data.vault_generic_secret.database_secrets.data["master_username"]
     db_password = data.vault_generic_secret.database_secrets.data["master_password"]
   })

@@ -18,8 +18,8 @@ terraform {
 }
 
 
-module "liquibase_secrets" {
-  source = "git@github.com:companieshouse/terraform-modules//aws/parameter-store?ref=1.0.434"
+module "secrets" {
+  source = "git@github.com:companieshouse/terraform-modules//aws/parameter-store?ref=1.0.427"
 
   name_prefix = local.liquibase_parameter_prefix
   kms_key_id  = data.aws_kms_key.kms_key.id

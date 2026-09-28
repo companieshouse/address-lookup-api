@@ -3,7 +3,7 @@ package uk.gov.companieshouse.addresslookup.release.runtime;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
-import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.check;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
 
 @ConfigurationProperties("importer")
 public record ImportProperties(

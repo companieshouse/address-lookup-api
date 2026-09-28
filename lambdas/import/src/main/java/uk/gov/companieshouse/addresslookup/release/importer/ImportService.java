@@ -2,8 +2,8 @@ package uk.gov.companieshouse.addresslookup.release.importer;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import software.amazon.awssdk.services.s3.S3Client;
-import uk.gov.companieshouse.addresslookup.lamda.shared.storage.ReconciliationCursor;
-import uk.gov.companieshouse.addresslookup.lamda.shared.storage.ReleaseStore;
+import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReconciliationCursor;
+import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.release.runtime.ImportProperties;
 import uk.gov.companieshouse.addresslookup.releasecore.service.DatasetImportService;
 import uk.gov.companieshouse.addresslookup.releasecore.service.PromotionService;
@@ -16,7 +16,7 @@ import uk.gov.companieshouse.release.model.ReleaseManifest;
 
 import java.util.*;
 
-import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.*;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 /**
  * Events are wake-ups only; persisted immutable descriptions and clean evidence authorize import.

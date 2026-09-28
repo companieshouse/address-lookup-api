@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 
 @Entity
 @Immutable
-@Table(name = "address_lookup")
+@Table(name = "address_lookup", schema = "address_lookup")
 public class RoyalMailAddressLookup {
 
     @Id

@@ -9,11 +9,14 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.logging.Logger;
 
 import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.*;
 
 /** API key is sent only to api.os.uk, never forwarded to the signed download host. */
 public final class OsClient {
+  private static final Logger LOG = Logger.getLogger(OsClient.class.getName());
+
   private final HttpClient http;
   private final String key;
   private final Duration requestTimeout;
@@ -34,6 +37,17 @@ public final class OsClient {
             .build();
   }
 
+  OsClient(
+      String key,
+      Duration requestTimeout,
+      com.fasterxml.jackson.databind.ObjectMapper json,
+      HttpClient http) {
+    this.key = key;
+    this.requestTimeout = requestTimeout;
+    this.json = json;
+    this.http = http;
+  }
+
   public InputStream download(String url) throws Exception {
     URI uri = URI.create(url);
     check(
@@ -49,7 +63,15 @@ public final class OsClient {
       check(
           java.util.Set.of(301, 302, 303, 307, 308).contains(r.statusCode()),
           "OS HTTP status " + r.statusCode());
-      uri = uri.resolve(r.headers().firstValue("location").orElseThrow());
+      URI next = uri.resolve(r.headers().firstValue("location").orElseThrow());
+      LOG.info(
+          "OS download redirect followed status="
+              + r.statusCode()
+              + " from="
+              + sanitizeUrl(uri.toString())
+              + " to="
+              + sanitizeUrl(next.toString()));
+      uri = next;
     }
     throw new IOException("Too many redirects");
   }

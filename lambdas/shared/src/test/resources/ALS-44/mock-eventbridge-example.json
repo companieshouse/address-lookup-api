@@ -1,0 +1,8 @@
+{
+  "source": "os.acquisition",
+  "detail-type": "DOWNLOAD",
+  "detail": {
+    "planKey": "acquisitions/2026-05-16/4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json",
+    "dataset": "add_isl_royalmailaddress"
+  }
+}

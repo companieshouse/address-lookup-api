@@ -109,7 +109,11 @@ public final class ReleaseStore {
   }
 
   public static String receiptKey(String id, String dataset, String step) {
-    return "control/" + UUID.fromString(id) + "/" + dataset + "/" + step + ".json";
+    UUID release = UUID.fromString(id);
+    if ("download".equals(step)) {
+      return "Scanned/" + release + "/" + dataset + ".receipt.json";
+    }
+    return "control/" + release + "/" + dataset + "/" + step + ".json";
   }
 
   public JsonNode receipt(String bucket, String id, String dataset, String step) throws Exception {

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import uk.gov.companieshouse.release.model.ReleaseJson;
 
+import java.net.URI;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Map;
@@ -27,5 +28,13 @@ public final class RuntimeSupport {
     public static String required(JsonNode n, String field) {
         check(n.hasNonNull(field) && !n.get(field).asText().isBlank(), "Missing " + field);
         return n.get(field).asText();
+    }
+
+    public static String sanitizeUrl(String value) {
+        URI uri = URI.create(value);
+        return uri.getScheme() + "://" + uri.getHost()
+                + (uri.getRawPath() == null ? "" : uri.getRawPath())
+                + (uri.getRawQuery() == null ? "" : "?***")
+                + (uri.getRawFragment() == null ? "" : "#" + uri.getRawFragment());
     }
 }

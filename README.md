@@ -38,9 +38,10 @@ curl "http://localhost:8080/address-lookup-api/multiple-addresses?postcode=WF2%2
 The local database is exposed on port `5433` to avoid clashing with any existing
 Postgres running on the default `5432` port.
 
-The changelogs live in [`db-schema/`](db-schema/README.md). Without the `local`
+The changelogs live in `address-lookup-api/src/main/resources/db/changelog`
+(see [docs/database-changes.md](docs/database-changes.md)). Without the `local`
 profile the service does not run Liquibase at all: Aurora is migrated only by
-the schema migrator Lambda (`lambdas/schema-migrator`) from a released
+the Liquibase Lambda (`lambdas/liquibase-schema-migrator`) from a released
 `db-schema` artefact. Provide `SPRING_DATASOURCE_URL`,
 `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD` when connecting to
 an externally hosted database.

@@ -31,7 +31,7 @@ import java.util.stream.Stream;
  */
 public final class Handler implements RequestHandler<Map<String, Object>, String> {
 
-    private static final Logger LOG = LoggerFactory.getLogger("address-lookup-schema-migrator");
+    private static final Logger LOG = LoggerFactory.getLogger("address-lookup-liquibase-lambda");
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final ChangelogArchive archive;

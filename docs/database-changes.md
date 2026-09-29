@@ -19,7 +19,7 @@ schema changes.
           |    to the release bucket (development account)
           | 3. invoke: VALIDATE -> UPDATE -> STATUS
           v                                                  |
-  address-lookup-api-liquibase-<env> (Lambda)                |
+  address-lookup-liquibase-lambda-<env> (Lambda)            |
           | 4. read DB credentials from Parameter Store (fed from Vault)
           | 5. read the released changelog from S3, verify its SHA-256
           | 6. Liquibase update
@@ -76,10 +76,15 @@ image's default version.
    `clearCheckSums` mode.
 3. Do not start comment lines with `-- changeset`, `-- precondition` or
    `-- rollback`: Liquibase parses them as directives.
-4. Run `make test-integration` (needs Docker). `SchemaMigratorIT` applies the
-   packaged changelog to PostGIS with the real Lambda code, including the
-   PostGIS-present and PostGIS-absent paths. Concourse runs it too, in
-   `build-test-integration`.
+4. Run `make test-unit test-integration`; neither needs Docker, and Concourse
+   runs both. `ReleasedChangelogTest` packages the real changelog as the
+   pipeline does and renders it with Liquibase's offline PostgreSQL mode: it
+   must parse and validate, pin PostGIS `3.6.1` in the `aws` context and
+   substitute every property. `SchemaMigratorIT` runs the Lambda code (every
+   mode, the `PARTIAL` resume, checksum and lock handling) against in-memory
+   H2 with a fixture changelog. The PostGIS SQL itself first executes against
+   Aurora in cidev, where `VALIDATE` runs before `UPDATE`; run the service
+   locally (`local` profile, PostGIS via Docker Compose) to try it earlier.
 5. Bump `version` for a breaking change, otherwise leave it: the pipeline
    calculates the patch number.
 
@@ -100,8 +105,10 @@ UI or with `fly -t <target> trigger-job -j address-lookup-api/cidev-db-schema-mi
 It migrates the latest release; pin an older `s3-db-schema-release` version in
 the UI to re-run that one. Nobody needs database or AWS console access.
 
-The Lambda itself is released on the `lambda-X.Y.Z` tag stream
-(`lambda-release`) and deployed by `cidev-lambda-plan/apply`; see
+The Lambda itself is released as `address-lookup-liquibase-lambda-X.Y.Z.zip` on
+its own `liquibase-lambda-X.Y.Z` tag stream (`liquibase-lambda-release`, version
+file `lambdas/liquibase-schema-migrator/version`) and deployed by
+`cidev-liquibase-lambda-plan/apply`; see
 [`terraform/groups/liquibase-lambda`](../terraform/groups/liquibase-lambda/README.md).
 
 ## Invoking the migrator

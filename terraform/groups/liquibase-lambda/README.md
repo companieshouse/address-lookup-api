@@ -1,6 +1,6 @@
 # terraform/groups/liquibase-lambda
 
-Deploys the address-lookup Liquibase Lambda, `address-lookup-api-liquibase-<environment>`.
+Deploys the address-lookup Liquibase Lambda, `address-lookup-liquibase-lambda-<environment>`.
 It applies a released changelog from
 `address-lookup-api/src/main/resources/db/changelog` to Aurora, and it is the
 only thing allowed to change the Aurora schema. The end-to-end design, pipeline
@@ -26,7 +26,7 @@ The group follows the layout of `services-dashboard-api/terraform/groups/lambda`
 | ------- | ---------------------- |
 | Trigger | No event rules and no resource policy. Concourse invokes it synchronously after a `db-schema` release |
 | Changelog | `s3:GetObject` on `address-lookup-api/address-lookup-db-schema-*.zip` in the release bucket only. The function also checks the SHA-256 that the pipeline passes in |
-| Credentials | Aurora master credentials from Vault (`common-services-stack/address-rds`), copied by `terraform-modules//aws/parameter-store` into two SecureStrings under `/address-lookup-api-liquibase-<environment>/`, encrypted with `alias/aws/ssm`. The function reads them at invocation time; `lambda_ssm_parameter_arns` limits it to those two parameters |
+| Credentials | Aurora master credentials from Vault (`common-services-stack/address-rds`), copied by `terraform-modules//aws/parameter-store` into two SecureStrings under `/address-lookup-liquibase-lambda-<environment>/`, encrypted with `alias/aws/ssm`. The function reads them at invocation time; `lambda_ssm_parameter_arns` limits it to those two parameters |
 | Network | Egress on 443 (S3, Parameter Store) and on the database port to the Aurora security group only. Aurora gets a matching ingress rule |
 | Concurrency | Reserved concurrency of 1 and no retries. One migration at a time; Concourse decides what to do after a failure |
 | Timeout | 900 seconds. `UPDATE` stops `MIN_REMAINING_MILLIS` before that and returns `PARTIAL`, so the Liquibase lock is always released |
@@ -37,9 +37,9 @@ It uses the master user because `CREATE EXTENSION postgis` needs
 ## Deployment
 
 Applied by the `address-lookup-api` pipeline in `companieshouse/ci-pipelines`
-(`cidev-lambda-plan` / `cidev-lambda-apply`, `GROUP: liquibase-lambda`), in the
+(`cidev-liquibase-lambda-plan` / `cidev-liquibase-lambda-apply`, `GROUP: liquibase-lambda`), in the
 same way as the `aurora` and `ecs-service` groups, with
-`release_artifact_key=address-lookup-api/address-lookup-lambda-liquibase-schema-migrator-<lambda-X.Y.Z>.zip`.
+`release_artifact_key=address-lookup-api/address-lookup-liquibase-lambda-<X.Y.Z>.zip`.
 
 Nothing needs to be added to Vault: the function uses the secret the `aurora`
 group creates the cluster with.

@@ -1,0 +1,16 @@
+# Test fixture for SchemaMigratorIT: the same shape as the real changelog (a
+# global property, a precondition that marks a changeset ran, context filters)
+# in SQL that H2 runs, so the migrator is tested without Docker.
+databaseChangeLog:
+  - property:
+      name: marker.label
+      value: default
+      global: true
+  - include:
+      file: db/changelog/changes/creation/000-create-marker.sql
+  - include:
+      file: db/changelog/changes/creation/001-create-address.sql
+  - include:
+      file: db/changelog/changes/creation/002-create-address-view.sql
+  - include:
+      file: db/changelog/changes/creation/003-local-seed.sql

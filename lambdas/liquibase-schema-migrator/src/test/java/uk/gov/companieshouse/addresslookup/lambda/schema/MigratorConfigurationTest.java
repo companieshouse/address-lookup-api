@@ -16,8 +16,8 @@ class MigratorConfigurationTest {
             "CHANGELOG_BUCKET", "release-bucket",
             "DB_HOST", "cidev-address-rds.cluster-abc.eu-west-2.rds.amazonaws.com",
             "DB_NAME", "addressdb",
-            "DB_USERNAME_PARAMETER", "/address-lookup-schema-migrator-cidev/db_username",
-            "DB_PASSWORD_PARAMETER", "/address-lookup-schema-migrator-cidev/db_password");
+            "DB_USERNAME_PARAMETER", "/address-lookup-liquibase-lambda-cidev/db_username",
+            "DB_PASSWORD_PARAMETER", "/address-lookup-liquibase-lambda-cidev/db_password");
 
     @Test
     void alwaysVerifiesTheServerCertificate() throws Exception {

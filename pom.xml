@@ -139,7 +139,7 @@
                 <!--
                     Lambda deployment package, following the Companies House
                     convention (search-service-comparison-utility): an attached
-                    <artifactId>-<version>-lambda.jar that `make package-lambdas`
+                    <artifactId>-<version>-lambda.jar that `make package-liquibase-lambda`
                     renames to <artifactId>-<version>.zip. Deployable Lambda
                     modules opt in by declaring the plugin without configuration.
                 -->

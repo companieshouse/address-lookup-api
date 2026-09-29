@@ -2,7 +2,7 @@ locals {
 
   service_name         = "address-lookup-api"
   stack_name           = "common-services-stack" # the stack the service and its Aurora cluster deploy into
-  lambda_function_name = "${local.service_name}-liquibase"
+  lambda_function_name = "address-lookup-liquibase-lambda"
   kms_alias            = "alias/aws/ssm"
 
   # Release artefacts, and the changelogs the function applies, are published

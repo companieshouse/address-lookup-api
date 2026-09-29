@@ -8,6 +8,7 @@ import liquibase.changelog.ChangeSet;
 import liquibase.changelog.RanChangeSet;
 import liquibase.database.Database;
 import liquibase.database.DatabaseFactory;
+import liquibase.database.core.PostgresDatabase;
 import liquibase.database.jvm.JdbcConnection;
 import liquibase.exception.LiquibaseException;
 import liquibase.resource.DirectoryResourceAccessor;
@@ -35,7 +36,7 @@ import java.util.function.LongSupplier;
  */
 public final class SchemaMigrator {
 
-    static final String APPLICATION_NAME = "address-lookup-schema-migrator";
+    static final String APPLICATION_NAME = "address-lookup-liquibase-lambda";
     static final String TAG_PREFIX = "db-schema-";
     private static final int MAX_SQL_PREVIEW_CHARS = 256 * 1024;
 
@@ -45,15 +46,29 @@ public final class SchemaMigrator {
         System.setProperty("liquibase.showBanner", "false");
     }
 
+    /** Opens the single connection an invocation uses. */
+    @FunctionalInterface
+    interface ConnectionFactory {
+        Connection open(DatabaseCredentials credentials) throws SQLException;
+    }
+
     private final MigratorConfiguration config;
+    private final ConnectionFactory connections;
 
     public SchemaMigrator(MigratorConfiguration config) {
         this.config = config;
+        this.connections = credentials -> DriverManager.getConnection(config.jdbcUrl(), connectionProperties(credentials));
+    }
+
+    /** For tests that run the migrator against an in-memory database instead of PostgreSQL. */
+    SchemaMigrator(MigratorConfiguration config, ConnectionFactory connections) {
+        this.config = config;
+        this.connections = connections;
     }
 
     public MigrationResult migrate(MigrationRequest request, Path changelogRoot, DatabaseCredentials credentials,
                                    LongSupplier remainingMillis) throws Exception {
-        try (Connection connection = DriverManager.getConnection(config.jdbcUrl(), connectionProperties(credentials))) {
+        try (Connection connection = connections.open(credentials)) {
             Database database = DatabaseFactory.getInstance()
                     .findCorrectDatabaseImplementation(new JdbcConnection(connection));
 
@@ -169,6 +184,9 @@ public final class SchemaMigrator {
         }
 
         private String postgisVersion() throws SQLException {
+            if (!(liquibase.getDatabase() instanceof PostgresDatabase)) {
+                return null;
+            }
             try (PreparedStatement query = connection.prepareStatement(
                     "SELECT extversion FROM pg_catalog.pg_extension WHERE extname = 'postgis'");
                  ResultSet rows = query.executeQuery()) {

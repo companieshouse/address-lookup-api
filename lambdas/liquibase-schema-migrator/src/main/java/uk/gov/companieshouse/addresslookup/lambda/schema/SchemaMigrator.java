@@ -1,4 +1,4 @@
-package uk.gov.companieshouse.addresslookup.lamda.schema;
+package uk.gov.companieshouse.addresslookup.lambda.schema;
 
 import liquibase.Contexts;
 import liquibase.LabelExpression;
@@ -11,7 +11,7 @@ import liquibase.database.DatabaseFactory;
 import liquibase.database.jvm.JdbcConnection;
 import liquibase.exception.LiquibaseException;
 import liquibase.resource.DirectoryResourceAccessor;
-import uk.gov.companieshouse.addresslookup.lamda.schema.MigrationResult.Status;
+import uk.gov.companieshouse.addresslookup.lambda.schema.MigrationResult.Status;
 
 import java.io.StringWriter;
 import java.nio.file.Path;

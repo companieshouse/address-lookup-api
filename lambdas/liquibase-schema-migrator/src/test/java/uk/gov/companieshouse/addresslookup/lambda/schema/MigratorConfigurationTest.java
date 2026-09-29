@@ -1,4 +1,4 @@
-package uk.gov.companieshouse.addresslookup.lamda.schema;
+package uk.gov.companieshouse.addresslookup.lambda.schema;
 
 import org.junit.jupiter.api.Test;
 

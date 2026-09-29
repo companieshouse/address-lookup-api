@@ -1,4 +1,4 @@
-package uk.gov.companieshouse.addresslookup.lamda.schema;
+package uk.gov.companieshouse.addresslookup.lambda.schema;
 
 import java.util.Locale;
 import java.util.Map;

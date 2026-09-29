@@ -1,5 +1,5 @@
 databaseChangeLog:
-  # Applied to Aurora only by the schema migrator Lambda. See db-schema/README.md.
+  # Applied to Aurora only by the schema migrator Lambda. See docs/database-changes.md.
   - property:
       name: postgis.version
       value: 3.6.1

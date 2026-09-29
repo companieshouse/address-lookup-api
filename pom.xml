@@ -16,7 +16,6 @@
     <modules>
         <module>release-model</module>
         <module>release-core</module>
-        <module>db-schema</module>
         <module>address-lookup-api</module>
         <module>lambdas/shared</module>
         <module>lambdas/discovery</module>

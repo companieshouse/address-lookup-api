@@ -1,8 +1,8 @@
-package uk.gov.companieshouse.addresslookup.lamda.schema;
+package uk.gov.companieshouse.addresslookup.lambda.schema;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import uk.gov.companieshouse.addresslookup.lamda.schema.MigratorConfiguration.ArchiveLimits;
+import uk.gov.companieshouse.addresslookup.lambda.schema.MigratorConfiguration.ArchiveLimits;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

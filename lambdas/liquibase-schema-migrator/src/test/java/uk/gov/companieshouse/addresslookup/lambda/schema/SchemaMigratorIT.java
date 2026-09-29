@@ -1,4 +1,4 @@
-package uk.gov.companieshouse.addresslookup.lamda.schema;
+package uk.gov.companieshouse.addresslookup.lambda.schema;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -8,8 +8,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
-import uk.gov.companieshouse.addresslookup.lamda.schema.MigrationResult.Status;
-import uk.gov.companieshouse.addresslookup.lamda.schema.MigratorConfiguration.ArchiveLimits;
+import uk.gov.companieshouse.addresslookup.lambda.schema.MigrationResult.Status;
+import uk.gov.companieshouse.addresslookup.lambda.schema.MigratorConfiguration.ArchiveLimits;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Testcontainers
 class SchemaMigratorIT {
 
-    private static final Path CHANGELOG_SOURCE = Path.of("../../db-schema/src/main/resources");
+    private static final Path CHANGELOG_SOURCE = Path.of("../../address-lookup-api/src/main/resources");
 
     @Container
     @SuppressWarnings("resource")

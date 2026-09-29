@@ -1,9 +1,9 @@
-package uk.gov.companieshouse.addresslookup.lamda.schema;
+package uk.gov.companieshouse.addresslookup.lambda.schema;
 
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
-import uk.gov.companieshouse.addresslookup.lamda.schema.MigratorConfiguration.ArchiveLimits;
+import uk.gov.companieshouse.addresslookup.lambda.schema.MigratorConfiguration.ArchiveLimits;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -20,7 +20,7 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import static uk.gov.companieshouse.addresslookup.lamda.schema.MigrationRequest.require;
+import static uk.gov.companieshouse.addresslookup.lambda.schema.MigrationRequest.require;
 
 /**
  * Fetches a released changelog archive and unpacks it for Liquibase.

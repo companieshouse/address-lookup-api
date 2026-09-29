@@ -4,14 +4,16 @@ version             := "unversioned"
 
 comma               := ,
 space               := $(empty) $(empty)
-# Deployable Lambda modules under lambdas/, released together on the lambda-X.Y.Z tag stream
-lambda_modules      := schema-migrator
+# Deployable Lambda modules under lambdas/, released together on the lambda-X.Y.Z tag stream.
+# Each is published as $(lambda_prefix)-<module>-<version>.zip
+lambda_modules      := liquibase-schema-migrator
 lambda_prefix       := address-lookup-lambda
 
-# Liquibase changelogs, released on the db-schema-X.Y.Z tag stream. Only the
-# master changelog and what it includes are shipped; seeds and data are local only.
+# Liquibase changelogs in $(api_module)/src/main/resources/db/changelog, released on the
+# db-schema-X.Y.Z tag stream. Only the master changelog and what it includes are
+# shipped; seeds and data are local only.
 db_schema_artifact  := address-lookup-db-schema
-db_schema_root      := db-schema/src/main/resources
+db_schema_root      := $(api_module)/src/main/resources
 db_schema_contents  := db/changelog/db.changelog-master.yaml db/changelog/changes/creation
 
 .PHONY: all
@@ -45,7 +47,7 @@ test-unit:
 .PHONY: test-integration
 test-integration:
 	@# Help: Run integration tests
-	mvn -pl $(api_module),lambdas/schema-migrator -am integration-test verify -Dskip.unit.tests=true failsafe:verify
+	mvn -pl $(api_module),lambdas/liquibase-schema-migrator -am integration-test verify -Dskip.unit.tests=true failsafe:verify
 
 .PHONY: build-container
 build-container: build

@@ -15,12 +15,9 @@
         only credentials able to change the schema, so it carries the fewest
         dependencies and has the smallest cold start.
     -->
-    <artifactId>address-lookup-lambda-schema-migrator</artifactId>
-    <name>address-lookup-lambda-schema-migrator</name>
+    <artifactId>address-lookup-lambda-liquibase-schema-migrator</artifactId>
+    <name>address-lookup-lambda-liquibase-schema-migrator</name>
     <packaging>jar</packaging>
-    <properties>
-        <skipITs>true</skipITs>
-    </properties>
     <dependencies>
         <dependency>
             <groupId>com.amazonaws</groupId>
@@ -87,12 +84,12 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
             </plugin>
-            <!-- SchemaMigratorIT runs Liquibase against a real PostGIS container; `make test-integration` -->
+            <!-- SchemaMigratorIT runs Liquibase against a real PostGIS container; `make test-integration` and Concourse build-test-integration -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <configuration>
-                    <skipITs>${skipITs}</skipITs>
+                    <skipITs>${skip.integration.tests}</skipITs>
                 </configuration>
                 <executions>
                     <execution>

@@ -1,4 +1,4 @@
-package uk.gov.companieshouse.addresslookup.lamda.schema;
+package uk.gov.companieshouse.addresslookup.lambda.schema;
 
 /** Credentials read from Parameter Store for a single invocation. Never logged. */
 public record DatabaseCredentials(String username, String password) {

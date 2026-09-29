@@ -1,16 +1,16 @@
-package uk.gov.companieshouse.addresslookup.lamda;
+package uk.gov.companieshouse.addresslookup.lambda;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.ssm.SsmClient;
-import uk.gov.companieshouse.addresslookup.lamda.schema.ChangelogArchive;
-import uk.gov.companieshouse.addresslookup.lamda.schema.MigrationRequest;
-import uk.gov.companieshouse.addresslookup.lamda.schema.MigrationResult;
-import uk.gov.companieshouse.addresslookup.lamda.schema.MigratorConfiguration;
-import uk.gov.companieshouse.addresslookup.lamda.schema.ParameterStoreCredentials;
-import uk.gov.companieshouse.addresslookup.lamda.schema.SchemaMigrator;
+import uk.gov.companieshouse.addresslookup.lambda.schema.ChangelogArchive;
+import uk.gov.companieshouse.addresslookup.lambda.schema.MigrationRequest;
+import uk.gov.companieshouse.addresslookup.lambda.schema.MigrationResult;
+import uk.gov.companieshouse.addresslookup.lambda.schema.MigratorConfiguration;
+import uk.gov.companieshouse.addresslookup.lambda.schema.ParameterStoreCredentials;
+import uk.gov.companieshouse.addresslookup.lambda.schema.SchemaMigrator;
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
 

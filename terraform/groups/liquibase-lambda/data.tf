@@ -6,12 +6,21 @@ data "vault_generic_secret" "database_secrets" {
   path = local.database_secrets_path
 }
 
-data "aws_caller_identity" "aws_identity" {}
-
-data "aws_partition" "current" {}
-
 data "aws_kms_key" "kms_key" {
   key_id = local.kms_alias
+}
+
+data "aws_caller_identity" "aws_identity" {}
+
+# Released changelog archives only; not the service or Lambda artefacts
+# alongside them in the release bucket.
+data "aws_iam_policy_document" "read_changelogs" {
+  statement {
+    sid       = "ReadReleasedChangelogs"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["arn:aws:s3:::${var.release_bucket_name}/${local.release_key_prefix}/address-lookup-db-schema-*.zip"]
+  }
 }
 
 data "aws_vpc" "vpc" {
@@ -21,6 +30,7 @@ data "aws_vpc" "vpc" {
   }
 }
 
+#Get application subnet IDs
 data "aws_subnets" "application" {
   filter {
     name   = "vpc-id"
@@ -34,7 +44,7 @@ data "aws_subnets" "application" {
 }
 
 data "aws_rds_cluster" "aurora" {
-  cluster_identifier = lower("${var.environment}-${local.database_service_name}")
+  cluster_identifier = "${var.environment}-${local.database_service_name}"
 }
 
 data "aws_security_group" "aurora" {
@@ -44,18 +54,4 @@ data "aws_security_group" "aurora" {
     name   = "group-name"
     values = [local.database_sg_name]
   }
-}
-
-data "aws_iam_policy_document" "liquibase" {
-  # Released changelog archives only; not the service or Lambda artefacts
-  # alongside them in the release bucket.
-  statement {
-    sid     = "ReadReleasedChangelogs"
-    effect  = "Allow"
-    actions = ["s3:GetObject"]
-    resources = [
-      "arn:${data.aws_partition.current.partition}:s3:::${var.release_bucket_name}/${var.lambda_artifact_key_prefix}/address-lookup-db-schema-*.zip"
-    ]
-  }
-
 }

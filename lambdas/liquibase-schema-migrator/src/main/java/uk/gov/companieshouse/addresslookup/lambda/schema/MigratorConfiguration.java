@@ -1,4 +1,4 @@
-package uk.gov.companieshouse.addresslookup.lamda.schema;
+package uk.gov.companieshouse.addresslookup.lambda.schema;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -7,7 +7,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Map;
 
-import static uk.gov.companieshouse.addresslookup.lamda.schema.MigrationRequest.require;
+import static uk.gov.companieshouse.addresslookup.lambda.schema.MigrationRequest.require;
 
 /**
  * Everything the function is configured with. All of it comes from Terraform-managed environment variables; the

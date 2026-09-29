@@ -1,4 +1,4 @@
-package uk.gov.companieshouse.addresslookup.lamda.schema;
+package uk.gov.companieshouse.addresslookup.lambda.schema;
 
 /** What an invocation of the schema migrator is asked to do. */
 public enum MigrationMode {

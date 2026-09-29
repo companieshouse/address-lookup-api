@@ -1,7 +1,9 @@
-# db-schema
+# Database changes
 
-The Liquibase changelogs for the `addressdb` Aurora PostgreSQL database, and
-the only route by which its schema changes.
+The Liquibase changelogs for the `addressdb` Aurora PostgreSQL database live in
+[`address-lookup-api/src/main/resources/db/changelog`](../address-lookup-api/src/main/resources/db/changelog).
+A merge to `main` that changes them is the only route by which the Aurora
+schema changes.
 
 ```
  developer / data architect
@@ -11,11 +13,13 @@ the only route by which its schema changes.
           |                                                  |
           v                                                  |
       Concourse (address-lookup-api pipeline)                |
-          | 1. db-schema-release: zip changelogs, tag db-schema-X.Y.Z
-          | 2. put address-lookup-db-schema-X.Y.Z.zip in the release bucket
-          | 3. invoke the schema migrator: VALIDATE -> UPDATE -> STATUS
+          | 1. read: db-schema-release checks out db/changelog,
+          |    zips it and tags db-schema-X.Y.Z
+          | 2. write: s3 put of address-lookup-db-schema-X.Y.Z.zip
+          |    to the release bucket (development account)
+          | 3. invoke: VALIDATE -> UPDATE -> STATUS
           v                                                  |
-  address-lookup-schema-migrator-<env> (Lambda)              |
+  address-lookup-api-liquibase-<env> (Lambda)                |
           | 4. read DB credentials from Parameter Store (fed from Vault)
           | 5. read the released changelog from S3, verify its SHA-256
           | 6. Liquibase update
@@ -24,24 +28,26 @@ the only route by which its schema changes.
 ```
 
 Nobody connects to the database to change it. The service itself runs with
-`spring.liquibase.enabled=false`; only `lambdas/schema-migrator` applies these
+`spring.liquibase.enabled=false`; only `lambdas/liquibase-schema-migrator` applies these
 changelogs to Aurora, and only when the pipeline invokes it with a released
 version.
 
 ## Layout
 
-| Path | Shipped to Aurora | Purpose |
-| ---- | ----------------- | ------- |
-| `src/main/resources/db/changelog/db.changelog-master.yaml` | yes | The changelog the migrator runs |
-| `src/main/resources/db/changelog/changes/creation/` | yes | Schema changesets included by the master changelog |
-| `src/main/resources/db/changelog/db.changelog-local.yaml` | no | Master plus local seed data, for `local` runs and the service's tests |
-| `src/main/resources/db/changelog/changes/seed/`, `data/` | no | Local seed data |
-| `version` | – | Major.minor for the `db-schema-X.Y.Z` tag stream (`db-schema-1.0`) |
+All paths are under `address-lookup-api/src/main/resources/db/changelog/`.
 
-The Maven module packages the same files as a jar so that the service's local
-profile and tests load them from the classpath, at the same `db/changelog/...`
-paths that Liquibase records in `DATABASECHANGELOG.FILENAME`. Keep those paths
-stable: moving a file makes Liquibase treat every changeset in it as new.
+| Path | Shipped to Aurora | Triggers a release | Purpose |
+| ---- | ----------------- | ------------------ | ------- |
+| `db.changelog-master.yaml` | yes | yes | The changelog the Lambda runs |
+| `changes/creation/` | yes | yes | Schema changesets included by the master changelog |
+| `version` | – | yes | Major.minor for the `db-schema-X.Y.Z` tag stream (`db-schema-1.0`) |
+| `db.changelog-local.yaml` | no | no | Master plus local seed data, for `local` runs and the service's tests |
+| `changes/seed/`, `data/` | no | no | Local seed data |
+
+The service loads the same files from its classpath for the `local` profile
+and its tests, at the same `db/changelog/...` paths that Liquibase records in
+`DATABASECHANGELOG.FILENAME`. Keep those paths stable: moving a file makes
+Liquibase treat every changeset in it as new.
 
 `make package-db-schema version=X.Y.Z` builds `address-lookup-db-schema-X.Y.Z.zip`
 containing only the master changelog and `changes/creation/`.
@@ -71,8 +77,9 @@ image's default version.
 3. Do not start comment lines with `-- changeset`, `-- precondition` or
    `-- rollback`: Liquibase parses them as directives.
 4. Run `make test-integration` (needs Docker). `SchemaMigratorIT` applies the
-   packaged changelog to PostGIS with the real migrator, including the
-   PostGIS-present and PostGIS-absent paths.
+   packaged changelog to PostGIS with the real Lambda code, including the
+   PostGIS-present and PostGIS-absent paths. Concourse runs it too, in
+   `build-test-integration`.
 5. Bump `version` for a breaking change, otherwise leave it: the pipeline
    calculates the patch number.
 
@@ -82,15 +89,20 @@ Merging to `main` releases and applies the change to cidev.
 
 In `companieshouse/ci-pipelines`, `pipelines/ssplatform/team-development/address-lookup-api`:
 
-| Job | Does |
-| --- | ---- |
-| `db-schema-release` | Triggered by `db-schema/*` on `main`. Calculates `db-schema-X.Y.Z`, runs `make package-db-schema`, puts the zip in the release bucket and creates the GitHub release |
-| `cidev-db-schema-migrate` | Triggered by a new release. Invokes the migrator with `VALIDATE` (the pending SQL is printed in the build log), then `UPDATE` (repeated while it returns `PARTIAL`), then `STATUS`, which must be `UP_TO_DATE` |
-| `cidev-db-schema-release-locks` | Manual, break-glass. Clears a Liquibase lock left by an invocation that was killed |
+| Job | Trigger | Does |
+| --- | ------- | ---- |
+| `db-schema-release` | Merge to `main` touching the shipped files above | Calculates `db-schema-X.Y.Z`, runs `make package-db-schema`, writes the zip to the release bucket (`s3` resource `put`) and creates the GitHub release |
+| `cidev-db-schema-migrate` | Each new `db-schema` release, or by hand | Invokes the Lambda with `VALIDATE` (the pending SQL is printed in the build log), then `UPDATE` (repeated while it returns `PARTIAL`), then `STATUS`, which must be `UP_TO_DATE` |
+| `cidev-db-schema-release-locks` | By hand only | Break-glass. Clears a Liquibase lock left by an invocation that was killed |
 
-The migrator function itself is released on the `lambda-X.Y.Z` tag stream
+To run a migration by hand, trigger `cidev-db-schema-migrate` from the Concourse
+UI or with `fly -t <target> trigger-job -j address-lookup-api/cidev-db-schema-migrate`.
+It migrates the latest release; pin an older `s3-db-schema-release` version in
+the UI to re-run that one. Nobody needs database or AWS console access.
+
+The Lambda itself is released on the `lambda-X.Y.Z` tag stream
 (`lambda-release`) and deployed by `cidev-lambda-plan/apply`; see
-[`terraform/groups/lambda`](../terraform/groups/lambda/README.md).
+[`terraform/groups/liquibase-lambda`](../terraform/groups/liquibase-lambda/README.md).
 
 ## Invoking the migrator
 

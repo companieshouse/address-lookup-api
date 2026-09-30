@@ -76,8 +76,8 @@ image's default version.
    `clearCheckSums` mode.
 3. Do not start comment lines with `-- changeset`, `-- precondition` or
    `-- rollback`: Liquibase parses them as directives.
-4. Run `make test-unit test-integration`; neither needs Docker, and Concourse
-   runs both. `ReleasedChangelogTest` packages the real changelog as the
+4. Run `make test-liquibase`; it needs no Docker, and Concourse runs it on
+   the pull request. `ReleasedChangelogTest` packages the real changelog as the
    pipeline does and renders it with Liquibase's offline PostgreSQL mode: it
    must parse and validate, pin PostGIS `3.6.1` in the `aws` context and
    substitute every property. `SchemaMigratorIT` runs the Lambda code (every
@@ -96,6 +96,7 @@ In `companieshouse/ci-pipelines`, `pipelines/ssplatform/team-development/address
 
 | Job | Trigger | Does |
 | --- | ------- | ---- |
+| `analyse-pull-request-liquibase` | A pull request touching `address-lookup-api/src/main/resources/db/changelog/` or `lambdas/liquibase-schema-migrator/` | Runs `make test-liquibase`, packages both zips as the release jobs do, and posts the `liquibase/validate` status on the PR. Make it a required status check on `main` so that a failing change cannot be merged |
 | `db-schema-release` | Merge to `main` touching the shipped files above | Calculates `db-schema-X.Y.Z`, runs `make package-db-schema`, writes the zip to the release bucket (`s3` resource `put`) and creates the GitHub release |
 | `cidev-db-schema-migrate` | Each new `db-schema` release, or by hand | Invokes the Lambda with `VALIDATE` (the pending SQL is printed in the build log), then `UPDATE` (repeated while it returns `PARTIAL`), then `STATUS`, which must be `UP_TO_DATE` |
 | `cidev-db-schema-release-locks` | By hand only | Break-glass. Clears a Liquibase lock left by an invocation that was killed |

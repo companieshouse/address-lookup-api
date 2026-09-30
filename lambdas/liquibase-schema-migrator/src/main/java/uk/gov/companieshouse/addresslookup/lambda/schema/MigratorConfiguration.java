@@ -1,10 +1,5 @@
 package uk.gov.companieshouse.addresslookup.lambda.schema;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.Map;
 
 import static uk.gov.companieshouse.addresslookup.lambda.schema.MigrationRequest.require;
@@ -29,8 +24,6 @@ public record MigratorConfiguration(
     public static final String ARTEFACT_NAME = "address-lookup-db-schema";
     public static final String MASTER_CHANGELOG = "db/changelog/db.changelog-master.yaml";
 
-    private static final String RDS_CA_RESOURCE = "/rds/eu-west-2-bundle.pem";
-
     public record ArchiveLimits(long maxArchiveBytes, long maxExtractedBytes, int maxEntries) {
         public static final ArchiveLimits DEFAULT = new ArchiveLimits(10L << 20, 50L << 20, 1_000);
     }
@@ -51,13 +44,12 @@ public record MigratorConfiguration(
     }
 
     /**
-     * Builds the configuration inside Lambda. The connection always verifies the server certificate against the
-     * RDS regional CA bundle packaged in this jar, matching the cluster's rds.force_ssl=1.
+     * Builds the configuration inside Lambda. The connection is always TLS-encrypted (sslmode=require), which the
+     * cluster enforces with rds.force_ssl=1; it fails rather than falling back to plain text.
      */
-    public static MigratorConfiguration fromEnvironment(Map<String, String> env) throws IOException {
-        Path caBundle = installRdsCaBundle(Path.of(System.getProperty("java.io.tmpdir")));
-        String jdbcUrl = "jdbc:postgresql://%s:%s/%s?sslmode=verify-full&sslrootcert=%s".formatted( // trufflehog:ignore
-                required(env, "DB_HOST"), env.getOrDefault("DB_PORT", "5432"), required(env, "DB_NAME"), caBundle);
+    public static MigratorConfiguration fromEnvironment(Map<String, String> env) {
+        String jdbcUrl = "jdbc:postgresql://%s:%s/%s?sslmode=require".formatted( // trufflehog:ignore
+                required(env, "DB_HOST"), env.getOrDefault("DB_PORT", "5432"), required(env, "DB_NAME"));
 
         return new MigratorConfiguration(
                 required(env, "CHANGELOG_BUCKET"),
@@ -71,15 +63,6 @@ public record MigratorConfiguration(
                 Long.parseLong(env.getOrDefault("MIN_REMAINING_MILLIS", "120000")),
                 Long.parseLong(env.getOrDefault("STATEMENT_TIMEOUT_MILLIS", "780000")),
                 ArchiveLimits.DEFAULT);
-    }
-
-    static Path installRdsCaBundle(Path directory) throws IOException {
-        Path target = directory.resolve("rds-eu-west-2-bundle.pem");
-        try (InputStream bundle = MigratorConfiguration.class.getResourceAsStream(RDS_CA_RESOURCE)) {
-            require(bundle != null, "RDS CA bundle missing from the deployment package");
-            Files.copy(bundle, target, StandardCopyOption.REPLACE_EXISTING);
-        }
-        return target;
     }
 
     private static String required(Map<String, String> env, String name) {

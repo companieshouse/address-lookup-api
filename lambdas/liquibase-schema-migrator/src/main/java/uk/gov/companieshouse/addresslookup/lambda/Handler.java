@@ -15,7 +15,6 @@ import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
@@ -88,11 +87,7 @@ public final class Handler implements RequestHandler<Map<String, Object>, String
     }
 
     private static MigratorConfiguration configuration() {
-        try {
-            return MigratorConfiguration.fromEnvironment(System.getenv());
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        return MigratorConfiguration.fromEnvironment(System.getenv());
     }
 
     private static void delete(Path directory) {

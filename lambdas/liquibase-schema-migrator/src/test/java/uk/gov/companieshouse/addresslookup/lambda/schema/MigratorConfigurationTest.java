@@ -2,13 +2,10 @@ package uk.gov.companieshouse.addresslookup.lambda.schema;
 
 import org.junit.jupiter.api.Test;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MigratorConfigurationTest {
 
@@ -20,17 +17,15 @@ class MigratorConfigurationTest {
             "DB_PASSWORD_PARAMETER", "/address-lookup-liquibase-lambda-cidev/db_password");
 
     @Test
-    void alwaysVerifiesTheServerCertificate() throws Exception {
+    void alwaysRequiresAnEncryptedConnection() {
         MigratorConfiguration config = MigratorConfiguration.fromEnvironment(ENV);
 
-        assertTrue(config.jdbcUrl().startsWith(
-                "jdbc:postgresql://cidev-address-rds.cluster-abc.eu-west-2.rds.amazonaws.com:5432/addressdb?sslmode=verify-full&sslrootcert=")); // trufflehog:ignore
-        Path bundle = Path.of(config.jdbcUrl().substring(config.jdbcUrl().indexOf("sslrootcert=") + 12));
-        assertTrue(Files.readString(bundle).contains("BEGIN CERTIFICATE"));
+        assertEquals("jdbc:postgresql://cidev-address-rds.cluster-abc.eu-west-2.rds.amazonaws.com:5432/addressdb?sslmode=require", // trufflehog:ignore
+                config.jdbcUrl());
     }
 
     @Test
-    void readsReleasedArtefactsFromTheFixedPrefix() throws Exception {
+    void readsReleasedArtefactsFromTheFixedPrefix() {
         MigratorConfiguration config = MigratorConfiguration.fromEnvironment(ENV);
 
         assertEquals("address-lookup-api/address-lookup-db-schema-1.0.3.zip", config.changelogKey("1.0.3"));

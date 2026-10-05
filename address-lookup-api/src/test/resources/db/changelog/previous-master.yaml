@@ -1,5 +1,4 @@
 databaseChangeLog:
-#testing migration to aurora
   - include:
       file: db/changelog/changes/creation/001-create-address-tables.sql
   - include:
@@ -8,8 +7,5 @@ databaseChangeLog:
       file: db/changelog/changes/creation/003-create-os-data-schema-and-tables.sql
   - include:
       file: db/changelog/changes/creation/004-create-os-stage-schema-and-tables.sql
-  - include:
-      # Reconcile existing databases where the renamed address tables are still in public.
-      file: db/changelog/changes/creation/006-reconcile-os-data-tables.sql
   - include:
       file: db/changelog/changes/creation/005-create-address-lookup-view.sql

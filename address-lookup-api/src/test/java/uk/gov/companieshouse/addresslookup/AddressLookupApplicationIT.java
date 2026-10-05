@@ -7,25 +7,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static uk.gov.companieshouse.logging.util.LogContextProperties.REQUEST_ID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.context.WebApplicationContext;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
-@AutoConfigureMockMvc
-@SpringBootTest(
-        classes = Application.class,
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {
-                "spring.docker.compose.enabled=false",
-                "spring.liquibase.change-log=classpath:db/changelog/db.changelog-local.yaml"
-        })
-@Testcontainers
-class AddressLookupApplicationIT {
-
-    @Autowired
-    protected MockMvc mockMvc;
+class AddressLookupApplicationIT extends AddressTestBaseIT {
 
     @Autowired
     private WebApplicationContext context;

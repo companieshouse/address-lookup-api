@@ -45,7 +45,10 @@ public class AddressLookupService {
     }
 
     private List<RoyalMailAddressLookup> findByPostcode(String postcode) {
-        return royalMailAddressLookupRepository.findByNormalizedPostcode(postcode);
+        // Callers may provide lowercase or spaced postcodes; normalize them to match
+        // the repository query's case-insensitive, space-free comparison.
+        String normalizedPostcode = postcode.replace(" ", "").toUpperCase(Locale.ROOT);
+        return royalMailAddressLookupRepository.findByNormalizedPostcode(normalizedPostcode);
     }
 
 }

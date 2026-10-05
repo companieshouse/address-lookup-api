@@ -2,7 +2,11 @@ package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.annotation.*;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.context.annotation.PropertySource;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
@@ -33,14 +37,7 @@ public class AcquisitionConfiguration {
   }
 
   @Bean
-  DiscoveryService discoveryService(
-      S3Client s3, OsClient os, Commands commands, AcquisitionProperties properties) {
-    return new DiscoveryService(s3, os, commands, properties);
-  }
-
-  @Bean
-  DownloadService downloadService(
-      S3Client s3, OsClient os, Commands commands, AcquisitionProperties properties) {
+  DownloadService downloadService(S3Client s3, OsClient os, AcquisitionProperties properties) {
     return new DownloadService(s3, os, properties);
   }
 

@@ -38,9 +38,14 @@ public final class RuntimeSupport {
         }
     }
 
-    public static String required(JsonNode n, String field) {
-        check(n.hasNonNull(field) && !n.get(field).asText().isBlank(), "Missing " + field);
-        return n.get(field).asText();
+    public static JsonNode detail(String e) {
+        JsonNode jsonNode = JSON.valueToTree(e);
+        return jsonNode.has("detail") ? jsonNode.get("detail") : jsonNode;
+    }
+
+    public static String required(JsonNode jsonNode, String field) {
+        check(jsonNode.hasNonNull(field) && !jsonNode.get(field).asText().isBlank(), "Missing " + field);
+        return jsonNode.get(field).asText();
     }
 
     public static String sanitizeUrl(String value) {

@@ -7,7 +7,7 @@ import java.util.Map;
 
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
-final class Commands {
+public final class Commands {
   private final EventBridgeClient events;
   private final String bus;
   private final com.fasterxml.jackson.databind.ObjectMapper json;
@@ -18,7 +18,7 @@ final class Commands {
     this.json = json;
   }
 
-  void send(String action, String planKey, String dataset) throws Exception {
+  public void send(String action, String planKey, String dataset) throws Exception {
     String detail = json.writeValueAsString(Map.of("planKey", planKey, "dataset", dataset));
     var response =
         events.putEvents(

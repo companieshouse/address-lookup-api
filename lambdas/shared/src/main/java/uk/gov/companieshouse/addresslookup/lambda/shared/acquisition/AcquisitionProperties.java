@@ -36,7 +36,7 @@ public record AcquisitionProperties(
     return "AcquisitionProperties[credentials redacted]";
   }
 
-  static String required(String value, String name) {
+  public static String required(String value, String name) {
     check(value != null && !value.isBlank(), "Missing " + name);
     return value;
   }

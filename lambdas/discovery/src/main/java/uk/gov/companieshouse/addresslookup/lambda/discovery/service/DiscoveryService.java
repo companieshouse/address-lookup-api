@@ -1,8 +1,11 @@
-package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
+package uk.gov.companieshouse.addresslookup.lambda.discovery.service;
 
-import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.release.model.DatasetCatalog;
@@ -20,27 +23,36 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
  * Scheduled acquisition; the supply cursor is published acquisition descriptions, not the DB
  * watermark.
  */
+@Component
 public final class DiscoveryService {
-  private final S3Client s3;
-  private final OsClient os;
+  private final S3Client s3Client;
+  private final OsClient osClient;
   private final Commands commands;
   private final AcquisitionProperties properties;
 
-  public DiscoveryService(
-      S3Client s3, OsClient os, Commands commands, AcquisitionProperties properties) {
-    this.s3 = s3;
-    this.os = os;
+  @Autowired
+  public DiscoveryService(S3Client s3Client, OsClient osClient,
+          Commands commands, AcquisitionProperties properties) {
+    this.s3Client = s3Client;
+    this.osClient = osClient;
     this.commands = commands;
     this.properties = properties;
     AcquisitionProperties.required(properties.packages(), "OS_PACKAGES");
   }
 
-  public String discover(Map<String, Object> event, Context context) throws Exception {
-    JsonNode input = detail(event);
+  public String discover(Map<String, Object> event) throws Exception {
+    return discover(detail(event));
+  }
+
+  public String discover(String event) throws Exception {
+    return discover(detail(event));
+  }
+
+  private String discover(JsonNode input) throws Exception {
     String mode = required(input, "mode");
     check(Set.of("FULL", "COU").contains(mode), "Unknown mode");
     JsonNode packages = JSON.readTree(properties.packages());
-    var store = new ReleaseStore(s3);
+    var store = new ReleaseStore(s3Client);
     String bucket = properties.sourceBucket();
     LocalDate previous = null;
     for (String key : store.keys(bucket, "acquisitions/")) {
@@ -57,13 +69,13 @@ public final class DiscoveryService {
         String version = required(input.path("versions"), t.name());
         check(
             version.matches("[a-zA-Z0-9_-]+") && !version.equals("latest"), "Pin FULL version ID");
-        versions.add(os.json(url + "/" + version));
+        versions.add(osClient.json(url + "/" + version));
       } else {
-        JsonNode listed = os.json(url);
+        JsonNode listed = osClient.json(url);
         check(listed.isArray(), "Unexpected OS version list");
         for (JsonNode version : listed)
           if (mode.equals(version.path("supplyType").asText()))
-            versions.add(os.json(url + "/" + required(version, "id")));
+            versions.add(osClient.json(url + "/" + required(version, "id")));
       }
       var byDate = new TreeMap<LocalDate, JsonNode>();
       for (JsonNode v : versions) {
@@ -83,7 +95,7 @@ public final class DiscoveryService {
             zip != null && summaryFile != null,
             "Expected primary ZIP and orderSummary downloads; package layout needs a verified"
                 + " adapter");
-        JsonNode summary = os.json(required(summaryFile, "url"));
+        JsonNode summary = osClient.json(required(summaryFile, "url"));
         OrderSummary s = JSON.treeToValue(summary, OrderSummary.class);
         LocalDate target = LocalDate.parse(required(summary, "validToDate"));
         if (previous != null && !target.isAfter(previous)) continue;

@@ -20,12 +20,17 @@ public final class RuntimeSupport {
     }
 
     public static JsonNode detail(Map<String, Object> e) {
-        JsonNode n = JSON.valueToTree(e);
-        return n.has("detail") ? n.get("detail") : n;
+        JsonNode jsonNode = JSON.valueToTree(e);
+        return jsonNode.has("detail") ? jsonNode.get("detail") : jsonNode;
     }
 
-    public static String required(JsonNode n, String field) {
-        check(n.hasNonNull(field) && !n.get(field).asText().isBlank(), "Missing " + field);
-        return n.get(field).asText();
+    public static JsonNode detail(String e) {
+        JsonNode jsonNode = JSON.valueToTree(e);
+        return jsonNode.has("detail") ? jsonNode.get("detail") : jsonNode;
+    }
+
+    public static String required(JsonNode jsonNode, String field) {
+        check(jsonNode.hasNonNull(field) && !jsonNode.get(field).asText().isBlank(), "Missing " + field);
+        return jsonNode.get(field).asText();
     }
 }

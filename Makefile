@@ -48,7 +48,8 @@ test-unit:
 .PHONY: test-integration
 test-integration:
 	@# Help: Run integration tests
-	mvn -pl $(api_module),$(liquibase_lambda_module) -am integration-test verify -Dskip.unit.tests=true failsafe:verify
+	mvn -pl $(api_module) -am -DskipTests=true -Dskip.integration.tests=false test-compile failsafe:integration-test failsafe:verify
+	perl scripts/report-migration-row-counts.pl address-lookup-api/target/failsafe-reports/TEST-uk.gov.companieshouse.addresslookup.OsDataSchemaMigrationIT.xml
 
 # .PHONY: test-liquibase
 # test-liquibase:

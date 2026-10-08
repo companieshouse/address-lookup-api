@@ -45,8 +45,8 @@ public class AcquisitionConfiguration {
 
   @Bean
   ScanResultsService scanResultsService(
-      S3Client s3, Commands commands, AcquisitionProperties properties) {
-    return new ScanResultsService(s3, commands, properties);
+      Commands commands, AcquisitionProperties properties) {
+    return new ScanResultsService(commands, properties);
   }
 
   @Bean

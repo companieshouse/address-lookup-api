@@ -1,5 +1,4 @@
 package uk.goc.companieshouse.addresslookup.lamda;
-
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import uk.gov.companieshouse.addresslookup.lamda.shared.acquisition.ScanResultsService;
@@ -13,9 +12,9 @@ public final class Handler implements RequestHandler<Map<String, Object>, String
 
   public String handleRequest(Map<String, Object> event, Context context) {
     try {
-      return service.scan(event, context);
+      return service.scan(event);
     } catch (Exception e) {
-      throw new RuntimeException("scan failed; durable state allows retry", e);
+      throw new RuntimeException("scan failed; PutEvents failures are retried", e);
     }
   }
 }

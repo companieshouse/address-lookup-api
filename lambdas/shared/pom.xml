@@ -19,11 +19,6 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
-            <artifactId>address-lookup-release-core</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>${project.groupId}</groupId>
             <artifactId>address-lookup-release-model</artifactId>
             <version>${project.version}</version>
         </dependency>

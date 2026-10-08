@@ -6,6 +6,7 @@ GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=AB124NY
 
 ### Lookup multiple legacy addresses by postcode (ISL table)
 GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=BT703LB
+key:MO9rg3h1GNRUOz7U5fKmVBF6Iw489Rle
 
 ### Lookup single legacy address by postcode
 GET http://localhost:8080/address-lookup-api/postcode?postcode=WF27QD

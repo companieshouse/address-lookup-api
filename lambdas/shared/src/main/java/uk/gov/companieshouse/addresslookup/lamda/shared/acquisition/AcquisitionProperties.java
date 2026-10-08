@@ -11,6 +11,7 @@ import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSu
 public record AcquisitionProperties(
     String sourceBucket,
     String scannedBucket,
+    String ingestBucket,
     String eventBus,
     String osApiKey,
     String packages,

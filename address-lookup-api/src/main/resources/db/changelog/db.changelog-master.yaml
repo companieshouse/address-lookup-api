@@ -1,4 +1,5 @@
 databaseChangeLog:
+#testing migration to aurora
   - include:
       file: db/changelog/changes/creation/001-create-address-tables.sql
   - include:

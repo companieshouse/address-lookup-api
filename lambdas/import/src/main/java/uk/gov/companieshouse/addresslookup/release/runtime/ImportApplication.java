@@ -7,7 +7,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.PropertySource;
-import uk.gov.companieshouse.addresslookup.lamda.shared.runtime.AwsClientsConfiguration;
+import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AwsClientsConfiguration;
 import uk.gov.companieshouse.addresslookup.release.importer.ImportService;
 
 @Configuration(proxyBeanMethods = false)

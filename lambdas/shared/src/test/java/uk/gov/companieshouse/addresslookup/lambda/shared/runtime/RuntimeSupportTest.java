@@ -1,4 +1,4 @@
-package uk.gov.companieshouse.addresslookup.lamda.shared.runtime;
+package uk.gov.companieshouse.addresslookup.lambda.shared.runtime;
 
 import org.junit.jupiter.api.Test;
 

@@ -14,7 +14,7 @@ public record AcquisitionProperties(
     String eventBus,
     String osApiKey,
     String packages,
-    @DefaultValue("536870912") long maxZipBytes,
+    @DefaultValue("21474836480") long maxZipBytes,
     @DefaultValue("1073741824") long maxExtractedBytes,
     @DefaultValue("20") int sweepLimit,
     @DefaultValue("20s") Duration connectTimeout,

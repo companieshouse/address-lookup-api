@@ -5,6 +5,7 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -98,10 +99,19 @@ public final class ReleaseStore {
   }
 
   public boolean clean(String bucket, JsonNode ref) {
-    String key = required(ref, "key"), version = required(ref, "version");
+    String key = ref.hasNonNull("s3Key") ? required(ref, "s3Key") : required(ref, "key");
+    String version = ref.hasNonNull("version") ? required(ref, "version") : version(bucket, key);
     if (!isClean(bucket, key, version)) return false;
     check(version.equals(version(bucket, key)), "Object changed after certification: " + key);
     return true;
+  }
+
+  public static String objectKey(JsonNode ref) {
+    return ref.hasNonNull("s3Key") ? required(ref, "s3Key") : required(ref, "key");
+  }
+
+  public static String objectVersion(ReleaseStore store, String bucket, JsonNode ref) {
+    return ref.hasNonNull("version") ? required(ref, "version") : store.version(bucket, objectKey(ref));
   }
 
   public static String planKey(JsonNode plan) {
@@ -116,6 +126,10 @@ public final class ReleaseStore {
     return "control/" + release + "/" + dataset + "/" + step + ".json";
   }
 
+  public static String downloadZipKey(String id, String dataset) {
+    return "Scanned/" + UUID.fromString(id) + "/" + dataset + ".zip";
+  }
+
   public JsonNode receipt(String bucket, String id, String dataset, String step) throws Exception {
     return read(bucket, receiptKey(id, dataset, step));
   }
@@ -124,5 +138,29 @@ public final class ReleaseStore {
       String bucket, String id, String dataset, String step, StreamingS3.Uploaded upload)
       throws Exception {
     immutable(bucket, receiptKey(id, dataset, step), JSON.valueToTree(upload));
+  }
+
+  public void downloadReceipt(
+      String bucket,
+      String id,
+      String dataset,
+      String fileName,
+      String expectedMd5,
+      String sourceUrl,
+      Instant downloadedAt,
+      StreamingS3.Uploaded upload)
+      throws Exception {
+    var receipt = JSON.createObjectNode();
+    receipt.put("releaseId", id);
+    receipt.put("dataset", dataset);
+    receipt.put("fileName", fileName);
+    receipt.put("s3Key", upload.key());
+    receipt.put("downloadedBytes", upload.bytes());
+    receipt.put("calculatedMd5", upload.md5());
+    receipt.put("expectedMd5", expectedMd5);
+    receipt.put("status", "DOWNLOADED");
+    receipt.put("downloadedAt", downloadedAt.toString());
+    receipt.put("sourceUrl", sourceUrl);
+    immutable(bucket, receiptKey(id, dataset, "download"), receipt);
   }
 }

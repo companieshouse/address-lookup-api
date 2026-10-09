@@ -69,7 +69,7 @@ class PostcodeControllerIT extends AddressTestBaseIT {
         "INVALID@POSTCODE", 
         "ZZ1 1ZZ",
         "BT557KLEXTRA",
-        "AB12 4NY"
+        "ZZ99 9ZZ"
     })
     void shouldReturnNotFoundForInvalidPostcodes(String postcode) throws Exception {
         this.mockMvc.perform(get("/address-lookup-api/postcode")

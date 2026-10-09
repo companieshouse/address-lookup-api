@@ -8,8 +8,8 @@ final class RuntimeSupportTest {
   @Test
   void sanitizesUrlQueryStringForLogs() {
     assertEquals(
-        "https://api.os.uk/downloads/v1/dataPackages/20781/versions/145051/downloads?***",
+        "https://api.os.uk/downloads/v1/dataPackages/12345/versions/159159/downloads?***",
         RuntimeSupport.sanitizeUrl(
-            "https://api.os.uk/downloads/v1/dataPackages/20781/versions/145051/downloads?fileName=add_isl_royalmailaddress.zip&token=secret"));
+            "https://api.os.uk/downloads/v1/dataPackages/12345/versions/159159/downloads?fileName=add_isl_royalmailaddress.zip&token=secret"));
   }
 }

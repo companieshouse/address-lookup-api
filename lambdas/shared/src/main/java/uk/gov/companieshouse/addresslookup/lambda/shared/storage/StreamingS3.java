@@ -16,7 +16,7 @@ import java.util.logging.Logger;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 /**
- * Bounded 64 MiB parts, with checksum validation before multipart completion.
+ * Bounded 256 MiB parts, with checksum validation before multipart completion.
  */
 public final class StreamingS3 {
     private static final Logger LOG = Logger.getLogger(StreamingS3.class.getName());

@@ -44,6 +44,15 @@ public class AddressLookupService {
                 .map(legacyAddressMapper::toLegacyAddressWithoutPremise);
     }
 
+    /**
+     * Finds lookup rows for a postcode, ignoring spaces and letter case.
+     *
+     * <p>For example {@code WF2 7QD}, {@code WF27QD} and {@code wf27qd} all return the same rows.
+     * The result comes from the {@code address_lookup.address_lookup} view.
+     *
+     * @param postcode the postcode as supplied by the caller
+     * @return the matching lookup rows, empty if none match
+     */
     private List<RoyalMailAddressLookup> findByPostcode(String postcode) {
         // Callers may provide lowercase or spaced postcodes; normalize them to match
         // the repository query's case-insensitive, space-free comparison.

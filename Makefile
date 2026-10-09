@@ -37,7 +37,7 @@ build:
 	cp ./$(api_module)/target/$(artifact_name)-$(version).jar ./$(artifact_name).jar
 
 .PHONY: test
-test: test-integration test-unit
+test: test-integration test-liquibase test-unit
 	@# Help: Run all test-* targets (convenience method for developers)
 
 .PHONY: test-unit
@@ -51,15 +51,12 @@ test-integration:
 	mvn -pl $(api_module) -am -DskipTests=true -Dskip.integration.tests=false test-compile failsafe:integration-test failsafe:verify
 	perl scripts/report-migration-row-counts.pl address-lookup-api/target/failsafe-reports/TEST-uk.gov.companieshouse.addresslookup.OsDataSchemaMigrationIT.xml
 
-# .PHONY: test-liquibase
-# test-liquibase:
-# 	@# Help: Test the Liquibase Lambda and validate the released changelogs (no Docker needed)
-# 	mvn -pl $(liquibase_lambda_module) -am verify
-
+# There is no offline Liquibase validator in this checkout. These ITs apply the real changelogs to
+# PostGIS (fresh, existing-history and rerun), so an invalid changelog fails here. Needs Docker.
 .PHONY: test-liquibase
 test-liquibase:
-	@echo "Liquibase validation is temporarily disabled"
-	@echo "TODO: Enable when liquibase-schema-migrator Maven project is ready"
+	@# Help: Validate the Liquibase changelogs by migrating a real PostGIS database (Docker required)
+	mvn -pl $(api_module) -am -DskipTests=true -Dskip.integration.tests=false -Dfailsafe.failIfNoSpecifiedTests=false -Dit.test=OsDataSchemaMigrationIT,AddressLookupApplicationIT test-compile failsafe:integration-test failsafe:verify
 
 .PHONY: build-container
 build-container: build

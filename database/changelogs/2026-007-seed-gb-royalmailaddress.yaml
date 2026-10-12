@@ -1,0 +1,28 @@
+# Jira: ALS-13
+# Description: Seed local GB Royal Mail addresses
+# Author: team-atlas
+# Created: 2026-10-12
+databaseChangeLog:
+  - changeSet:
+      id: "2026-007:01"
+      author: team-atlas
+      context: "@local"
+      comment: Load GB Royal Mail fixtures into the disposable local database.
+      preConditions:
+        - sqlCheck:
+            expectedResult: "0"
+            sql: SELECT count(*) FROM os_data.add_gb_royalmailaddress_v1
+      changes:
+        - loadData:
+            file: ../test-data/gb_royalmailaddress.csv
+            relativeToChangelogFile: true
+            schemaName: os_data
+            tableName: add_gb_royalmailaddress_v1
+            separator: ","
+            quotchar: '"'
+            nullPlaceholder: "NULL"
+            usePreparedStatements: false
+      rollback:
+        - delete:
+            schemaName: os_data
+            tableName: add_gb_royalmailaddress_v1

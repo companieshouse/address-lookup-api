@@ -1,0 +1,28 @@
+# Jira: ALS-13
+# Description: Seed local GB built addresses
+# Author: team-atlas
+# Created: 2026-10-12
+databaseChangeLog:
+  - changeSet:
+      id: "2026-008:01"
+      author: team-atlas
+      context: "@local"
+      comment: Load GB built-address fixtures into the disposable local database.
+      preConditions:
+        - sqlCheck:
+            expectedResult: "0"
+            sql: SELECT count(*) FROM os_data.add_gb_builtaddress_v3
+      changes:
+        - loadData:
+            file: ../test-data/gb_builtaddress.csv
+            relativeToChangelogFile: true
+            schemaName: os_data
+            tableName: add_gb_builtaddress_v3
+            separator: ","
+            quotchar: '"'
+            nullPlaceholder: "NULL"
+            usePreparedStatements: false
+      rollback:
+        - delete:
+            schemaName: os_data
+            tableName: add_gb_builtaddress_v3

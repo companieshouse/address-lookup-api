@@ -10,12 +10,19 @@ space               := $(empty) $(empty)
 liquibase_lambda_module   := lambdas/liquibase-schema-migrator
 liquibase_lambda_artifact := address-lookup-liquibase-lambda
 
-# Liquibase changelogs in $(api_module)/src/main/resources/db/changelog, released on the
+# Canonical Liquibase feed in database/, released on the
 # db-schema-X.Y.Z tag stream. Only the master changelog and what it includes are
 # shipped; seeds and data are local only.
 db_schema_artifact  := address-lookup-db-schema
-db_schema_root      := $(api_module)/src/main/resources
-db_schema_contents  := db/changelog/db.changelog-master.yaml db/changelog/changes/creation
+db_schema_root      := .
+db_schema_local_contents := $(wildcard database/changelogs/2026-00[6-9]-* \
+                                      database/changelogs/2026-010-*)
+db_schema_changelogs := $(filter-out $(db_schema_local_contents), \
+                         $(wildcard database/changelogs/*.postgres.sql \
+                                    database/changelogs/*.yaml database/changelogs/*.xml))
+db_schema_contents  := database/changelog-master.xml database/version \
+                       database/production.properties database/staging.properties \
+                       database/cidev.properties $(db_schema_changelogs)
 
 .PHONY: all
 all: build
@@ -48,17 +55,12 @@ test-unit:
 .PHONY: test-integration
 test-integration:
 	@# Help: Run integration tests
-	mvn -pl $(api_module),$(liquibase_lambda_module) -am integration-test verify -Dskip.unit.tests=true failsafe:verify
-
-# .PHONY: test-liquibase
-# test-liquibase:
-# 	@# Help: Test the Liquibase Lambda and validate the released changelogs (no Docker needed)
-# 	mvn -pl $(liquibase_lambda_module) -am verify
+	mvn -pl $(api_module) -am verify -Dskip.unit.tests=true
 
 .PHONY: test-liquibase
 test-liquibase:
-	@echo "Liquibase validation is temporarily disabled"
-	@echo "TODO: Enable when liquibase-schema-migrator Maven project is ready"
+	mvn -pl $(api_module) -am test -Dtest=LiquibaseFeedTest -Dsurefire.failIfNoSpecifiedTests=false
+	mvn -pl $(api_module) -am verify -Dit.test=LiquibaseFeedIT -Dskip.unit.tests=true
 
 .PHONY: build-container
 build-container: build

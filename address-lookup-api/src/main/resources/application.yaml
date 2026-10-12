@@ -1,0 +1,21 @@
+spring:
+  config:
+    import: classpath:database/production.properties
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+    import: classpath:database/local.properties
+---
+spring:
+  config:
+    activate:
+      on-profile: staging
+    import: classpath:database/staging.properties
+---
+spring:
+  config:
+    activate:
+      on-profile: cidev
+    import: classpath:database/cidev.properties

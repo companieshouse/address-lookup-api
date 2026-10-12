@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -12,15 +13,20 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+/**
+ * Starts the local-profile API against disposable PostGIS, applying the
+ * canonical feed without Docker Compose or a developer's datasource.
+ */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Testcontainers
+@ActiveProfiles("local")
 @AutoConfigureMockMvc
 @SpringBootTest(
         classes = Application.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
                 "spring.docker.compose.enabled=false",
-                "spring.liquibase.change-log=classpath:db/changelog/db.changelog-local.yaml"
+                "spring.liquibase.change-log=classpath:database/changelog-master.xml"
         })
 public abstract class AddressTestBaseIT {
     

@@ -40,6 +40,10 @@ module "aurora_postgres" {
       name         = "rds.allowed_extensions"
       value        = "postgis"
       apply_method = "immediate"
+    },
+    {
+      name  = "ssl_min_protocol_version",
+      value = "TLSv1.3" 
     }
   ]
 

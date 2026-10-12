@@ -1,21 +1,37 @@
+server:
+  port: ${SERVER_PORT:8080}
+management:
+  endpoints:
+    enabled-by-default: false
+    web:
+      base-path: /address-lookup-api/
+      path-mapping:
+        health: healthcheck
+  endpoint:
+    health:
+      show-details: never
+      enabled: true
+api:
+  api-local-url: ${API_LOCAL_URL:localhost}
 spring:
-  config:
-    import: classpath:database/production.properties
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+  flyway:
+    enabled: false
+    baseline-on-migrate: false
+    clean-disabled: true
+    validate-on-migrate: true
+    validate-migration-naming: true
+    default-schema: public
+    schemas: public
+  docker:
+    compose:
+      enabled: ${DOCKER_COMPOSE_ENABLED:false}
 ---
 spring:
   config:
     activate:
       on-profile: local
-    import: classpath:database/local.properties
----
-spring:
-  config:
-    activate:
-      on-profile: staging
-    import: classpath:database/staging.properties
----
-spring:
-  config:
-    activate:
-      on-profile: cidev
-    import: classpath:database/cidev.properties
+    import: classpath:database/config/spring/local.properties

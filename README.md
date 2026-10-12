@@ -16,12 +16,12 @@ mvn -pl address-lookup-api -am package -Dskip.unit.tests=true -Dskip.integration
 
 The application uses Spring Boot Docker Compose support to start a local PostGIS
 Postgres database from `compose.yaml`. The `local` profile imports
-`database/local.properties` and applies `database/changelog-master.xml`.
-It creates the schema and loads the four fixtures from `database/test-data/`
-using the explicit `local` Liquibase context.
+`database/config/spring/local.properties` and applies Flyway schema and
+local-fixture migrations. Local migration resources are included only with the
+`local-db` Maven profile.
 
 ```bash
-mvn -pl address-lookup-api spring-boot:run -Dspring-boot.run.profiles=local
+mvn -pl address-lookup-api -Plocal-db spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
 Look up addresses by postcode:
@@ -39,31 +39,28 @@ curl "http://localhost:8080/address-lookup-api/multiple-addresses?postcode=WF2%2
 The local database is exposed on port `5433` to avoid clashing with any existing
 Postgres running on the default `5432` port.
 
-Without the `local` profile, the API imports `database/production.properties`
-and does not run Liquibase at startup. The `staging` and `cidev` Spring profiles
-import their respective properties files and also leave schema migration to
-the separate deployment process. Provide `SPRING_DATASOURCE_URL`,
+Without the `local` profile, the API does not run Flyway at startup. Schema
+migrations are applied by a separate deployment process. Provide `SPRING_DATASOURCE_URL`,
 `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD` when connecting to
 an externally hosted database.
 
 ## Database feed and validation
 
-The ALS-13 Liquibase feed is a first-class component under [`database/`](database/README.md).
-Version `2.0.0` initializes **fresh databases only**. Renumbered changesets must
-not be applied to a database containing the previous migration history.
-The released original changelogs remain unchanged in source as an inactive
-historical snapshot; they are excluded from the API's resources.
+The ALS-13 Flyway feed is a first-class component under [`database/`](database/README.md).
+Version `2.0.0` initializes **fresh databases only**. Do not apply it to a
+database with existing Liquibase or Flyway history. The original released
+Liquibase changelogs remain unchanged as an inactive historical snapshot.
 
 ```bash
-make test-liquibase
+make test-flyway
 make package-db-schema version=2.0.0
 ```
 
 The tests require Docker and exercise the actual production ZIP, seed isolation,
-geometry, repeat application and rollback against disposable PostGIS. The ZIP
-contains only the production schema and nonlocal configuration; it excludes
-local triggers, seed changelogs and CSV data. Concourse path changes are a
-separate DevOps handoff, not implemented by this refactor.
+geometry and repeat application against disposable PostGIS. The ZIP contains
+only the production schema and nonlocal configuration; it excludes local
+triggers, seed SQL and CSV data. The production migrator and Concourse pipeline
+are not present in this checkout and require a separate deployment handoff.
 
 ## Environment variables
 

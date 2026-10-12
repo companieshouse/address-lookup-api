@@ -50,7 +50,17 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-liquibase</artifactId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+            <version>${flyway.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <version>${flyway.version}</version>
         </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
@@ -130,19 +140,47 @@
                 </excludes>
             </resource>
             <resource>
-                <directory>${project.basedir}/../database</directory>
-                <targetPath>database</targetPath>
-                <excludes>
-                    <exclude>README.md</exclude>
-                </excludes>
+                <directory>${project.basedir}/../database/migrations/schema</directory>
+                <targetPath>db/migration</targetPath>
             </resource>
         </resources>
+        <testResources>
+            <testResource>
+                <directory>src/test/resources</directory>
+            </testResource>
+            <testResource>
+                <directory>${project.basedir}/../database/migrations/local</directory>
+                <targetPath>db/local-migration</targetPath>
+            </testResource>
+            <testResource>
+                <directory>${project.basedir}/../database/config/spring</directory>
+                <targetPath>database/config/spring</targetPath>
+                <includes>
+                    <include>local.properties</include>
+                </includes>
+            </testResource>
+            <testResource>
+                <directory>${project.basedir}/../database/config/flyway</directory>
+                <targetPath>database/config/flyway</targetPath>
+            </testResource>
+        </testResources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <skipTests>${skip.unit.tests}</skipTests>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.5.1</version>
+                <configuration>
+                    <excludes>
+                        <exclude>db/local-migration/**</exclude>
+                        <exclude>database/config/spring/local.properties</exclude>
+                    </excludes>
                 </configuration>
             </plugin>
             <plugin>
@@ -205,4 +243,42 @@
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <profile>
+            <id>local-db</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <executions>
+                            <execution>
+                                <id>copy-local-flyway-resources</id>
+                                <phase>process-resources</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${project.build.outputDirectory}</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${project.basedir}/../database/migrations/local</directory>
+                                            <targetPath>db/local-migration</targetPath>
+                                        </resource>
+                                        <resource>
+                                            <directory>${project.basedir}/../database/config/spring</directory>
+                                            <targetPath>database/config/spring</targetPath>
+                                            <includes>
+                                                <include>local.properties</include>
+                                            </includes>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

@@ -1,19 +1,13 @@
---liquibase formatted sql
-
 -- Jira: ALS-13
 -- Description: create address tables
 -- Author: team-atlas
 -- Created: 2026-10-12
+-- Source mapping: database/changelogs/2026-001-create-address-tables.postgres.sql (2026-001:01-2026-001:07)
 
---changeset team-atlas:2026-001:01
---comment: create-postgis-extension
 CREATE EXTENSION IF NOT EXISTS postgis;
 
 -- Keep the potentially pre-existing shared extension when rolling back this feed.
---rollback SELECT 1;
 
---changeset team-atlas:2026-001:02
---comment: create-add-gb-royalmailaddress
 CREATE TABLE add_gb_royalmailaddress (
     udprn integer not null,
     versiondate date not null,
@@ -61,11 +55,8 @@ CREATE TABLE add_gb_royalmailaddress (
     PRIMARY KEY (udprn)
 );
 
---rollback DROP TABLE add_gb_royalmailaddress;
 
 
---changeset team-atlas:2026-001:03
---comment: create-add-gb-builtaddress
 CREATE TABLE add_gb_builtaddress (
     uprn bigint not null,
     versiondate date not null,
@@ -127,11 +118,8 @@ CREATE TABLE add_gb_builtaddress (
     PRIMARY KEY (uprn)
 );
 
---rollback DROP TABLE add_gb_builtaddress;
 
 
---changeset team-atlas:2026-001:04
---comment: create-add-isl-royalmailaddress
 CREATE TABLE add_isl_royalmailaddress (
     udprn integer not null,
     versiondate date not null,
@@ -179,11 +167,8 @@ CREATE TABLE add_isl_royalmailaddress (
     PRIMARY KEY (udprn)
 );
 
---rollback DROP TABLE add_isl_royalmailaddress;
 
 
---changeset team-atlas:2026-001:05
---comment: create-add-isl-builtaddress
 CREATE TABLE add_isl_builtaddress (
     uprn bigint not null,
     versiondate date not null,
@@ -245,19 +230,11 @@ CREATE TABLE add_isl_builtaddress (
     PRIMARY KEY (uprn)
 );
 
---rollback DROP TABLE add_isl_builtaddress;
 
---changeset team-atlas:2026-001:06
---comment: create-add-gb-royalmailaddress-postcode-index
 CREATE INDEX idx_royalmailaddress_postcode_normalized
 ON add_gb_royalmailaddress (upper(replace(postcode, ' ', '')));
 
---rollback DROP INDEX idx_royalmailaddress_postcode_normalized;
 
 
---changeset team-atlas:2026-001:07
---comment: create-add-isl-royalmailaddress-postcode-index
 CREATE INDEX idx_isl_royalmailaddress_postcode_normalized
 ON add_isl_royalmailaddress (upper(replace(postcode, ' ', '')));
-
---rollback DROP INDEX idx_isl_royalmailaddress_postcode_normalized;

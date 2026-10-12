@@ -10,7 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.context.WebApplicationContext;
 /**
  * Checks application wiring and health with the container and local-profile
- * migrations inherited from the API integration-test base.
+ * Flyway migrations inherited from the API integration-test base.
  */
 class AddressLookupApplicationIT extends AddressTestBaseIT {
 

@@ -15,7 +15,7 @@ import org.testcontainers.utility.DockerImageName;
 
 /**
  * Starts the local-profile API against disposable PostGIS, applying the
- * canonical feed without Docker Compose or a developer's datasource.
+ * canonical Flyway feed without Docker Compose or a developer's datasource.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Testcontainers
@@ -26,7 +26,7 @@ import org.testcontainers.utility.DockerImageName;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
                 "spring.docker.compose.enabled=false",
-                "spring.liquibase.change-log=classpath:database/changelog-master.xml"
+                "spring.flyway.locations=classpath:db/migration,classpath:db/local-migration"
         })
 public abstract class AddressTestBaseIT {
     

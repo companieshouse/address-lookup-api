@@ -24,7 +24,7 @@ module "aurora_postgres" {
   db_name        = local.database_name
   environment    = var.environment
   engine         = "aurora-postgresql"
-  engine_version = "18.3"
+  engine_version = "18.6"
   vpc_id         = data.aws_vpc.vpc.id
 
   master_username = local.master_username

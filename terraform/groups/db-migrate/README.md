@@ -35,7 +35,7 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
 | Aurora allows 5432 from it | `aws_vpc_security_group_ingress_rule.aurora_from_lambda` on `<env>-address-rds-rds-sg` |
 | Endpoints S3 gateway, SSM, KMS, Logs | S3 gateway: the VPC's existing one, looked up. SSM: created here. KMS and Logs: not needed (see Network). |
 | IAM S3 Get on `snapshots/*`, `ssm:GetParameter` on the one parameter, `kms:Decrypt` | `data.aws_iam_policy_document.db_migrate` attached via `additional_policies` |
-| Credentials | SecureString `/address-lookup/<env>/db/schema-owner` = `{"username","password","jdbcUrl"}`, written from Vault by `module.credentials` (terraform-modules `aws/parameter-store`) and encrypted with `alias/<aws_profile>/environment-services-kms` |
+| Credentials | SecureString `/address-lookup/<env>/db/schema-owner` = `{"username","password","jdbcUrl"}`, written from Vault by `module.credentials` (terraform-modules `aws/parameter-store`) and encrypted with `alias/<aws_profile>/environment-services-kms`. See [Schema-owner credentials (ALS-88)](#schema-owner-credentials-als-88) |
 | Log group | Created by the module (`/aws/lambda/address-lookup-db-migrate-<env>`), retention `lambda_logs_retention_days` (90) |
 | Errors > 0 alarm to the team channel | `aws_cloudwatch_metric_alarm.errors` → `common-services-<env>-cloudwatch-alarms-notify-topic` (override with `alarm_topic_name`) |
 
@@ -82,14 +82,14 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
    existing `data_subnet_pattern`. The plan fails without them.
    - The same password is used when the role is created in the database
      (ALS-90).
-   - To rotate it, change Vault, then re-apply this group and the ALS-90
-     bootstrap.
+   - To rotate it, follow [Rotation](#rotation).
 3. The VPC has an S3 gateway endpoint associated with the data subnets' route
    tables. It is looked up; the plan fails if it is missing.
 4. The release `address-lookup-api/address-lookup-db-migrate-<version>.zip`
    exists in the shared-services release bucket. To produce it, push a
    `db-migrate-lambda-X.Y.Z` release for `lambdas/db-migrate`
-   (`make package-db-migrate-lambda`).
+   (`make package-db-migrate-lambda`). The zip must contain the RDS CA bundle
+   at `certs/eu-west-2-bundle.pem` (see `rds_ca_bundle_path`).
 5. The environment's Concourse AWS credentials are the `concourse-platform` IAM
    user. If not, set `concourse_iam_user_name`.
 
@@ -147,6 +147,80 @@ aws ec2 describe-security-group-rules --filters Name=group-id,Values="$LSG" \
 
 # Concurrency 1: a second simultaneous invocation is throttled (TooManyRequestsException)
 aws lambda get-function-concurrency --function-name "$F"   # ReservedConcurrentExecutions: 1
+```
+
+## Schema-owner credentials (ALS-88)
+
+The function reads `/address-lookup/<env>/db/schema-owner` itself, with
+`ssm:GetParameter` and `WithDecryption`, on every invocation. The password
+therefore never appears in the invocation payload, the response or the
+pipeline logs.
+
+| | |
+|---|---|
+| Source | Vault `applications/<aws_profile>/<env>/common-services-stack/address-rds`, keys `schema_owner_username` and `schema_owner_password`. This is the schema-owner role: it owns the application schemas, runs DDL, and is used only by this function. It is not the Aurora master user. |
+| Parameter | `/address-lookup/<env>/db/schema-owner`, type `SecureString`, encrypted with the customer-managed key `alias/<aws_profile>/environment-services-kms` |
+| Value | `{"username": "<schema owner>", "password": "<from Vault>", "jdbcUrl": "jdbc:postgresql://<writer endpoint>:5432/addressdb?sslmode=verify-full&sslrootcert=/var/task/certs/eu-west-2-bundle.pem"}` |
+| Endpoint | The cluster (writer) endpoint, `data.aws_rds_cluster.aurora.endpoint`, never the reader |
+| TLS | `verify-full` checks that the server certificate chains to the RDS CA and matches the writer endpoint. The cluster also enforces TLS (`rds.force_ssl=1`). |
+| Writer | **Terraform**: this group's `module.credentials`, run by the pipeline's `<env>-db-migrate-plan/apply` jobs. This is the platform standard (the org `aws/parameter-store` module). It replaces the drawn option of Concourse running `aws ssm put-parameter`, so Concourse needs no `ssm:PutParameter`. |
+| Reader | The function's role: `ssm:GetParameter` on this parameter only, and `kms:Decrypt`. The SSM endpoint's policy admits only this role and this parameter. |
+
+Text to record on the ticket: *"Writer: Terraform (terraform/groups/db-migrate,
+terraform-modules aws/parameter-store) reading Vault, applied by the
+address-lookup-api pipeline's <env>-db-migrate jobs. Key: the shared
+environment-services-kms customer-managed key."*
+
+### Known gaps
+
+- **The key is shared.** `environment-services-kms` is the account's standard
+  key for service parameters (org convention, chosen over a dedicated key). Any
+  role in the account that has both `ssm:GetParameter` on this name (or `*`) and
+  `kms:Decrypt` on that key can read the value, for example administrator
+  roles and possibly other services' roles. This group grants only the
+  function's role. Nothing here denies other roles. A dedicated key whose
+  policy allows `Decrypt` only to the function (via SSM) would close this.
+- **The writer can also read.** Terraform reads the parameter back on every
+  plan, so the principal that runs it (Concourse) needs `kms:Decrypt` too. This
+  applies to any Terraform writer.
+- **The plan and state contain the value.** The plan shows
+  `(sensitive value)`, but the plan zip in the `<env>.terraform-plans` bucket and
+  the state file hold it in plain text, as for every Terraform-managed secret.
+
+### Rotation
+
+1. Change `schema_owner_password` in Vault. Use `vault kv patch` or the UI;
+   `put` would wipe the other keys.
+2. Apply the aurora group. The ALS-90 bootstrap sets the role's password from
+   Vault on every apply (`ALTER ROLE ... PASSWORD`).
+3. Trigger `<env>-db-migrate-plan`, then `<env>-db-migrate-apply`. Only the
+   parameter changes: the plan shows `aws_ssm_parameter` updated in place, and
+   the function is not redeployed. The plan jobs don't run on a Vault change,
+   so trigger them by hand. In cidev, `fly -t <target> trigger-job -j address-lookup-api/cidev-db-migrate-plan`.
+4. The next invocation reads the new value, so `info` succeeds with no
+   redeploy.
+
+Between steps 2 and 3 the database and the parameter disagree, so don't run
+`update-<env>` then.
+
+### Verifying the ALS-88 acceptance criteria
+
+```sh
+N=/address-lookup/<env>/db/schema-owner
+# SecureString with the customer-managed key
+aws ssm describe-parameters --parameter-filters Key=Name,Values="$N" \
+  --query 'Parameters[0].[Type,KeyId]' --output text
+aws kms describe-key --key-id alias/<aws_profile>/environment-services-kms --query KeyMetadata.KeyManager   # "CUSTOMER"
+
+# JSON has the fields (prints key names only, never the values)
+aws ssm get-parameter --name "$N" --with-decryption --query Parameter.Value --output text | jq -r 'keys[]'
+
+# Writer and readers: the function's role policy, and who else could decrypt
+aws iam list-role-policies --role-name "$(terraform output -raw lambda_role_arn | cut -d/ -f2)"
+aws kms get-key-policy --key-id <key id> --policy-name default
+
+# Never in pipeline output: the plan/apply logs show (sensitive value) and
+# update-<env> prints only named fields of the function's response.
 ```
 
 <!-- BEGIN_TF_DOCS -->
@@ -217,6 +291,7 @@ aws lambda get-function-concurrency --function-name "$F"   # ReservedConcurrentE
 | <a name="input_lambda_runtime"></a> [lambda\_runtime](#input\_lambda\_runtime) | The Lambda managed runtime | `string` | `"java21"` | no |
 | <a name="input_lambda_timeout_seconds"></a> [lambda\_timeout\_seconds](#input\_lambda\_timeout\_seconds) | The amount of time the Lambda function is allowed to run before being stopped. Concourse invokes it with --cli-read-timeout 900 | `number` | `900` | no |
 | <a name="input_lock_timeout"></a> [lock\_timeout](#input\_lock\_timeout) | PostgreSQL lock\_timeout for each migration (LOCK\_TIMEOUT) | `string` | `"10s"` | no |
+| <a name="input_rds_ca_bundle_path"></a> [rds\_ca\_bundle\_path](#input\_rds\_ca\_bundle\_path) | Path, inside the function, of the RDS CA bundle (https://truststore.pki.rds.amazonaws.com/<region>/<region>-bundle.pem) used for sslmode=verify-full. The lambdas/db-migrate zip must contain it. | `string` | `"/var/task/certs/eu-west-2-bundle.pem"` | no |
 | <a name="input_release_artifact_key"></a> [release\_artifact\_key](#input\_release\_artifact\_key) | Key of the Lambda code object (address-lookup-db-migrate-<version>.zip) in the release bucket | `string` | n/a | yes |
 | <a name="input_release_bucket_name"></a> [release\_bucket\_name](#input\_release\_bucket\_name) | The name of the S3 bucket containing the Lambda release artefact | `string` | n/a | yes |
 | <a name="input_snapshot_bucket_name"></a> [snapshot\_bucket\_name](#input\_snapshot\_bucket\_name) | The versioned bucket the Concourse gather-snapshot job writes Flyway snapshots to (SNAPSHOT\_BUCKET) | `string` | n/a | yes |

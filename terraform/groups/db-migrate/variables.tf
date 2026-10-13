@@ -74,6 +74,12 @@ variable "lambda_logs_retention_days" {
   default     = 90
 }
 
+variable "rds_ca_bundle_path" {
+  type        = string
+  description = "Path, inside the function, of the RDS CA bundle (https://truststore.pki.rds.amazonaws.com/<region>/<region>-bundle.pem) used for sslmode=verify-full. The lambdas/db-migrate zip must contain it."
+  default     = "/var/task/certs/eu-west-2-bundle.pem"
+}
+
 variable "lock_timeout" {
   type        = string
   description = "PostgreSQL lock_timeout for each migration (LOCK_TIMEOUT)"

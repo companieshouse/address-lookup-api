@@ -31,8 +31,10 @@ locals {
   credentials_parameter_name = "/${local.parameter_prefix}/schema-owner"
   credentials_parameter_arn  = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.credentials_parameter_name}"
 
-  # TLS is always used and enforced by the cluster (rds.force_ssl=1).
-  jdbc_url = "jdbc:postgresql://${data.aws_rds_cluster.aurora.endpoint}:${local.database_port}/${local.database_name}?sslmode=require"
+  # The writer (cluster) endpoint, never the reader. verify-full pins TLS to the
+  # RDS certificate for this host, using the region's RDS CA bundle that the
+  # function's zip carries (var.rds_ca_bundle_path).
+  jdbc_url = "jdbc:postgresql://${data.aws_rds_cluster.aurora.endpoint}:${local.database_port}/${local.database_name}?sslmode=verify-full&sslrootcert=${var.rds_ca_bundle_path}"
 
   credentials = {
     "schema-owner" = jsonencode({

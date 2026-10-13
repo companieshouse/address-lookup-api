@@ -8,6 +8,8 @@ import java.util.Map;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 public final class Commands {
+  private static final String INGEST_SOURCE = "uk.gov.companieshouse.address-lookup.ingest";
+
   private final EventBridgeClient events;
   private final String bus;
   private final com.fasterxml.jackson.databind.ObjectMapper json;
@@ -23,6 +25,14 @@ public final class Commands {
   }
 
   void send(String action, Map<String, ?> payload) throws Exception {
+    send(action, payload, "os.acquisition");
+  }
+
+  public void sendIngestion(String action, Map<String, ?> payload) throws Exception {
+    send(action, payload, INGEST_SOURCE);
+  }
+
+  private void send(String action, Map<String, ?> payload, String source) throws Exception {
     String detail = json.writeValueAsString(payload);
     var response =
         events.putEvents(
@@ -30,7 +40,7 @@ public final class Commands {
                 b.entries(
                     PutEventsRequestEntry.builder()
                         .eventBusName(bus)
-                        .source("os.acquisition")
+                        .source(source)
                         .detailType(action)
                         .detail(detail)
                         .build()));

@@ -22,7 +22,22 @@ class KeyLayoutTest {
       var parsed = KeyLayout.parseZipKey(KeyLayout.zipKey("rel-1", d));
       assertEquals(d, parsed.dataset());
       assertEquals("rel-1", parsed.releaseId());
+
+      var csv = KeyLayout.parseCsvKey(KeyLayout.csvKey("rel-1", d));
+      assertEquals(d, csv.dataset());
+      assertEquals("rel-1", csv.releaseId());
+      assertEquals(KeyLayout.FileType.CSV, csv.fileType());
     }
+  }
+
+  @Test
+  void parsesObjectFileType() {
+    assertEquals(
+        KeyLayout.FileType.ZIP,
+        KeyLayout.parseObjectKey("zips/rel-1/add_gb_builtaddress.zip").fileType());
+    assertEquals(
+        KeyLayout.FileType.CSV,
+        KeyLayout.parseObjectKey("csv/rel-1/add_gb_builtaddress.csv").fileType());
   }
 
   @ParameterizedTest
@@ -37,7 +52,10 @@ class KeyLayoutTest {
         "zips//add_gb_builtaddress.zip",
         "zips/rel/extra/add_gb_builtaddress.zip",
         "/zips/rel/add_gb_builtaddress.zip",
-        "zips/rel/add_gb_builtaddress.zip/"
+        "zips/rel/add_gb_builtaddress.zip/",
+        "csv/rel/add_gb_builtaddress.zip",
+        "zips/rel/add_gb_builtaddress.csv",
+        "csv/rel/extra/add_gb_builtaddress.csv"
       })
   void rejectsInvalidKeys(String key) {
     assertThrows(IllegalArgumentException.class, () -> KeyLayout.parseZipKey(key));

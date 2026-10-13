@@ -44,12 +44,6 @@ public class AcquisitionConfiguration {
   }
 
   @Bean
-  ScanResultsService scanResultsService(
-      Commands commands, AcquisitionProperties properties) {
-    return new ScanResultsService(commands, properties);
-  }
-
-  @Bean
   ExtractionService extractionService(S3Client s3, AcquisitionProperties properties) {
     return new ExtractionService(s3, properties);
   }

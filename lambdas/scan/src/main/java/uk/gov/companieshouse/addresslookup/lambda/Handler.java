@@ -2,14 +2,14 @@ package uk.gov.companieshouse.addresslookup.lambda;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.ScanResultsService;
-import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
+import uk.gov.companieshouse.addresslookup.lambda.scan.ScanApplication;
+import uk.gov.companieshouse.addresslookup.lambda.scan.ScanResultsService;
 
 import java.util.Map;
 
 public final class Handler implements RequestHandler<Map<String, Object>, String> {
   private final ScanResultsService service =
-      AcquisitionApplication.start(ScanResultsService.class);
+      ScanApplication.start();
 
   public String handleRequest(Map<String, Object> event, Context context) {
     try {

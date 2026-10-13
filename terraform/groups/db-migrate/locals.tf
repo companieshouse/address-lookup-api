@@ -24,25 +24,14 @@ locals {
 
   alarm_topic_name = coalesce(var.alarm_topic_name, "${local.stack_name}-${var.environment}-cloudwatch-alarms-notify-topic")
 
-  # aws/parameter-store names each parameter /<name_prefix>/<key>, giving
-  # /address-lookup/<environment>/db/schema-owner. Only the key is used by its
-  # for_each; the value stays sensitive.
-  parameter_prefix           = "address-lookup/${var.environment}/db"
-  credentials_parameter_name = "/${local.parameter_prefix}/schema-owner"
+  # Written by terraform/groups/aurora from Vault (aws/parameter-store names it
+  # /<name_prefix>/<key>), as {"username","password","jdbcUrl"} with a
+  # verify-full jdbcUrl on the writer endpoint.
+  credentials_parameter_name = "/address-lookup/${var.environment}/db/schema-owner"
   credentials_parameter_arn  = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.credentials_parameter_name}"
 
-  # The writer (cluster) endpoint, never the reader. verify-full pins TLS to the
-  # RDS certificate for this host, using the region's RDS CA bundle that the
-  # function's zip carries (var.rds_ca_bundle_path).
-  jdbc_url = "jdbc:postgresql://${data.aws_rds_cluster.aurora.endpoint}:${local.database_port}/${local.database_name}?sslmode=verify-full&sslrootcert=${var.rds_ca_bundle_path}"
-
-  credentials = {
-    "schema-owner" = jsonencode({
-      username = local.database_secrets["schema_owner_username"]
-      password = local.database_secrets["schema_owner_password"]
-      jdbcUrl  = local.jdbc_url
-    })
-  }
-
-  ssm_endpoint_url = "https://${aws_vpc_endpoint.ssm.dns_entry[0].dns_name}"
+  # terraform/groups/aurora names the endpoint address-lookup-<env>-ssm and its
+  # security group address-lookup-<env>-ssm-endpoint.
+  ssm_endpoint_name = "address-lookup-${var.environment}-ssm"
+  ssm_endpoint_url  = "https://${data.aws_vpc_endpoint.ssm.dns_entry[0].dns_name}"
 }

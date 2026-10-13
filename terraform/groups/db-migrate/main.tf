@@ -21,16 +21,6 @@ provider "aws" {
   region = var.aws_region
 }
 
-# Vault remains the source of truth. The schema owner's credentials are copied
-# into the one SecureString the function reads: /address-lookup/<env>/db/schema-owner.
-module "credentials" {
-  source = "git@github.com:companieshouse/terraform-modules//aws/parameter-store?ref=1.0.442"
-
-  name_prefix = local.parameter_prefix
-  kms_key_id  = data.aws_kms_key.parameters.id
-  secrets     = local.credentials
-}
-
 module "lambda" {
   source = "git@github.com:companieshouse/terraform-modules//aws/lambda?ref=1.0.442"
 
@@ -52,8 +42,8 @@ module "lambda" {
     LOCK_TIMEOUT             = var.lock_timeout
     # Break-glass only: set to true by hand for a repair-<env> run, then back.
     ALLOW_REPAIR = "false"
-    # The SSM endpoint has private DNS off (see network.tf), so the AWS SDK is
-    # pointed at it explicitly.
+    # The SSM endpoint (terraform/groups/aurora) has private DNS off, so the
+    # AWS SDK is pointed at it explicitly.
     AWS_ENDPOINT_URL_SSM = local.ssm_endpoint_url
   }
 

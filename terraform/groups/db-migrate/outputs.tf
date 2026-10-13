@@ -19,6 +19,6 @@ output "credentials_parameter_name" {
 }
 
 output "ssm_endpoint_dns_name" {
-  description = "The SSM interface endpoint the function uses (private DNS is off)"
-  value       = aws_vpc_endpoint.ssm.dns_entry[0].dns_name
+  description = "The SSM interface endpoint the function uses (terraform/groups/aurora; private DNS is off)"
+  value       = data.aws_vpc_endpoint.ssm.dns_entry[0].dns_name
 }

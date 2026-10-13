@@ -1,6 +1,5 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
 
-import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,7 +8,7 @@ import uk.gov.companieshouse.release.model.KeyLayout;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.JSON;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 
 /**
  * Stateless router for GuardDuty scan results. It never touches S3 or stores state; duplicate
@@ -29,7 +28,7 @@ public final class ScanResultsService {
     this.ingestBucket = AcquisitionProperties.required(properties.ingestBucket(), "INGEST_BUCKET");
   }
 
-  public String scan(Map<String, Object> event, Context context) throws Exception {
+  public String scan(Map<String, Object> event) throws Exception {
     JsonNode input = JSON.valueToTree(event);
     String eventId = input.path("id").asText("unknown");
     JsonNode detail = input.path("detail");

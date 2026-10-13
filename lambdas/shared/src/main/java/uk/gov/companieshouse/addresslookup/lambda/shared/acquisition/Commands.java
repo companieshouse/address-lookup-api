@@ -7,12 +7,12 @@ import java.util.Map;
 
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
-final class Commands {
+public final class Commands {
   private final EventBridgeClient events;
   private final String bus;
   private final com.fasterxml.jackson.databind.ObjectMapper json;
 
-  Commands(EventBridgeClient events, String bus, com.fasterxml.jackson.databind.ObjectMapper json) {
+  public Commands(EventBridgeClient events, String bus, com.fasterxml.jackson.databind.ObjectMapper json) {
     this.events = events;
     this.bus = bus;
     this.json = json;

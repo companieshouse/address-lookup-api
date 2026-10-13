@@ -21,7 +21,6 @@ public record AcquisitionProperties(
     @DefaultValue("20s") Duration connectTimeout,
     @DefaultValue("840s") Duration requestTimeout) {
   public AcquisitionProperties {
-    check(sourceBucket != null && !sourceBucket.isBlank(), "Missing SOURCE_BUCKET");
     check(maxZipBytes > 0 && maxExtractedBytes > 0 && sweepLimit > 0, "Limits must be positive");
     check(
         !connectTimeout.isNegative()

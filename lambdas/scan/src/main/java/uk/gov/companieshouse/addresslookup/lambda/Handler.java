@@ -13,7 +13,7 @@ public final class Handler implements RequestHandler<Map<String, Object>, String
 
   public String handleRequest(Map<String, Object> event, Context context) {
     try {
-      return service.scan(event, context);
+      return service.scan(event);
     } catch (Exception e) {
       throw new RuntimeException("scan failed; PutEvents failures are retried", e);
     }

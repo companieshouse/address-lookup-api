@@ -21,6 +21,7 @@ public final class DownloadService {
     this.s3 = s3;
     this.os = os;
     this.properties = properties;
+    AcquisitionProperties.required(properties.sourceBucket(), "SOURCE_BUCKET");
   }
 
   public String download(Map<String, Object> event, Context context) throws Exception {

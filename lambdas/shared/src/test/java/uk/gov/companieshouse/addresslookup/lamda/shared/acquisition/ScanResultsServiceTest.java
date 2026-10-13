@@ -7,6 +7,9 @@ import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsRequest;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsResponse;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.ScanResultsService;
 
 import java.io.InputStream;
 import java.lang.reflect.Proxy;
@@ -18,7 +21,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static uk.gov.companieshouse.addresslookup.lamda.shared.runtime.RuntimeSupport.JSON;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 
 class ScanResultsServiceTest {
   private static final String BUCKET = "ingest-bucket";
@@ -48,7 +51,7 @@ class ScanResultsServiceTest {
                 });
     var properties =
         new AcquisitionProperties(
-            "source", "scanned", BUCKET, "bus", null, null, 1, 1, 1,
+            null, null, BUCKET, "bus", null, null, 1, 1, 1,
             Duration.ofSeconds(1), Duration.ofSeconds(1));
     service = new ScanResultsService(new Commands(client, "bus", JSON), properties);
   }
@@ -174,7 +177,7 @@ class ScanResultsServiceTest {
   void constructorRequiresIngestBucket() {
     var props =
         new AcquisitionProperties(
-            "source", "scanned", null, "bus", null, null, 1, 1, 1,
+            null, null, null, "bus", null, null, 1, 1, 1,
             Duration.ofSeconds(1), Duration.ofSeconds(1));
     assertThrows(
         IllegalArgumentException.class, () -> new ScanResultsService(null, props));

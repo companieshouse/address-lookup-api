@@ -10,6 +10,6 @@ ZIP keys are parsed with the shared `KeyLayout` (`zips/<releaseId>/<dataset>.zip
 | `UNSUPPORTED`, `ACCESS_DENIED`, `FAILED`, unknown | `StepRejected{SCAN_INCONCLUSIVE}` |
 | invalid input | `StepRejected{INVALID_INPUT}` |
 
-Config: `INGEST_BUCKET`, `EVENT_BUS` (plus `SOURCE_BUCKET`, required by shared properties).
+Config: `INGEST_BUCKET`, `EVENT_BUS`. Scan does not require `SOURCE_BUCKET`.
 IAM: `events:PutEvents` on the bus only; no S3 access. Duplicate events are republished; a
 PutEvents failure fails the invocation so retry/DLQ applies.

@@ -24,6 +24,7 @@ public final class ExtractionService {
   public ExtractionService(S3Client s3, AcquisitionProperties properties) {
     this.s3 = s3;
     this.properties = properties;
+    AcquisitionProperties.required(properties.sourceBucket(), "SOURCE_BUCKET");
     AcquisitionProperties.required(properties.scannedBucket(), "SCANNED_BUCKET");
   }
 

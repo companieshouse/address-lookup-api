@@ -256,6 +256,45 @@ final class DownloadServiceTest {
     }
 
     @Test
+    void failsWithoutDownloadingWhenPlanFileDoesNotExist() throws Exception {
+        var s3 = new FakeS3();
+        var os = mock(OsClient.class);
+        var service = new DownloadService(s3.client(), os, mock(Commands.class), properties());
+        var logger = java.util.logging.Logger.getLogger(DownloadService.class.getName());
+        var records = new java.util.ArrayList<java.util.logging.LogRecord>();
+        var handler =
+                new java.util.logging.Handler() {
+                    @Override
+                    public void publish(java.util.logging.LogRecord record) {
+                        records.add(record);
+                    }
+
+                    @Override
+                    public void flush() {}
+
+                    @Override
+                    public void close() {}
+                };
+        logger.addHandler(handler);
+
+        try {
+            var e = assertThrows(IllegalArgumentException.class, () -> service.download(event(), context()));
+
+            String expected = "Acquisition plan not found planKey=" + PLAN_KEY + " dataset=" + DATASET;
+            assertEquals(expected, e.getMessage());
+            assertTrue(
+                    records.stream()
+                            .anyMatch(
+                                    r ->
+                                            r.getLevel() == java.util.logging.Level.SEVERE
+                                                    && expected.equals(r.getMessage())));
+            verifyNoInteractions(os);
+        } finally {
+            logger.removeHandler(handler);
+        }
+    }
+
+    @Test
     void receiptIsCreatedConditionallyAndNeverOverwritten() throws Exception {
         var s3 = new FakeS3();
         String receiptKey = ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download");
@@ -316,9 +355,38 @@ final class DownloadServiceTest {
         var os = mock(OsClient.class);
         when(os.download(anyString())).thenReturn(new ByteArrayInputStream("wrong content".getBytes(StandardCharsets.UTF_8)));
         var service = new DownloadService(s3.client(), os, mock(Commands.class), properties());
+        var logger = java.util.logging.Logger.getLogger(DownloadService.class.getName());
+        var records = new java.util.ArrayList<java.util.logging.LogRecord>();
+        var handler =
+                new java.util.logging.Handler() {
+                    @Override
+                    public void publish(java.util.logging.LogRecord record) {
+                        records.add(record);
+                    }
 
-        assertEquals("CHECKSUM_MISMATCH", service.download(event(), context()));
+                    @Override
+                    public void flush() {}
 
+                    @Override
+                    public void close() {}
+                };
+        logger.addHandler(handler);
+
+        try {
+            assertEquals("CHECKSUM_MISMATCH", service.download(event(), context()));
+        } finally {
+            logger.removeHandler(handler);
+        }
+
+        assertTrue(
+                records.stream()
+                        .anyMatch(
+                                r ->
+                                        r.getLevel() == java.util.logging.Level.SEVERE
+                                                && r.getMessage().contains("Download checksum mismatch")
+                                                && r.getMessage().contains("expected=")
+                                                && r.getMessage().contains("actual=")),
+                "mismatch must be logged at SEVERE with both MD5 values");
         assertTrue(s3.abortedUploads > 0, "multipart upload should be aborted");
         assertFalse(
                 s3.objects.containsKey(ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download")),

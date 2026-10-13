@@ -15,7 +15,6 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 
 public final class DownloadService {
     private static final Logger LOG = Logger.getLogger(DownloadService.class.getName());
-    static final String DOWNLOAD_COMPLETE = "DOWNLOAD_COMPLETE";
 
     private final S3Client s3;
     private final OsClient os;
@@ -139,13 +138,6 @@ public final class DownloadService {
             return "CHECKSUM_MISMATCH";
         }
 
-        // Only reached when the MD5 matched and the receipt was written (conditionally, never overwritten).
-        publishDownloadComplete(downloadCommandPlanKey, downloadCommandDataset, manifestReleaseId);
         return "ZIP_SCAN";
-    }
-
-    private void publishDownloadComplete(String planKey, String dataset, String releaseId) throws Exception {
-        commands.send(DOWNLOAD_COMPLETE, planKey, dataset);
-        LOG.info("Download-complete event published releaseId=" + releaseId + " dataset=" + dataset);
     }
 }

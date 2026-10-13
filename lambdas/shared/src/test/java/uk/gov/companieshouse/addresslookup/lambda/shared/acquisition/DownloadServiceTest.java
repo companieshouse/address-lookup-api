@@ -211,28 +211,19 @@ final class DownloadServiceTest {
     }
 
     @Test
-    void publishesDownloadCompleteEventOnlyAfterMd5MatchesAndReceiptIsWritten() throws Exception {
+    void doesNotPublishDownloadCompleteEventAfterSuccessfulDownload() throws Exception {
         byte[] zip = "event zip bytes".getBytes(StandardCharsets.UTF_8);
         var s3 = new FakeS3();
         s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifestWithSelectedMd5(md5(zip))));
         var os = mock(OsClient.class);
         when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
         var commands = mock(Commands.class);
-        doAnswer(
-                invocation -> {
-                    assertTrue(
-                            s3.objects.containsKey(ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download")),
-                            "receipt must exist before the event is published");
-                    return null;
-                })
-                .when(commands)
-                .send(anyString(), anyString(), anyString());
         var service = new DownloadService(s3.client(), os, commands, properties());
 
         assertEquals("ZIP_SCAN", service.download(event(), context()));
 
-        verify(commands).send("DOWNLOAD_COMPLETE", PLAN_KEY, DATASET);
-        verifyNoMoreInteractions(commands);
+        assertTrue(s3.objects.containsKey(ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download")));
+        verifyNoInteractions(commands);
     }
 
     @Test
@@ -262,29 +253,6 @@ final class DownloadServiceTest {
 
         verifyNoInteractions(os);
         verifyNoInteractions(commands);
-    }
-
-    @Test
-    void eventPublishFailureFailsInvocationAndRetryIsSkippedWithoutRepublishing() throws Exception {
-        byte[] zip = "retry zip bytes".getBytes(StandardCharsets.UTF_8);
-        var s3 = new FakeS3();
-        s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifestWithSelectedMd5(md5(zip))));
-        var os = mock(OsClient.class);
-        when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
-        var commands = mock(Commands.class);
-        doThrow(new IllegalArgumentException("EventBridge rejected command"))
-                .doNothing()
-                .when(commands)
-                .send(anyString(), anyString(), anyString());
-        var service = new DownloadService(s3.client(), os, commands, properties());
-
-        assertThrows(IllegalArgumentException.class, () -> service.download(event(), context()));
-        assertTrue(s3.objects.containsKey(ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download")));
-
-        assertEquals("SKIPPED", service.download(event(), context()));
-
-        verify(commands, times(1)).send("DOWNLOAD_COMPLETE", PLAN_KEY, DATASET);
-        verify(os, times(1)).download(anyString());
     }
 
     @Test

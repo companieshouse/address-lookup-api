@@ -18,7 +18,7 @@ terraform {
 }
 
 module "aurora_postgres" {
-  source = "git@github.com:companieshouse/terraform-modules//aws/aurora?ref=1.0.397"
+  source = "git@github.com:companieshouse/terraform-modules//aws/aurora?ref=1.0.442"
 
   service        = local.service_name
   db_name        = local.database_name
@@ -30,22 +30,7 @@ module "aurora_postgres" {
   master_username = local.master_username
   master_password = local.master_password
 
-  cluster_parameter_group_settings = [
-    {
-      name         = "rds.force_ssl"
-      value        = "1"
-      apply_method = "pending-reboot"
-    },
-    {
-      name         = "rds.allowed_extensions"
-      value        = "postgis"
-      apply_method = "immediate"
-    },
-    {
-      name  = "ssl_min_protocol_version",
-      value = "TLSv1.3" 
-    }
-  ]
+  cluster_parameter_group_settings = local.cluster_parameter_group_settings
 
   subnet_ids = data.aws_subnets.data.ids
   instances  = var.instances
@@ -58,14 +43,14 @@ module "aurora_postgres" {
 }
 
 module "iac_tags" {
-  source = "git@github.com:companieshouse/terraform-modules//aws/tagging/iac?ref=1.0.397"
+  source = "git@github.com:companieshouse/terraform-modules//aws/tagging/iac?ref=1.0.442"
 
   group           = "aurora"
   source_code_url = "https://github.com/companieshouse/address-lookup-api.git"
 }
 
 module "owner_tags" {
-  source = "git@github.com:companieshouse/terraform-modules//aws/tagging/owner?ref=1.0.397"
+  source = "git@github.com:companieshouse/terraform-modules//aws/tagging/owner?ref=1.0.442"
 
   platform_owner = "development"
 }

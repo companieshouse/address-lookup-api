@@ -1,6 +1,7 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
 
 import com.amazonaws.services.lambda.runtime.Context;
+import com.fasterxml.jackson.databind.JsonNode;
 import software.amazon.awssdk.services.s3.S3Client;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
@@ -29,43 +30,16 @@ public final class DownloadService {
     }
 
     public String download(Map<String, Object> event, Context context) throws Exception {
-        // Accept only EventBridge DOWNLOAD commands.
-        check(event != null, "Missing download event");
-        check(
-                (!event.containsKey("source") || "os.acquisition".equals(event.get("source")))
-                        && (!event.containsKey("detail-type") || "DOWNLOAD".equals(event.get("detail-type"))),
-                "Unexpected download event");
+        var input = validateCommand(event);
 
-        // The command payload must be a non-empty "detail" object.
-        check(event.get("detail") instanceof Map<?, ?> d && !d.isEmpty(), "Missing detail in download command");
-        var input = detail(event);
-
-        // The plan key must be present, textual and non-blank.
-        check(
-                input.hasNonNull("planKey")
-                        && input.get("planKey").isTextual()
-                        && !input.get("planKey").asText().isBlank(),
-                "Missing detail.planKey in download command");
         String downloadCommandPlanKey = input.get("planKey").asText().trim();
-
-        // The dataset must be present, textual and non-blank before it is resolved against the catalogue.
-        check(
-                input.hasNonNull("dataset")
-                        && input.get("dataset").isTextual()
-                        && !input.get("dataset").asText().isBlank(),
-                "Missing detail.dataset in download command");
         String downloadCommandDataset = table(input.get("dataset").asText().trim()).name();
 
         var store = new ReleaseStore(s3);
         String sourceBucket = properties.sourceBucket();
 
-        // Restrict S3 reads to canonical acquisition manifests.
-        check(
-                downloadCommandPlanKey.matches("acquisitions/\\d{4}-\\d{2}-\\d{2}/[0-9a-fA-F-]{36}\\.json"),
-                "Invalid plan key");
-
-        var manifest = store.read(sourceBucket, downloadCommandPlanKey);
-        check(manifest != null, "Missing acquisition manifest");
+        validatePlanKey(downloadCommandPlanKey);
+        var manifest = readManifest(store, sourceBucket, downloadCommandPlanKey, downloadCommandDataset);
 
         String manifestReleaseId = releaseId(manifest).toString();
         LOG.info(
@@ -128,7 +102,7 @@ public final class DownloadService {
                             + " receiptKey="
                             + ReleaseStore.receiptKey(manifestReleaseId, downloadCommandDataset, "download"));
         } catch (StreamingS3.ChecksumMismatchException e) {
-            LOG.warning(
+            LOG.severe(
                     "Download checksum mismatch releaseId="
                             + manifestReleaseId
                             + " dataset="
@@ -139,5 +113,46 @@ public final class DownloadService {
         }
 
         return "ZIP_SCAN";
+    }
+
+    // Accepts only EventBridge DOWNLOAD commands with a non-blank textual planKey and dataset.
+    private static JsonNode validateCommand(Map<String, Object> event) {
+        check(event != null, "Missing download event");
+        check(
+                (!event.containsKey("source") || "os.acquisition".equals(event.get("source")))
+                        && (!event.containsKey("detail-type") || "DOWNLOAD".equals(event.get("detail-type"))),
+                "Unexpected download event");
+
+        check(event.get("detail") instanceof Map<?, ?> d && !d.isEmpty(), "Missing detail in download command");
+        var input = detail(event);
+
+        check(
+                input.hasNonNull("planKey")
+                        && input.get("planKey").isTextual()
+                        && !input.get("planKey").asText().isBlank(),
+                "Missing detail.planKey in download command");
+        check(
+                input.hasNonNull("dataset")
+                        && input.get("dataset").isTextual()
+                        && !input.get("dataset").asText().isBlank(),
+                "Missing detail.dataset in download command");
+        return input;
+    }
+
+    // Restricts S3 reads to canonical acquisition manifests.
+    private static void validatePlanKey(String planKey) {
+        check(planKey.matches("acquisitions/\\d{4}-\\d{2}-\\d{2}/[0-9a-fA-F-]{36}\\.json"), "Invalid plan key");
+    }
+
+    // A missing plan fails the invocation. The plan key has already passed format validation.
+    private static JsonNode readManifest(ReleaseStore store, String bucket, String planKey, String dataset)
+            throws Exception {
+        var manifest = store.read(bucket, planKey);
+        if (manifest == null) {
+            String message = "Acquisition plan not found planKey=" + planKey + " dataset=" + dataset;
+            LOG.severe(message);
+            check(false, message);
+        }
+        return manifest;
     }
 }

@@ -8,7 +8,6 @@ import org.junit.jupiter.api.io.TempDir;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
-import javax.net.ssl.TrustManagerFactory;
 import java.io.DataInputStream;
 import java.io.InputStream;
 import java.net.InetAddress;
@@ -20,8 +19,12 @@ import java.security.KeyStore;
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Runs the probe against an in-process server that answers like PostgreSQL with ssl_min_protocol_version=TLSv1.3. */
 class TlsProtocolProbeTest {
@@ -76,27 +79,31 @@ class TlsProtocolProbeTest {
     }
 
     @Test
-    void refusesAServerItDoesNotTrust() throws Exception {
-        KeyStore empty = KeyStore.getInstance("PKCS12");
-        empty.load(null, null);
-        TrustManagerFactory trust = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-        trust.init(empty);
-        TlsProtocolProbe untrusting = new TlsProtocolProbe(trust.getTrustManagers(), Duration.ofSeconds(5));
+    void neverCompletesTheHandshake() throws Exception {
+        AtomicBoolean completed = new AtomicBoolean();
 
-        try (ServerSocket server = server('S', 1)) {
-            assertEquals(TlsProtocolProbe.Result.REFUSED,
-                    untrusting.probe("localhost", server.getLocalPort(), "TLSv1.3").result());
+        try (ServerSocket server = server('S', 1, completed)) {
+            assertEquals(TlsProtocolProbe.Result.ACCEPTED,
+                    probe().probe("localhost", server.getLocalPort(), "TLSv1.3").result());
+            executor.shutdown();
+            assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
         }
+        assertFalse(completed.get());
     }
 
-    private static TlsProtocolProbe probe() throws Exception {
-        TrustManagerFactory trust = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-        trust.init(keyStore);
-        return new TlsProtocolProbe(trust.getTrustManagers(), Duration.ofSeconds(5));
+    private static TlsProtocolProbe probe() {
+        return new TlsProtocolProbe(Duration.ofSeconds(5));
     }
 
-    /** Answers {@code connections} SSLRequests with {@code answer}, then handshakes with TLS 1.3 only. */
     private ServerSocket server(char answer, int connections) throws Exception {
+        return server(answer, connections, new AtomicBoolean());
+    }
+
+    /**
+     * Answers {@code connections} SSLRequests with {@code answer}, then handshakes with TLS 1.3 only, setting
+     * {@code completed} if a handshake ever completes.
+     */
+    private ServerSocket server(char answer, int connections, AtomicBoolean completed) throws Exception {
         KeyManagerFactory keys = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
         keys.init(keyStore, PASSWORD);
         SSLContext context = SSLContext.getInstance("TLS");
@@ -116,6 +123,7 @@ class TlsProtocolProbeTest {
                             tls.setUseClientMode(false);
                             tls.setEnabledProtocols(new String[] {"TLSv1.3"});
                             tls.startHandshake();
+                            completed.set(true);
                             tls.getInputStream().read();
                         } catch (Exception ignored) {
                             // the refused handshake ends here

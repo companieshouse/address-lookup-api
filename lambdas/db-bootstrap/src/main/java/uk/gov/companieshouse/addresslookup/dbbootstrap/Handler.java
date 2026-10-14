@@ -5,7 +5,6 @@ import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import software.amazon.awssdk.services.ssm.SsmClient;
 
-import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -41,7 +40,7 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
     }
 
     private Handler(BootstrapConfiguration config) {
-        this(config, new ParameterStoreCredentials(SsmClient.create(), config.defaultRootCert()));
+        this(config, new ParameterStoreCredentials(SsmClient.create()));
     }
 
     Handler(BootstrapConfiguration config, Function<String, DatabaseCredentials> credentials) {
@@ -66,7 +65,7 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
                 if ("bootstrap".equals(command)) {
                     DatabaseBootstrap.bootstrap(connection, master.username(), owner);
                 }
-                BootstrapVerifier.Report report = verifier(master).verify(connection, master, owner.username());
+                BootstrapVerifier.Report report = verifier().verify(connection, master, owner.username());
                 Map<String, Object> result = JSON.convertValue(report, JSON.getTypeFactory()
                         .constructMapType(Map.class, String.class, Object.class));
                 result.put("command", command);
@@ -84,12 +83,8 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
         }
     }
 
-    private BootstrapVerifier verifier(DatabaseCredentials master) throws Exception {
-        if (!config.verifyTls()) {
-            return new BootstrapVerifier(null);
-        }
-        String rootCert = master.parameters().getOrDefault("sslrootcert", config.defaultRootCert());
-        return new BootstrapVerifier(TlsProtocolProbe.trusting(Path.of(rootCert), config.timeout()));
+    private BootstrapVerifier verifier() {
+        return new BootstrapVerifier(config.verifyTls() ? new TlsProtocolProbe(config.timeout()) : null);
     }
 
     private Connection connect(DatabaseCredentials credentials) throws SQLException {

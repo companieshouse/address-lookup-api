@@ -11,11 +11,9 @@ import java.util.function.Function;
 public final class ParameterStoreCredentials implements Function<String, DatabaseCredentials> {
 
     private final SsmClient ssm;
-    private final String defaultRootCert;
 
-    public ParameterStoreCredentials(SsmClient ssm, String defaultRootCert) {
+    public ParameterStoreCredentials(SsmClient ssm) {
         this.ssm = ssm;
-        this.defaultRootCert = defaultRootCert;
     }
 
     @Override
@@ -24,7 +22,7 @@ public final class ParameterStoreCredentials implements Function<String, Databas
                 .parameter()
                 .value();
         try {
-            return DatabaseCredentials.fromJson(value, defaultRootCert);
+            return DatabaseCredentials.fromJson(value);
         } catch (IllegalArgumentException e) {
             throw new IllegalStateException(parameterName + ": " + e.getMessage(), e);
         }

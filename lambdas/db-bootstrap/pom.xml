@@ -57,8 +57,7 @@
     <build>
         <plugins>
             <!-- Produces target/address-lookup-db-bootstrap-<version>-lambda.jar, which `make
-                 package-db-bootstrap-lambda` publishes as address-lookup-db-bootstrap-<version>.zip.
-                 certs/eu-west-2-bundle.pem lands at /var/task/certs/ for sslmode=verify-full. -->
+                 package-db-bootstrap-lambda` publishes as address-lookup-db-bootstrap-<version>.zip. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>

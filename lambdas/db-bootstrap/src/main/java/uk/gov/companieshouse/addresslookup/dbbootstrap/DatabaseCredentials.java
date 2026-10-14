@@ -12,9 +12,9 @@ import java.util.Map;
 
 /**
  * One Parameter Store credentials document, as written by terraform/groups/aurora:
- * {@code {"jdbcUrl": "jdbc:postgresql://<writer>:5432/<db>?sslmode=verify-full&sslrootcert=...", "username": ..., "password": ...}}.
- * The {@code host}/{@code port}/{@code dbname} form from ALS-88 is also accepted. Never logged: {@link #toString()}
- * masks the password.
+ * {@code {"jdbcUrl": "jdbc:postgresql://<writer>:5432/<db>?sslmode=require", "username": ..., "password": ...}}.
+ * The {@code host}/{@code port}/{@code dbname} form from ALS-88 is also accepted and connects with
+ * {@code sslmode=require}. Never logged: {@link #toString()} masks the password.
  */
 public record DatabaseCredentials(String jdbcUrl, String username, String password) {
 
@@ -27,7 +27,7 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
         require(password != null && !password.isBlank(), "password is empty");
     }
 
-    public static DatabaseCredentials fromJson(String json, String defaultRootCert) {
+    public static DatabaseCredentials fromJson(String json) {
         JsonNode node;
         try {
             node = JSON.readTree(json);
@@ -42,8 +42,7 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
             String dbname = text(node, "dbname");
             require(host != null && dbname != null, "Credentials need jdbcUrl, or host and dbname");
             int port = node.hasNonNull("port") ? node.get("port").asInt(5432) : 5432;
-            jdbcUrl = PREFIX + host + ":" + port + "/" + dbname
-                    + "?sslmode=verify-full&sslrootcert=" + defaultRootCert;
+            jdbcUrl = PREFIX + host + ":" + port + "/" + dbname + "?sslmode=require";
         }
         return new DatabaseCredentials(jdbcUrl, text(node, "username"), text(node, "password"));
     }
@@ -57,7 +56,7 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
         return port == -1 ? 5432 : port;
     }
 
-    /** Query parameters of the JDBC URL, e.g. {@code sslmode} and {@code sslrootcert}. */
+    /** Query parameters of the JDBC URL, e.g. {@code sslmode}. */
     public Map<String, String> parameters() {
         Map<String, String> parameters = new LinkedHashMap<>();
         String query = uri().getRawQuery();

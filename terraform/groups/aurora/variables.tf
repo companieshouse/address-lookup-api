@@ -44,12 +44,6 @@ variable "db_bootstrap_timeout_seconds" {
   default     = 120
 }
 
-variable "rds_ca_bundle_path" {
-  type        = string
-  description = "Path, inside the Lambdas, of the RDS CA bundle (https://truststore.pki.rds.amazonaws.com/<region>/<region>-bundle.pem) used for sslmode=verify-full"
-  default     = "/var/task/certs/eu-west-2-bundle.pem"
-}
-
 variable "db_migrate_function_name" {
   type        = string
   description = "function_name of the db-migrate Lambda (terraform/groups/db-migrate); its role may read the schema-owner parameter through the SSM endpoint"

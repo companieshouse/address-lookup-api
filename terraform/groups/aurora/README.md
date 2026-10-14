@@ -9,7 +9,7 @@ migration Lambdas read from Parameter Store.
 | What | Details |
 |------|---------|
 | Aurora cluster | `<env>-address-rds`, database `addressdb`, terraform-modules `aws/aurora`. |
-| TLS | Cluster parameter group: `rds.force_ssl=1`, `ssl_min_protocol_version=TLSv1.3` (the agreed post-quantum readiness step). Both jdbcUrls use `sslmode=verify-full` with the RDS CA bundle. |
+| TLS | Cluster parameter group: `rds.force_ssl=1`, `ssl_min_protocol_version=TLSv1.3` (the agreed post-quantum readiness step). Both jdbcUrls use `sslmode=require`: encrypted, with no CA file in the repo or the Lambda zips. The cluster refuses non-TLS and pre-1.3 connections. |
 | Credentials | SecureStrings `/address-lookup/<env>/db/master` and `/address-lookup/<env>/db/schema-owner` = `{"username","password","jdbcUrl"}` (writer endpoint), written from Vault by `module.credentials` and encrypted with `alias/<aws_profile>/environment-services-kms`. |
 | SSM endpoint | Interface endpoint `address-lookup-<env>-ssm` (private DNS off) and its security group `address-lookup-<env>-ssm-endpoint`. Its policy lets the bootstrap Lambda read both parameters and the db-migrate Lambda's role read only the schema owner's. `terraform/groups/db-migrate` looks both up by Name tag. |
 | db-bootstrap Lambda | `address-lookup-db-bootstrap-<env>` (code: `lambdas/db-bootstrap`). No CIDR egress: only Aurora (5432) and the SSM endpoint (443). No event sources or invoke permissions. |
@@ -34,7 +34,7 @@ Connected as the master user (the only code that uses it):
      would stop with a "non-empty schema" error
    * `rds.force_ssl` is `1`, `ssl_min_protocol_version` is `TLSv1.3`, and its own connection uses TLS 1.3
    * a client limited to TLS 1.2 is refused and one limited to TLS 1.3 is accepted (PostgreSQL SSLRequest
-     then a pinned handshake, trusting only the RDS CA bundle; no credentials are sent)
+     then a handshake pinned to one version, stopped at the server certificate so it needs no CA file; no credentials are sent)
 
 It never creates application schemas or tables: those all come from Flyway, starting at V2026.001.
 
@@ -96,8 +96,8 @@ openssl s_client -connect "$HOST:5432" -starttls postgres -tls1_2 </dev/null  # 
 openssl s_client -connect "$HOST:5432" -starttls postgres -tls1_3 </dev/null  # Protocol: TLSv1.3
 
 # As the master or schema owner:
-psql "host=$HOST dbname=addressdb sslmode=verify-full sslrootcert=eu-west-2-bundle.pem" -c "SELECT extname FROM pg_extension"
-psql "host=$HOST dbname=addressdb sslmode=verify-full sslrootcert=eu-west-2-bundle.pem ssl_max_protocol_version=TLSv1.2" -c 'SELECT 1'  # refused
+psql "host=$HOST dbname=addressdb sslmode=require" -c "SELECT extname FROM pg_extension"
+psql "host=$HOST dbname=addressdb sslmode=require ssl_max_protocol_version=TLSv1.2" -c 'SELECT 1'  # refused
 ```
 
 After the first `update-<env>`, Flyway's `info` shows V2026.001 to V2026.004 applied with no
@@ -163,7 +163,6 @@ After the first `update-<env>`, Flyway's `info` shows V2026.001 to V2026.004 app
 | <a name="input_hashicorp_vault_password"></a> [hashicorp\_vault\_password](#input\_hashicorp\_vault\_password) | The password used when retrieving configuration from Hashicorp Vault | `string` | n/a | yes |
 | <a name="input_hashicorp_vault_username"></a> [hashicorp\_vault\_username](#input\_hashicorp\_vault\_username) | The username used when retrieving configuration from Hashicorp Vault | `string` | n/a | yes |
 | <a name="input_instances"></a> [instances](#input\_instances) | Map of instance configurations for the Aurora cluster | `map(object({}))` | <pre>{<br/>  "primary": {}<br/>}</pre> | no |
-| <a name="input_rds_ca_bundle_path"></a> [rds\_ca\_bundle\_path](#input\_rds\_ca\_bundle\_path) | Path, inside the Lambdas, of the RDS CA bundle (https://truststore.pki.rds.amazonaws.com/<region>/<region>-bundle.pem) used for sslmode=verify-full | `string` | `"/var/task/certs/eu-west-2-bundle.pem"` | no |
 | <a name="input_release_bucket_name"></a> [release\_bucket\_name](#input\_release\_bucket\_name) | The S3 bucket holding the db-bootstrap Lambda release artefact | `string` | n/a | yes |
 
 ## Outputs

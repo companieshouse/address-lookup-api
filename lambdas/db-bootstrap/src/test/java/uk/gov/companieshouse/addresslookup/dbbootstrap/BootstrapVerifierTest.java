@@ -18,7 +18,7 @@ import static uk.gov.companieshouse.addresslookup.dbbootstrap.TlsProtocolProbe.R
 class BootstrapVerifierTest {
 
     private static final DatabaseCredentials MASTER = new DatabaseCredentials(
-            "jdbc:postgresql://writer.example:5432/addressdb?sslmode=verify-full", "master", "pw");
+            "jdbc:postgresql://writer.example:5432/addressdb?sslmode=require", "master", "pw");
     private static final String OWNER = "address_lookup_owner";
 
     private final TlsProtocolProbe probe = mock(TlsProtocolProbe.class);

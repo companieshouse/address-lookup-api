@@ -20,7 +20,7 @@ import static org.mockito.Mockito.when;
 class HandlerTest {
 
     private static final BootstrapConfiguration CONFIG = new BootstrapConfiguration(
-            "/address-lookup/cidev/db/master", "/address-lookup/cidev/db/schema-owner", "/ca.pem", false,
+            "/address-lookup/cidev/db/master", "/address-lookup/cidev/db/schema-owner", false,
             Duration.ofSeconds(1));
     private static final DatabaseCredentials MASTER =
             new DatabaseCredentials("jdbc:postgresql://writer:5432/addressdb", "master", "master-secret");

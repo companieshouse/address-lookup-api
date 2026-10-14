@@ -20,7 +20,6 @@ class BootstrapConfigurationTest {
 
         assertEquals("/address-lookup/cidev/db/master", config.masterParameter());
         assertEquals("/address-lookup/cidev/db/schema-owner", config.schemaOwnerParameter());
-        assertEquals("/var/task/certs/eu-west-2-bundle.pem", config.defaultRootCert());
         assertTrue(config.verifyTls());
         assertEquals(Duration.ofSeconds(10), config.timeout());
     }

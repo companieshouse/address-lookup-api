@@ -25,7 +25,6 @@ module "db_bootstrap" {
   lambda_env_vars = {
     MASTER_CREDENTIALS_PARAMETER       = local.master_parameter_name
     SCHEMA_OWNER_CREDENTIALS_PARAMETER = local.schema_owner_parameter_name
-    RDS_CA_BUNDLE_PATH                 = var.rds_ca_bundle_path
     AWS_ENDPOINT_URL_SSM               = local.ssm_endpoint_url
   }
 

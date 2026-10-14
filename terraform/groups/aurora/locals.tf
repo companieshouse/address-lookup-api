@@ -50,9 +50,9 @@ locals {
   schema_owner_parameter_arn  = "${local.parameter_arn_prefix}${local.schema_owner_parameter_name}"
   parameters_kms_alias        = "alias/${var.aws_profile}/environment-services-kms"
 
-  # The writer (cluster) endpoint, never the reader. verify-full pins TLS to the RDS certificate for
-  # this host, using the RDS CA bundle that both Lambda zips carry.
-  jdbc_url = "jdbc:postgresql://${module.aurora_postgres.cluster_endpoint}:${local.database_port}/${local.database_name}?sslmode=verify-full&sslrootcert=${var.rds_ca_bundle_path}"
+  # The writer (cluster) endpoint, never the reader. sslmode=require encrypts every connection without a
+  # CA file in the repo or the Lambda zips; the cluster enforces TLS (rds.force_ssl=1, TLS 1.3 minimum).
+  jdbc_url = "jdbc:postgresql://${module.aurora_postgres.cluster_endpoint}:${local.database_port}/${local.database_name}?sslmode=require"
 
   credentials = {
     "master" = jsonencode({

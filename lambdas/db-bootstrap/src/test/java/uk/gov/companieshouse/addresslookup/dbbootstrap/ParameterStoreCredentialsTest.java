@@ -31,7 +31,7 @@ class ParameterStoreCredentialsTest {
             return response("{\"jdbcUrl\":\"jdbc:postgresql://writer:5432/addressdb\",\"username\":\"owner\",\"password\":\"pw\"}");
         });
 
-        DatabaseCredentials credentials = new ParameterStoreCredentials(ssm, "/ca.pem").apply("/address-lookup/cidev/db/schema-owner");
+        DatabaseCredentials credentials = new ParameterStoreCredentials(ssm).apply("/address-lookup/cidev/db/schema-owner");
 
         assertEquals("owner", credentials.username());
         assertEquals("/address-lookup/cidev/db/schema-owner", sent[0].name());
@@ -44,7 +44,7 @@ class ParameterStoreCredentialsTest {
         when(ssm.getParameter(any(Consumer.class))).thenReturn(response("{\"password\":\"s3cret\"}"));
 
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> new ParameterStoreCredentials(ssm, "/ca.pem").apply("/address-lookup/cidev/db/master"));
+                () -> new ParameterStoreCredentials(ssm).apply("/address-lookup/cidev/db/master"));
 
         assertTrue(e.getMessage().startsWith("/address-lookup/cidev/db/master"));
         assertFalse(e.getMessage().contains("s3cret"));

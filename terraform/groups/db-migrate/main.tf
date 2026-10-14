@@ -40,7 +40,7 @@ module "lambda" {
     SNAPSHOT_BUCKET          = var.snapshot_bucket_name
     DB_CREDENTIALS_PARAMETER = local.credentials_parameter_name
     LOCK_TIMEOUT             = var.lock_timeout
-    # Break-glass only: set to true by hand for a repair-<env> run, then back.
+    # Break-glass only: set to true by hand for a <env>-db-schema-repair run, then back.
     ALLOW_REPAIR = "false"
     # The SSM endpoint (terraform/groups/aurora) has private DNS off, so the
     # AWS SDK is pointed at it explicitly.

@@ -6,10 +6,10 @@ address-lookup Aurora cluster (`<env>-address-rds`) in cidev, staging and live.
 The `address-lookup-api` Concourse pipeline invokes the function
 synchronously:
 
-- `update-<env>` runs `info`, `migrate` and `info` with the recorded
+- `<env>-db-schema-migrate` runs `info`, `migrate` and `info` with the recorded
   `snapshots/<tag>.zip`.
 - `cidev-apply`, `staging-apply` and `live-apply` run `info` (check-db-schema).
-- `repair-<env>` is break-glass only.
+- `<env>-db-schema-repair` is break-glass only.
 
 Nothing else triggers it.
 
@@ -105,7 +105,7 @@ Pipeline `address-lookup-api`:
 
 - staging and live take the exact Lambda release and terraform that the
   previous environment applied.
-- `update-<env>` will not run until its environment's apply has succeeded.
+- `<env>-db-schema-migrate` will not run until its environment's apply has succeeded.
 
 Locally:
 
@@ -121,7 +121,7 @@ Run these from the environment's account (`F=address-lookup-db-migrate-<env>`).
 
 ```sh
 # info from Concourse returns SUCCESS (run with the Concourse credentials, or
-# re-run the update-<env> job and read its info output)
+# re-run the <env>-db-schema-migrate job and read its info output)
 aws lambda invoke --function-name "$F" --cli-binary-format raw-in-base64-out \
   --payload '{"command":"info","key":"snapshots/<tag>.zip","versionId":"<versionId>","sha256":"<sha256>"}' out.json
 cat out.json        # "status":"SUCCESS", schemaVersion, pending

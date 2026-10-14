@@ -1,9 +1,6 @@
 package uk.gov.companieshouse.addresslookup.dbbootstrap;
 
-import com.amazonaws.services.lambda.runtime.Context;
-import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import java.sql.SQLException;
 import java.time.Duration;
@@ -13,9 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 class HandlerTest {
 
@@ -30,18 +25,16 @@ class HandlerTest {
     @Test
     void bootstrapsAndVerifiesAsTheMaster() throws Exception {
         FakeDatabase db = FakeDatabase.ready();
-        Context context = context();
 
-        Map<String, Object> result = handler(db).handleRequest(Map.of("command", "bootstrap"), context);
+        Map<String, Object> result = handler(db).handleRequest(Map.of("command", "bootstrap"), null);
 
         assertEquals("bootstrap", result.get("command"));
         assertEquals("EMPTY", result.get("databaseState"));
         assertEquals("address_lookup_owner", result.get("schemaOwner"));
         assertEquals("CREATE EXTENSION IF NOT EXISTS postgis", db.executed.get(0));
         verify(db.connection).close();
-        ArgumentCaptor<String> logged = ArgumentCaptor.forClass(String.class);
-        verify(context.getLogger()).log(logged.capture());
-        assertFalse(logged.getValue().contains("secret"), logged.getValue());
+        // The result is also what is logged
+        assertFalse(result.toString().contains("secret"), result.toString());
     }
 
     @Test
@@ -105,11 +98,5 @@ class HandlerTest {
             case "/address-lookup/cidev/db/schema-owner" -> OWNER;
             default -> throw new AssertionError(parameter);
         };
-    }
-
-    private static Context context() {
-        Context context = mock(Context.class);
-        when(context.getLogger()).thenReturn(mock(LambdaLogger.class));
-        return context;
     }
 }

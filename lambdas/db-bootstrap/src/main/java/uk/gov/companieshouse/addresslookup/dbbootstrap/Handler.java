@@ -4,6 +4,8 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import software.amazon.awssdk.services.ssm.SsmClient;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -24,6 +26,7 @@ import java.util.function.Function;
 public final class Handler implements RequestHandler<Map<String, Object>, Map<String, Object>> {
 
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final Logger LOGGER = LoggerFactory.getLogger("address-lookup-db-bootstrap");
 
     /** Opens a JDBC connection; replaced by a mock in the unit tests. */
     @FunctionalInterface
@@ -69,11 +72,11 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
                 Map<String, Object> result = JSON.convertValue(report, JSON.getTypeFactory()
                         .constructMapType(Map.class, String.class, Object.class));
                 result.put("command", command);
-                log(context, "Database ready for Flyway: " + JSON.writeValueAsString(result));
+                LOGGER.info("Database ready for Flyway: " + JSON.writeValueAsString(result));
                 return result;
             }
         } catch (BootstrapVerifier.VerificationException e) {
-            log(context, "Database verification failed: " + e.report());
+            LOGGER.error("Database verification failed: " + e.report());
             throw e;
         } catch (RuntimeException e) {
             throw e;
@@ -94,11 +97,5 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
         properties.setProperty("connectTimeout", String.valueOf(config.timeout().toSeconds()));
         properties.setProperty("ApplicationName", "address-lookup-db-bootstrap");
         return DriverManager.getConnection(credentials.jdbcUrl(), properties);
-    }
-
-    private static void log(Context context, String message) {
-        if (context != null && context.getLogger() != null) {
-            context.getLogger().log(message);
-        }
     }
 }

@@ -66,7 +66,7 @@ Note: this branch is based on ALS-81, so the first apply also upgrades the engin
 
 Change `schema_owner_password` in Vault, then plan/apply this group. The parameter is overwritten, the
 bootstrap re-runs (its trigger is the password's SHA-256) and sets the new password on the role. Both
-Lambdas read the parameter on every invocation, so nothing is redeployed; the next `update-<env>` or
+Lambdas read the parameter on every invocation, so nothing is redeployed; the next `<env>-db-schema-migrate` or
 `info` uses the new password. Rotating the master password in Vault is applied by the aurora module
 and the master parameter in the same apply.
 
@@ -100,7 +100,7 @@ psql "host=$HOST dbname=addressdb sslmode=require" -c "SELECT extname FROM pg_ex
 psql "host=$HOST dbname=addressdb sslmode=require ssl_max_protocol_version=TLSv1.2" -c 'SELECT 1'  # refused
 ```
 
-After the first `update-<env>`, Flyway's `info` shows V2026.001 to V2026.004 applied with no
+After the first `<env>-db-schema-migrate`, Flyway's `info` shows V2026.001 to V2026.004 applied with no
 "non-empty schema" error.
 
 <!-- BEGIN_TF_DOCS -->

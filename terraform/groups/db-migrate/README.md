@@ -88,9 +88,8 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
 4. The release `address-lookup-api/address-lookup-db-migrate-<version>.zip`
    exists in the shared-services release bucket. To produce it, push a
    `db-migrate-lambda-X.Y.Z` release for `lambdas/db-migrate`
-   (`make package-db-migrate-lambda`). The zip must contain the RDS CA bundle
-   at `certs/eu-west-2-bundle.pem`: the jdbcUrl the aurora group writes uses
-   `sslrootcert=/var/task/certs/eu-west-2-bundle.pem` (its `rds_ca_bundle_path`).
+   (`make package-db-migrate-lambda`). No CA bundle is needed: the jdbcUrl the
+   aurora group writes uses `sslmode=require`.
 5. The environment's Concourse AWS credentials are the `concourse-platform` IAM
    user. If not, set `concourse_iam_user_name`.
 
@@ -161,9 +160,9 @@ pipeline logs.
 |---|---|
 | Source | Vault `applications/<aws_profile>/<env>/common-services-stack/address-rds`, keys `schema_owner_username` and `schema_owner_password`. This is the schema-owner role: it owns the application schemas, runs DDL, and is used only by this function. It is not the Aurora master user. |
 | Parameter | `/address-lookup/<env>/db/schema-owner`, type `SecureString`, encrypted with the customer-managed key `alias/<aws_profile>/environment-services-kms` |
-| Value | `{"username": "<schema owner>", "password": "<from Vault>", "jdbcUrl": "jdbc:postgresql://<writer endpoint>:5432/addressdb?sslmode=verify-full&sslrootcert=/var/task/certs/eu-west-2-bundle.pem"}` |
+| Value | `{"username": "<schema owner>", "password": "<from Vault>", "jdbcUrl": "jdbc:postgresql://<writer endpoint>:5432/addressdb?sslmode=require"}` |
 | Endpoint | The cluster (writer) endpoint, `module.aurora_postgres.cluster_endpoint` in the aurora group, never the reader |
-| TLS | `verify-full` checks that the server certificate chains to the RDS CA and matches the writer endpoint. The cluster also enforces TLS (`rds.force_ssl=1`). |
+| TLS | `sslmode=require`: the connection is always encrypted, with no CA file in the repo or the zip. The cluster enforces TLS (`rds.force_ssl=1`, `ssl_min_protocol_version=TLSv1.3`). |
 | Writer | **Terraform**: `terraform/groups/aurora`'s `module.credentials`, run by the pipeline's aurora plan/apply jobs. It writes the master parameter (`/address-lookup/<env>/db/master`, read only by the ALS-90 bootstrap Lambda) in the same place, so one group owns every database credential and the role's password is set in the same apply. This is the platform standard (the org `aws/parameter-store` module). It replaces the drawn option of Concourse running `aws ssm put-parameter`, so Concourse needs no `ssm:PutParameter`. |
 | Reader | The function's role: `ssm:GetParameter` on this parameter only, and `kms:Decrypt`. The SSM endpoint's policy admits this role for this parameter only (and the bootstrap Lambda's role for the master and schema-owner parameters). |
 

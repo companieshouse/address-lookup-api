@@ -26,7 +26,7 @@ locals {
 
   # Written by terraform/groups/aurora from Vault (aws/parameter-store names it
   # /<name_prefix>/<key>), as {"username","password","jdbcUrl"} with a
-  # verify-full jdbcUrl on the writer endpoint.
+  # sslmode=require jdbcUrl on the writer endpoint.
   credentials_parameter_name = "/address-lookup/${var.environment}/db/schema-owner"
   credentials_parameter_arn  = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.credentials_parameter_name}"
 

@@ -9,9 +9,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.context.WebApplicationContext;
+import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
 
 @AutoConfigureMockMvc
 @SpringBootTest(
@@ -19,16 +24,34 @@ import org.testcontainers.junit.jupiter.Testcontainers;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
                 "spring.docker.compose.enabled=false",
-                "spring.liquibase.change-log=classpath:db/changelog/db.changelog-local.yaml"
+                "spring.flyway.enabled=true",
+                "spring.flyway.locations=classpath:db/migrations,classpath:db/local"
         })
 @Testcontainers
 class AddressLookupApplicationIT {
+
+    @SuppressWarnings("resource")
+    @Container
+    private static final PostgreSQLContainer POSTGRES =
+            new PostgreSQLContainer(
+                    DockerImageName.parse("postgis/postgis:18-3.6")
+                            .asCompatibleSubstituteFor("postgres"))
+                    .withCreateContainerCmdModifier(
+                            command -> command.withPlatform("linux/amd64"));
 
     @Autowired
     protected MockMvc mockMvc;
 
     @Autowired
     private WebApplicationContext context;
+
+    @DynamicPropertySource
+    static void registerDataSourceProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+        registry.add("spring.datasource.username", POSTGRES::getUsername);
+        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.datasource.driver-class-name", POSTGRES::getDriverClassName);
+    }
 
     @Test
     void shouldLoadApplicationContext() {

@@ -24,8 +24,15 @@ public interface LegacyAddressMapper {
     @Mapping(target = "country", expression = "java(toLegacyCountry(address.getCountry()))")
     LegacyAddress toLegacyAddressWithoutPremise(RoyalMailAddressLookup address);
 
+    /**
+     * Combines the sub-building name and building number for the legacy premise field.
+     *
+     * @param address address with the premise components
+     * @return nonblank components joined by a comma, or an empty string
+     */
     default String toPremise(RoyalMailAddressLookup address) {
         return join(
+                address.getSubBuildingName(),
                 address.getBuildingNumber() == null ? null : address.getBuildingNumber().toString());
     }
 

@@ -1,6 +1,9 @@
 package uk.gov.companieshouse.addresslookup.service;
 
-import org.springframework.http.HttpStatus;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import uk.gov.companieshouse.addresslookup.entity.RoyalMailAddressLookup;
 import uk.gov.companieshouse.addresslookup.mapper.LegacyAddressMapper;
@@ -8,10 +11,6 @@ import uk.gov.companieshouse.addresslookup.mapper.RoyalMailAddressMapper;
 import uk.gov.companieshouse.addresslookup.model.LegacyAddress;
 import uk.gov.companieshouse.addresslookup.model.RoyalMailAddressDto;
 import uk.gov.companieshouse.addresslookup.repository.RoyalMailAddressLookupRepository;
-
-import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
 
 @Service
 public class AddressLookupService {
@@ -44,8 +43,38 @@ public class AddressLookupService {
                 .map(legacyAddressMapper::toLegacyAddressWithoutPremise);
     }
 
+    /**
+     * Retries a lookup once when its database exception chain reports SQLSTATE 40001.
+     *
+     * @param postcode postcode to look up
+     * @return matching address rows
+     * @throws DataAccessException when the lookup fails or its single retry fails
+     */
     private List<RoyalMailAddressLookup> findByPostcode(String postcode) {
-        return royalMailAddressLookupRepository.findByNormalizedPostcode(postcode);
+        try {
+            return royalMailAddressLookupRepository.findByNormalizedPostcode(postcode);
+        } catch (DataAccessException exception) {
+            if (!hasSerializationFailure(exception)) {
+                throw exception;
+            }
+            return royalMailAddressLookupRepository.findByNormalizedPostcode(postcode);
+        }
+    }
+
+    /**
+     * Checks nested database causes for the PostgreSQL serialization-failure state.
+     *
+     * @param exception exception whose cause chain is inspected
+     * @return true when the cause chain contains SQLSTATE 40001
+     */
+    private static boolean hasSerializationFailure(Throwable exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sqlException
+                    && "40001".equals(sqlException.getSQLState())) {
+                return true;
+            }
+        }
+        return false;
     }
 
 }

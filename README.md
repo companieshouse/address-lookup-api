@@ -14,36 +14,55 @@ mvn -pl address-lookup-api -am package -Dskip.unit.tests=true -Dskip.integration
 
 ## Running locally
 
-ALS-83 moves database migrations and local seed SQL to the repository-root
-`database/` directory and removes the API module's Liquibase changelog
-resources. API Flyway wiring is deferred to ALS-84, so the existing API `local`
-profile is not yet connected to the new database feed. Do not rely on the
-previous Liquibase-based API startup instructions until ALS-84 is implemented.
-See [`database/README.md`](database/README.md) for the database feed layout and
-conventions.
+The API uses Flyway for schema setup. Its default configuration disables
+migrations and searches only `db/migrations`; the `local` profile enables
+Flyway and adds the local seed files under `db/local`. The API package includes
+the SQL feed from `database/` without copying or modifying those files.
+
+From `CODE/`, start PostGIS and then the API with:
+
+```bash
+docker compose -f compose.yaml up -d postgres
+mvn -pl address-lookup-api spring-boot:run -Dspring-boot.run.profiles=local
+```
 
 Production database packages are built from `database/migrations/` with
 `make package-db-schema version=<version>`. The local-only seed files under
 `database/local/` are not included.
 
-Run the database feed layout checks and PostGIS integration test with
-`make test-flyway`. Docker is required for the integration test.
+Run the database feed layout checks and fresh-PostGIS integration test with
+`make test-flyway`. Docker is required. API integration tests use Flyway with
+both `classpath:db/migrations` and `classpath:db/local`.
+
+Run the API unit and controller integration tests with:
+
+```bash
+mvn -pl address-lookup-api -Dtest=AddressLookupControllerTest test
+mvn -pl address-lookup-api -am -Dit.test=AddressesControllerIT -Dskip.unit.tests=true test-compile failsafe:integration-test failsafe:verify
+```
+
+`FLYWAY_ENABLED` defaults to `false`, so deployed API startup does not apply
+migrations unless deployment configuration explicitly enables them. Confirm
+the deployment setting before relying on this default.
 
 Look up addresses by postcode:
 
+Postcode query values use uppercase letters and omit spaces; response values
+retain their display formatting.
+
 ```bash
-curl "http://localhost:8080/address-lookup-api/addresses?postcode=WF2%207QD"
+curl "http://localhost:8080/address-lookup-api/addresses?postcode=WF27QD"
 ```
 
 Look up addresses in the legacy response format:
 
 ```bash
-curl "http://localhost:8080/address-lookup-api/multiple-addresses?postcode=WF2%207QD"
+curl "http://localhost:8080/address-lookup-api/multiple-addresses?postcode=WF27QD"
 ```
 
 The local PostGIS database is exposed on port `5433` to avoid clashing with any
-existing Postgres running on the default `5432` port. API database startup and
-external datasource configuration remain part of the ALS-84 wiring work.
+existing Postgres running on the default `5432` port. Nonlocal environments
+must provide the PostgreSQL datasource and provision its schema separately.
 
 ## Environment variables
 
@@ -57,6 +76,7 @@ external datasource configuration remain part of the ALS-84 wiring work.
 | SPRING_DATASOURCE_URL | JDBC URL for the address lookup Postgres database.                          | jdbc:postgresql://localhost:5433/address_lookup |
 | SPRING_DATASOURCE_USERNAME | Username for the address lookup Postgres database.                    | postgres                              |
 | SPRING_DATASOURCE_PASSWORD | Password for the address lookup Postgres database.                    | postgres                              |
+| FLYWAY_ENABLED | Whether API startup applies Flyway migrations; defaults to disabled. | false |
 
 ## Building the docker image
 

@@ -34,6 +34,7 @@
         <spring.boot.version>4.1.1</spring.boot.version>
         <spring-framework.version>6.2.20</spring-framework.version>
         <spring-data-bom.version>2025.0.14</spring-data-bom.version>
+        <flyway.version>13.10.0</flyway.version>
         <tomcat-embed-plugin.version>11.0.26</tomcat-embed-plugin.version>
         <jackson.version>2.22.1</jackson.version>
         <log4j.version>2.25.5</log4j.version>
@@ -62,6 +63,16 @@
     </properties>
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-core</artifactId>
+                <version>${flyway.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-database-postgresql</artifactId>
+                <version>${flyway.version}</version>
+            </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-bom</artifactId>

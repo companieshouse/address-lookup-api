@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.util.ClassUtils;
 
 class FlywayConfigurationTest {
@@ -21,13 +22,23 @@ class FlywayConfigurationTest {
     private static final String LOCAL_LOCATIONS = "classpath:db/migrations,classpath:db/local";
 
     @Test
-    void disablesFlywayByDefaultAndUsesProductionMigrationsOnly() throws IOException {
+    void enablesFlywayByDefaultAndUsesProductionMigrationsOnly() throws IOException {
         Properties properties = loadProperties("application.properties");
 
-        assertEquals(
-                "${FLYWAY_ENABLED:false}",
-                properties.getProperty("spring.flyway.enabled"));
+        assertEquals("true", properties.getProperty("spring.flyway.enabled"));
         assertEquals(MIGRATION_LOCATIONS, properties.getProperty("spring.flyway.locations"));
+    }
+
+    @Test
+    void keepsFlywayEnabledWhenLegacyFlagIsFalse() throws IOException {
+        Properties properties = loadProperties("application.properties");
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("FLYWAY_ENABLED", "false");
+
+        assertEquals(
+                "true",
+                environment.resolveRequiredPlaceholders(
+                        properties.getProperty("spring.flyway.enabled")));
     }
 
     @Test
@@ -79,7 +90,10 @@ class FlywayConfigurationTest {
         assertTrue(springBootTest != null, testClass.getSimpleName() + " needs @SpringBootTest");
 
         List<String> properties = Arrays.asList(springBootTest.properties());
-        assertTrue(properties.contains("spring.flyway.enabled=true"), properties.toString());
+        assertTrue(properties.contains("FLYWAY_ENABLED=false"), properties.toString());
+        assertFalse(
+                properties.stream().anyMatch(property -> property.startsWith("spring.flyway.enabled=")),
+                properties.toString());
         assertTrue(properties.contains("spring.flyway.locations=" + LOCAL_LOCATIONS), properties.toString());
     }
 }

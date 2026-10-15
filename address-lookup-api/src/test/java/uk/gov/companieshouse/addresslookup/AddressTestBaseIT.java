@@ -20,7 +20,7 @@ import org.testcontainers.utility.DockerImageName;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
                 "spring.docker.compose.enabled=false",
-                "spring.flyway.enabled=true",
+                "FLYWAY_ENABLED=false",
                 "spring.flyway.locations=classpath:db/migrations,classpath:db/local"
         })
 public abstract class AddressTestBaseIT {

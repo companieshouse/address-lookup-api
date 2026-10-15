@@ -1,6 +1,7 @@
 package uk.gov.companieshouse.addresslookup;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -24,7 +26,7 @@ import org.testcontainers.utility.DockerImageName;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
                 "spring.docker.compose.enabled=false",
-                "spring.flyway.enabled=true",
+                "FLYWAY_ENABLED=false",
                 "spring.flyway.locations=classpath:db/migrations,classpath:db/local"
         })
 @Testcontainers
@@ -45,6 +47,9 @@ class AddressLookupApplicationIT {
     @Autowired
     private WebApplicationContext context;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     @DynamicPropertySource
     static void registerDataSourceProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
@@ -56,6 +61,16 @@ class AddressLookupApplicationIT {
     @Test
     void shouldLoadApplicationContext() {
         assertNotNull(context);
+    }
+
+    @Test
+    void shouldApplyFlywayMigrationsWhenLegacyFlagIsFalse() {
+        Integer successfulMigrations = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE",
+                Integer.class);
+
+        assertNotNull(successfulMigrations);
+        assertTrue(successfulMigrations > 0);
     }
 
     @Test

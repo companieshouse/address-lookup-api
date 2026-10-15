@@ -49,6 +49,12 @@ test-integration:
 	@# Help: Run integration tests
 	mvn -pl $(api_module),$(liquibase_lambda_module) -am integration-test verify -Dskip.unit.tests=true failsafe:verify
 
+
+.PHONY: m2-check
+m2-check:
+	@# Help: Make sure ~/.m2/settings.xml is there and working with JFrog
+	perl tests/m2-check.pl
+
 .PHONY: test-flyway
 test-flyway:
 	@# Help: Test the Flyway database feed against fresh PostGIS

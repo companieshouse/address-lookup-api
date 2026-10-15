@@ -32,10 +32,13 @@ The `database/` directory contains only these two subdirectories.
 - Generate geometry using the coordinate reference system and coordinate
   columns defined by the corresponding source dataset.
 
-The API module Liquibase changelog has been removed for ALS-83. Spring/Maven
-Flyway wiring is deferred to ALS-84. The production migration runner is managed
-separately from this feed. Do not treat the presence of SQL here as proof that
-the API is configured or that migrations have been deployed.
+The API module Liquibase changelog was removed for ALS-83, and ALS-84 wires the
+API to this Flyway feed. API startup always enables Flyway and reads
+`classpath:db/migrations`; the local profile and disposable API integration
+tests also include `classpath:db/local`. The legacy `FLYWAY_ENABLED` variable
+does not control API startup and cannot disable Flyway. The separate production
+migration runner is managed outside this feed and checkout. Do not treat the
+presence of SQL here as proof that an external database release was deployed.
 
 The two local repeatable seeds cover all ten current happy-path API postcode
 fixtures. They deliberately retain `country = NULL` for GB UDPRN 19 and ISL

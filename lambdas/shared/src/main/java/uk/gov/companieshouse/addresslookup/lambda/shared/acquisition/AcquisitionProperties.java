@@ -1,11 +1,12 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
 
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import uk.gov.companieshouse.release.model.DatasetDefault;
 
 import java.time.Duration;
-
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
+import java.util.List;
 
 @ConfigurationProperties("acquisition")
 public record AcquisitionProperties(
@@ -13,7 +14,9 @@ public record AcquisitionProperties(
     String scannedBucket,
     String eventBus,
     String osApiKey,
-    String packages,
+    List<DatasetDefault> datasets,
+    @DefaultValue("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}")
+    String osHttpURLTemplate,
     @DefaultValue("536870912") long maxZipBytes,
     @DefaultValue("1073741824") long maxExtractedBytes,
     @DefaultValue("20") int sweepLimit,

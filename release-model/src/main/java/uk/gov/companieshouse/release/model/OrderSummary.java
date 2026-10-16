@@ -1,13 +1,17 @@
 package uk.gov.companieshouse.release.model;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+
 import java.time.LocalDate;
 
 public record OrderSummary(
     String featureName,
     String crs,
     String schemaVersion,
-    String validFromDate,
-    String validToDate,
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    LocalDate validFromDate,
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    LocalDate validToDate,
     long recordCount) {
   private static void require(boolean ok, String message) {
     if (!ok) throw new IllegalArgumentException(message);
@@ -26,11 +30,11 @@ public record OrderSummary(
     require(t.name().replace('_', '-').equals(featureName), "Wrong featureName: " + featureName);
     require(t.version().equals(schemaVersion), "Unsupported schemaVersion");
     if (type == SupplyType.COU)
-      require(LocalDate.parse(validFromDate).equals(previous), "COU continuity gap");
+      require(validFromDate.equals(previous), "COU continuity gap");
     if (validFromDate != null)
-      require(!LocalDate.parse(validFromDate).isAfter(target), "Invalid validFromDate");
+      require(!validFromDate.isAfter(target), "Invalid validFromDate");
     require(
-        LocalDate.parse(validToDate).equals(target)
+        validToDate.equals(target)
             && (previous == null || target.isAfter(previous)),
         "Invalid COU target");
     require(recordCount >= 0, "Negative recordCount");

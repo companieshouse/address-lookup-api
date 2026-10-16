@@ -27,14 +27,6 @@ public class APIGatewayHTTPHandlerTest {
 
     private APIGatewayHTTPHandler apiGatewayHTTPHandler;
 
-    @BeforeEach
-    public void setup() {
-        try (MockedStatic<AcquisitionApplication> mocked =
-                     Mockito.mockStatic(AcquisitionApplication.class)) {
-            mocked.when(() -> AcquisitionApplication.start(DiscoveryService.class)).thenReturn(discoveryService);
-            apiGatewayHTTPHandler = new APIGatewayHTTPHandler();
-        }
-    }
     private static final String TEST_EVENT_PAYLOAD = """
 {
   "mode": "FULL",
@@ -44,7 +36,16 @@ public class APIGatewayHTTPHandlerTest {
   }
 }
 """;
-    private static final String TEST_RESPONSE_ID = "12345-67890-12345-67890";
+    private static final String TEST_RESPONSE_ID = "12345678-1234-1234-1234-123456789abc";
+
+    @BeforeEach
+    public void setup() {
+        try (MockedStatic<AcquisitionApplication> mockApp = Mockito.mockStatic(AcquisitionApplication.class)) {
+            mockApp.when(() -> AcquisitionApplication.start(DiscoveryService.class))
+                    .thenReturn(discoveryService);
+            apiGatewayHTTPHandler = new APIGatewayHTTPHandler();
+        }
+    }
 
     @Test
     public void shouldReturnReleaseIdForSuccessfulDiscovery() throws Exception {
@@ -77,7 +78,6 @@ public class APIGatewayHTTPHandlerTest {
             response = apiGatewayHTTPHandler.handleRequest(testEvent, context);
         } catch (Exception e) {
             assertInstanceOf(RuntimeException.class, e);
-            System.err.println("Exception: " + e);
             assertTrue(e.getMessage().startsWith("discovery failed; durable state allows retry, event"));
             assertTrue(e.getCause().getMessage().contains(EXCEPTION_TEXT));
         }

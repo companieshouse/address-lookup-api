@@ -43,6 +43,15 @@ final class OsClientTest {
     }
 
     @Test
+    void publicConstructorBuildsAClientThatOnlyAcceptsApiOsUkUrls() {
+        var os = new OsClient("test-key", Duration.ofSeconds(1), Duration.ofSeconds(1), JSON);
+
+        var failure = assertThrows(IllegalArgumentException.class, () -> os.download("https://example.com/file.zip"));
+
+        assertEquals("Expected OS API URL", failure.getMessage());
+    }
+
+    @Test
     void failsAfterTooManyRedirects() {
         var http = new RedirectingHttpClient(request -> redirect(302, "https://api.os.uk/next"));
         var os = new OsClient("test-key", Duration.ofSeconds(840), JSON, http);

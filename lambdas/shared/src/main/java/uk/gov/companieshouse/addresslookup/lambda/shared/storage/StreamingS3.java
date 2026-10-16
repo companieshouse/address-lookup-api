@@ -133,18 +133,21 @@ public final class StreamingS3 {
 
             return new Uploaded(key, result.versionId(), actualSha, actualMd5, total);
         } catch (Exception e) {
-            LOG.warn("Multipart upload failed bucket={} key={} reason={}", bucket, key, e.getMessage());
-
-            // Best effort cleanup: incomplete multipart uploads should not become readable objects.
-            try {
-                s3.abortMultipartUpload(b -> b.bucket(bucket).key(key).uploadId(upload));
-                LOG.info("Incomplete multipart upload cleaned up bucket={} key={}", bucket, key);
-            } catch (Exception abortFailure) {
-                LOG.warn("Incomplete multipart upload cleanup failed bucket={} key={} reason={}",
-                        bucket, key, abortFailure.getMessage());
-            }
-
+            abortIncompleteUpload(bucket, key, upload, e.getMessage());
             throw e;
+        }
+    }
+
+    // Best effort cleanup: incomplete multipart uploads should not become readable objects.
+    private void abortIncompleteUpload(String bucket, String key, String uploadId, String reason) {
+        LOG.warn("Multipart upload failed bucket={} key={} reason={}", bucket, key, reason);
+
+        try {
+            s3.abortMultipartUpload(b -> b.bucket(bucket).key(key).uploadId(uploadId));
+            LOG.info("Incomplete multipart upload cleaned up bucket={} key={}", bucket, key);
+        } catch (Exception abortFailure) {
+            LOG.warn("Incomplete multipart upload cleanup failed bucket={} key={} reason={}",
+                    bucket, key, abortFailure.getMessage());
         }
     }
 }

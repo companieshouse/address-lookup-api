@@ -50,6 +50,8 @@
         <skip.integration.tests>false</skip.integration.tests>
         <org.testcontainers.version>2.0.5</org.testcontainers.version>
         <io.netty.version>4.2.18.Final</io.netty.version>
+        <!-- 0.8.10 (inherited) predates Java 21 support; the report is consumed by Sonar -->
+        <jacoco-maven-plugin.version>0.8.13</jacoco-maven-plugin.version>
 
         <!--companies house-->
         <structured-logging.version>3.0.51</structured-logging.version>
@@ -126,6 +128,14 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+        <plugins>
+            <!-- Activates the JaCoCo executions managed by companies-house-parent so that
+                 target/site/jacoco/jacoco.xml is produced for Sonar coverage. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
     </build>
 
     <repositories>

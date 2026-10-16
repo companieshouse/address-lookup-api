@@ -65,7 +65,8 @@ final class ReleaseStoreTest {
         when(client.getObject(any(GetObjectRequest.class)))
                 .thenThrow(S3Exception.builder().statusCode(403).message("denied").build());
 
-        var failure = assertThrows(S3Exception.class, () -> new ReleaseStore(client).read(BUCKET, "plan.json"));
+        var failingStore = new ReleaseStore(client);
+        var failure = assertThrows(S3Exception.class, () -> failingStore.read(BUCKET, "plan.json"));
 
         assertEquals(403, failure.statusCode());
     }
@@ -84,9 +85,9 @@ final class ReleaseStoreTest {
         when(client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
                 .thenThrow(S3Exception.builder().statusCode(500).message("boom").build());
 
-        assertThrows(
-                S3Exception.class,
-                () -> new ReleaseStore(client).immutable(BUCKET, "receipt.json", JSON.createObjectNode()));
+        var failingStore = new ReleaseStore(client);
+        var value = JSON.createObjectNode();
+        assertThrows(S3Exception.class, () -> failingStore.immutable(BUCKET, "receipt.json", value));
     }
 
     @Test
@@ -138,7 +139,7 @@ final class ReleaseStoreTest {
     }
 
     @Test
-    void cleanUsesTheVersionInTheReference() throws Exception {
+    void cleanUsesTheVersionInTheReference() {
         s3.scanStatus.put(KEY, ReleaseStore.CLEAN);
         var ref = JSON.createObjectNode().put("s3Key", KEY).put("version", FakeS3.DEFAULT_VERSION);
 

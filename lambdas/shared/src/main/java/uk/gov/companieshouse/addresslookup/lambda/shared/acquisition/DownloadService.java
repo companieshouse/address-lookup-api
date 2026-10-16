@@ -17,24 +17,24 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 
 public final class DownloadService {
     private static final Logger LOG = LoggerFactory.getLogger(DownloadService.class);
+    private static final String DOWNLOAD_COMMAND_PLAN_KEY = "planKey";
+    private static final String DOWNLOAD_COMMAND_DATASET = "dataset";
 
     private final S3Client s3;
     private final OsClient os;
-    private final Commands commands;
     private final AcquisitionProperties properties;
 
-    public DownloadService(S3Client s3, OsClient os, Commands commands, AcquisitionProperties properties) {
+    public DownloadService(S3Client s3, OsClient os, AcquisitionProperties properties) {
         this.s3 = s3;
         this.os = os;
-        this.commands = commands;
         this.properties = properties;
     }
 
     public String download(Map<String, Object> event, Context context) throws Exception {
         var input = validateCommand(event);
 
-        String downloadCommandPlanKey = input.get("planKey").asText().trim();
-        String downloadCommandDataset = table(input.get("dataset").asText().trim()).name();
+        String downloadCommandPlanKey = input.get(DOWNLOAD_COMMAND_PLAN_KEY).asText().trim();
+        String downloadCommandDataset = table(input.get(DOWNLOAD_COMMAND_DATASET).asText().trim()).name();
 
         var store = new ReleaseStore(s3);
         String sourceBucket = properties.sourceBucket();
@@ -68,8 +68,9 @@ public final class DownloadService {
         String datasetUrl = required(datasetZipJsonObj, "url");
         String zipUploadS3Path = ReleaseStore.downloadZipKey(manifestReleaseId, downloadCommandDataset);
 
+        String sanitizedDatasetUrl = sanitizeUrl(datasetUrl);
         LOG.info("Download started releaseId={} dataset={} fileName={} sourceUrl={}",
-                manifestReleaseId, downloadCommandDataset, datasetFileName, sanitizeUrl(datasetUrl));
+                manifestReleaseId, downloadCommandDataset, datasetFileName, sanitizedDatasetUrl);
 
         // Stream the supplier ZIP directly into S3 multipart upload. StreamingS3 calculates the MD5
         // while uploading and completes the upload only when it matches the manifest value.
@@ -80,11 +81,14 @@ public final class DownloadService {
 
             // prepare the download receipt
             store.downloadReceipt(
-                    sourceBucket, manifestReleaseId, downloadCommandDataset, datasetFileName, expectedDatasetMd5, datasetUrl, Instant.now(), upload);
+                    sourceBucket,
+                    new ReleaseStore.DownloadReceipt(
+                            manifestReleaseId, downloadCommandDataset, datasetFileName, expectedDatasetMd5, datasetUrl, Instant.now()),
+                    upload);
 
+            String receiptLocationS3Path = ReleaseStore.receiptKey(manifestReleaseId, downloadCommandDataset, "download");
             LOG.info("Download completed releaseId={} dataset={} s3Key={} receiptKey={}",
-                    manifestReleaseId, downloadCommandDataset, upload.key(),
-                    ReleaseStore.receiptKey(manifestReleaseId, downloadCommandDataset, "download"));
+                    manifestReleaseId, downloadCommandDataset, upload.key(), receiptLocationS3Path);
         } catch (StreamingS3.ChecksumMismatchException e) {
             LOG.error("Download checksum mismatch releaseId={} dataset={} {}",
                     manifestReleaseId, downloadCommandDataset, e.getMessage());
@@ -106,14 +110,14 @@ public final class DownloadService {
         var input = detail(event);
 
         check(
-                input.hasNonNull("planKey")
-                        && input.get("planKey").isTextual()
-                        && !input.get("planKey").asText().isBlank(),
+                input.hasNonNull(DOWNLOAD_COMMAND_PLAN_KEY)
+                        && input.get(DOWNLOAD_COMMAND_PLAN_KEY).isTextual()
+                        && !input.get(DOWNLOAD_COMMAND_PLAN_KEY).asText().isBlank(),
                 "Missing detail.planKey in download command");
         check(
-                input.hasNonNull("dataset")
-                        && input.get("dataset").isTextual()
-                        && !input.get("dataset").asText().isBlank(),
+                input.hasNonNull(DOWNLOAD_COMMAND_DATASET)
+                        && input.get(DOWNLOAD_COMMAND_DATASET).isTextual()
+                        && !input.get(DOWNLOAD_COMMAND_DATASET).asText().isBlank(),
                 "Missing detail.dataset in download command");
         return input;
     }

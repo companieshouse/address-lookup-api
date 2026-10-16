@@ -133,7 +133,7 @@ public final class StreamingS3 {
 
             return new Uploaded(key, result.versionId(), actualSha, actualMd5, total);
         } catch (Exception e) {
-            LOG.warn("Multipart upload failed bucket={} key={} reason={}", bucket, key, e.getMessage(), e);
+            LOG.warn("Multipart upload failed bucket={} key={} reason={}", bucket, key, e.getMessage());
 
             // Best effort cleanup: incomplete multipart uploads should not become readable objects.
             try {

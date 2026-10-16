@@ -43,7 +43,7 @@ final class DownloadServiceTest {
         String expectedUrl = manifest.path(DATASET).path("zip").path("url").asText();
         var os = mock(OsClient.class);
         when(os.download(expectedUrl)).thenReturn(new ByteArrayInputStream(zip));
-        var service = new DownloadService(s3.client(), os, mock(Commands.class), properties());
+        var service = new DownloadService(s3.client(), os, properties());
 
         assertEquals("ZIP_SCAN", service.download(event(), context()));
 
@@ -79,7 +79,7 @@ final class DownloadServiceTest {
     }
 
     @Test
-    void rejectsNullEvent() throws Exception {
+    void rejectsNullEvent() {
         assertRejected(null, "Missing download event");
     }
 
@@ -187,9 +187,10 @@ final class DownloadServiceTest {
         event.put("detail", Map.of("planKey", PLAN_KEY, "dataset", "not_a_real_dataset"));
         var s3 = new FakeS3();
         var os = mock(OsClient.class);
-        var service = new DownloadService(s3.client(), os, mock(Commands.class), properties());
+        var service = new DownloadService(s3.client(), os, properties());
+        var context = context();
 
-        assertThrows(Exception.class, () -> service.download(event, context()));
+        assertThrows(Exception.class, () -> service.download(event, context));
 
         assertTrue(s3.objects.isEmpty());
         verifyNoInteractions(os);
@@ -204,7 +205,7 @@ final class DownloadServiceTest {
         when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
         var event = event();
         event.put("detail", Map.of("planKey", "  " + PLAN_KEY + "  ", "dataset", "  " + DATASET + "  "));
-        var service = new DownloadService(s3.client(), os, mock(Commands.class), properties());
+        var service = new DownloadService(s3.client(), os, properties());
 
         assertEquals("ZIP_SCAN", service.download(event, context()));
         assertTrue(s3.objects.containsKey(ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download")));
@@ -217,13 +218,11 @@ final class DownloadServiceTest {
         s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifestWithSelectedMd5(md5(zip))));
         var os = mock(OsClient.class);
         when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
-        var commands = mock(Commands.class);
-        var service = new DownloadService(s3.client(), os, commands, properties());
+        var service = new DownloadService(s3.client(), os, properties());
 
         assertEquals("ZIP_SCAN", service.download(event(), context()));
 
         assertTrue(s3.objects.containsKey(ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download")));
-        verifyNoInteractions(commands);
     }
 
     @Test
@@ -232,12 +231,10 @@ final class DownloadServiceTest {
         s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
         var os = mock(OsClient.class);
         when(os.download(anyString())).thenReturn(new ByteArrayInputStream("wrong content".getBytes(StandardCharsets.UTF_8)));
-        var commands = mock(Commands.class);
-        var service = new DownloadService(s3.client(), os, commands, properties());
+        var service = new DownloadService(s3.client(), os, properties());
 
         assertEquals("CHECKSUM_MISMATCH", service.download(event(), context()));
 
-        verifyNoInteractions(commands);
     }
 
     @Test
@@ -246,26 +243,26 @@ final class DownloadServiceTest {
         s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
         s3.objects.put(ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download"), "{}".getBytes(StandardCharsets.UTF_8));
         var os = mock(OsClient.class);
-        var commands = mock(Commands.class);
-        var service = new DownloadService(s3.client(), os, commands, properties());
+        var service = new DownloadService(s3.client(), os, properties());
 
         assertEquals("SKIPPED", service.download(event(), context()));
 
         verifyNoInteractions(os);
-        verifyNoInteractions(commands);
     }
 
     @Test
     void failsWithoutDownloadingWhenPlanFileDoesNotExist() throws Exception {
         var s3 = new FakeS3();
         var os = mock(OsClient.class);
-        var service = new DownloadService(s3.client(), os, mock(Commands.class), properties());
+        var service = new DownloadService(s3.client(), os, properties());
+        var event = event();
+        var context = context();
         String expected = "Acquisition plan not found planKey=" + PLAN_KEY + " dataset=" + DATASET;
         var out = new java.io.ByteArrayOutputStream();
         var originalOut = System.out;
         System.setOut(new java.io.PrintStream(out, true, StandardCharsets.UTF_8));
         try {
-            var e = assertThrows(IllegalArgumentException.class, () -> service.download(event(), context()));
+            var e = assertThrows(IllegalArgumentException.class, () -> service.download(event, context));
             assertEquals(expected, e.getMessage());
             verifyNoInteractions(os);
         } finally {
@@ -284,7 +281,11 @@ final class DownloadServiceTest {
 
         // A 412 from the conditional create is tolerated and the existing receipt stays untouched.
         new ReleaseStore(s3.client())
-                .downloadReceipt(BUCKET, RELEASE_ID, DATASET, DATASET + ".zip", "md5", "https://api.os.uk/x", java.time.Instant.now(), upload);
+                .downloadReceipt(
+                        BUCKET,
+                        new ReleaseStore.DownloadReceipt(
+                                RELEASE_ID, DATASET, DATASET + ".zip", "md5", "https://api.os.uk/x", java.time.Instant.now()),
+                        upload);
 
         assertArrayEquals(original, s3.objects.get(receiptKey));
     }
@@ -292,16 +293,15 @@ final class DownloadServiceTest {
     private static void assertRejected(Map<String, Object> event, String expectedMessage) {
         var s3 = new FakeS3();
         var os = mock(OsClient.class);
-        var commands = mock(Commands.class);
-        var service = new DownloadService(s3.client(), os, commands, properties());
+        var service = new DownloadService(s3.client(), os, properties());
+        var context = context();
 
-        var failure = assertThrows(IllegalArgumentException.class, () -> service.download(event, context()));
+        var failure = assertThrows(IllegalArgumentException.class, () -> service.download(event, context));
 
         assertEquals(expectedMessage, failure.getMessage());
         assertTrue(s3.objects.isEmpty());
         assertTrue(s3.uploads.isEmpty());
         verifyNoInteractions(os);
-        verifyNoInteractions(commands);
     }
 
     @Test
@@ -319,7 +319,7 @@ final class DownloadServiceTest {
             event.put("detail", Map.of("planKey", PLAN_KEY, "dataset", dataset));
             var os = mock(OsClient.class);
             when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
-            var service = new DownloadService(s3.client(), os, mock(Commands.class), properties());
+            var service = new DownloadService(s3.client(), os, properties());
 
             assertEquals("ZIP_SCAN", service.download(event, context()));
             assertEquals(List.of("Scanned/" + RELEASE_ID + "/" + dataset + ".zip"), s3.completedKeys);
@@ -334,7 +334,7 @@ final class DownloadServiceTest {
         s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
         var os = mock(OsClient.class);
         when(os.download(anyString())).thenReturn(new ByteArrayInputStream("wrong content".getBytes(StandardCharsets.UTF_8)));
-        var service = new DownloadService(s3.client(), os, mock(Commands.class), properties());
+        var service = new DownloadService(s3.client(), os, properties());
         var out = new java.io.ByteArrayOutputStream();
         var originalOut = System.out;
         System.setOut(new java.io.PrintStream(out, true, StandardCharsets.UTF_8));
@@ -377,7 +377,7 @@ final class DownloadServiceTest {
                                 "downloadedAt", "2026-05-16T09:15:23Z",
                                 "sourceUrl", "https://api.os.uk/example")));
         var os = mock(OsClient.class);
-        var service = new DownloadService(s3.client(), os, mock(Commands.class), properties());
+        var service = new DownloadService(s3.client(), os, properties());
 
         assertEquals("SKIPPED", service.download(event(), context()));
         verifyNoInteractions(os);

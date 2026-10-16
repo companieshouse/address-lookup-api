@@ -65,11 +65,13 @@ public final class OsClient {
           java.util.Set.of(301, 302, 303, 307, 308).contains(r.statusCode()),
           "OS HTTP status " + r.statusCode());
       URI next = uri.resolve(r.headers().firstValue("location").orElseThrow());
+      String sanitizedFromUrl = sanitizeUrl(uri.toString());
+      String sanitizedToUrl = sanitizeUrl(next.toString());
       LOG.info(
           "OS download redirect followed status={} from={} to={}",
           r.statusCode(),
-          sanitizeUrl(uri.toString()),
-          sanitizeUrl(next.toString()));
+          sanitizedFromUrl,
+          sanitizedToUrl);
       uri = next;
     }
     throw new IOException("Too many redirects");

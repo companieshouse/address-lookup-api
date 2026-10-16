@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSession;
+import java.io.IOException;
 import java.net.Authenticator;
 import java.net.CookieHandler;
 import java.net.ProxySelector;
@@ -17,6 +18,7 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
@@ -40,19 +42,103 @@ final class OsClientTest {
         assertTrue(http.requests.get(1).headers().firstValue("key").isEmpty());
     }
 
+    @Test
+    void failsAfterTooManyRedirects() {
+        var http = new RedirectingHttpClient(request -> redirect(302, "https://api.os.uk/next"));
+        var os = new OsClient("test-key", Duration.ofSeconds(840), JSON, http);
+
+        var failure = assertThrows(IOException.class, () -> os.download("https://api.os.uk/start"));
+
+        assertEquals("Too many redirects", failure.getMessage());
+        assertEquals(5, http.requests.size());
+    }
+
+    @Test
+    void rejectsNonRedirectErrorStatus() {
+        var http = new RedirectingHttpClient(request -> new Reply(500, Map.of(), new byte[0]));
+        var os = new OsClient("test-key", Duration.ofSeconds(840), JSON, http);
+
+        var failure = assertThrows(IllegalArgumentException.class, () -> os.download("https://api.os.uk/start"));
+
+        assertEquals("OS HTTP status 500", failure.getMessage());
+        assertEquals(1, http.requests.size());
+    }
+
+    @Test
+    void rejectsRedirectToHttp() {
+        var http = new RedirectingHttpClient(request -> redirect(302, "http://os-downloads.example/file.zip"));
+        var os = new OsClient("test-key", Duration.ofSeconds(840), JSON, http);
+
+        var failure = assertThrows(IllegalArgumentException.class, () -> os.download("https://api.os.uk/start"));
+
+        assertEquals("HTTPS required", failure.getMessage());
+        assertEquals(1, http.requests.size());
+    }
+
+    @Test
+    void rejectsRedirectWithoutLocationHeader() {
+        var http = new RedirectingHttpClient(request -> new Reply(302, Map.of(), new byte[0]));
+        var os = new OsClient("test-key", Duration.ofSeconds(840), JSON, http);
+
+        assertThrows(NoSuchElementException.class, () -> os.download("https://api.os.uk/start"));
+    }
+
+    @Test
+    void rejectsUrlsOutsideApiOsUk() {
+        var http = new RedirectingHttpClient();
+        var os = new OsClient("test-key", Duration.ofSeconds(840), JSON, http);
+
+        for (String url : List.of("https://example.com/file.zip", "http://api.os.uk/file.zip")) {
+            var failure = assertThrows(IllegalArgumentException.class, () -> os.download(url));
+            assertEquals("Expected OS API URL", failure.getMessage());
+        }
+        assertTrue(http.requests.isEmpty());
+    }
+
+    @Test
+    void jsonParsesResponseBody() throws Exception {
+        var http = new RedirectingHttpClient(request -> new Reply(200, Map.of(), "{\"a\":1}".getBytes()));
+        var os = new OsClient("test-key", Duration.ofSeconds(840), JSON, http);
+
+        assertEquals(1, os.json("https://api.os.uk/meta").path("a").asInt());
+    }
+
+    @Test
+    void jsonRejectsOversizedResponseBody() {
+        var http = new RedirectingHttpClient(request -> new Reply(200, Map.of(), new byte[4 * 1024 * 1024 + 1]));
+        var os = new OsClient("test-key", Duration.ofSeconds(840), JSON, http);
+
+        var failure = assertThrows(IllegalArgumentException.class, () -> os.json("https://api.os.uk/meta"));
+
+        assertEquals("OS metadata too large", failure.getMessage());
+    }
+
+    private static Reply redirect(int status, String location) {
+        return new Reply(status, Map.of("location", List.of(location)), new byte[0]);
+    }
+
+    private record Reply(int status, Map<String, List<String>> headers, byte[] body) {
+    }
+
     private static final class RedirectingHttpClient extends HttpClient {
         final List<HttpRequest> requests = new ArrayList<>();
+        private final Function<HttpRequest, Reply> script;
+
+        RedirectingHttpClient() {
+            this(request -> "api.os.uk".equals(request.uri().getHost())
+                    ? redirect(307, "https://os-downloads.example/signed/add_isl_royalmailaddress.zip?token=redacted")
+                    : new Reply(200, Map.of(), "zip-bytes".getBytes()));
+        }
+
+        RedirectingHttpClient(Function<HttpRequest, Reply> script) {
+            this.script = script;
+        }
 
         @Override
         public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler) {
             requests.add(request);
-            if ("api.os.uk".equals(request.uri().getHost()))
-                return response(
-                        307,
-                        Map.of("location", List.of("https://os-downloads.example/signed/add_isl_royalmailaddress.zip?token=redacted")),
-                        handler,
-                        new byte[0]);
-            return response(200, Map.of(), handler, "zip-bytes".getBytes());
+            var reply = script.apply(request);
+            return response(reply.status(), reply.headers(), handler, reply.body());
         }
 
         @SuppressWarnings("unchecked")
@@ -63,10 +149,12 @@ final class OsClientTest {
             subscriber.onSubscribe(new java.util.concurrent.Flow.Subscription() {
                 @Override
                 public void request(long n) {
+                    // Intentionally empty: the body is pushed synchronously below, so demand needs no tracking.
                 }
 
                 @Override
                 public void cancel() {
+                    // Intentionally empty: the fake response is fully delivered, so there is nothing to cancel.
                 }
             });
             if (body.length == 0) {

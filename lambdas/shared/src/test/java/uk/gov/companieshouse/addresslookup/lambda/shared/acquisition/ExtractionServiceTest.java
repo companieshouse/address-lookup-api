@@ -82,8 +82,7 @@ final class ExtractionServiceTest {
 
     @Test
     void rejectsMissingPlan() {
-        var failure = assertThrows(
-                IllegalArgumentException.class, () -> service(1024).unzip(event(), context(PLENTY_OF_TIME)));
+        var failure = assertUnzipThrows(IllegalArgumentException.class, 1024, PLENTY_OF_TIME);
 
         assertEquals("Missing acquisition plan", failure.getMessage());
     }
@@ -92,8 +91,10 @@ final class ExtractionServiceTest {
     void rejectsPlanKeyOutsideAcquisitionsPrefix() {
         var event = Map.<String, Object>of("detail", Map.of("planKey", "other/plan.json", "dataset", DATASET));
 
-        var failure = assertThrows(
-                IllegalArgumentException.class, () -> service(1024).unzip(event, context(PLENTY_OF_TIME)));
+        var service = service(1024);
+        var context = context(PLENTY_OF_TIME);
+
+        var failure = assertThrows(IllegalArgumentException.class, () -> service.unzip(event, context));
 
         assertEquals("Invalid plan key", failure.getMessage());
     }
@@ -102,8 +103,7 @@ final class ExtractionServiceTest {
     void rejectsCsvWhoseHeaderDoesNotMatchTheCatalogue() throws Exception {
         stageCleanZip(zip(entries(DATASET + ".csv", "not,the,right,header\nrow\n")));
 
-        var failure = assertThrows(
-                IllegalArgumentException.class, () -> service(1024 * 1024).unzip(event(), context(PLENTY_OF_TIME)));
+        var failure = assertUnzipThrows(IllegalArgumentException.class, 1024 * 1024, PLENTY_OF_TIME);
 
         assertEquals("CSV header does not match pinned OS DDL", failure.getMessage());
         assertTrue(s3.completedKeys.isEmpty());
@@ -113,8 +113,7 @@ final class ExtractionServiceTest {
     void rejectsZipWithoutPrimaryCsv() throws Exception {
         stageCleanZip(zip(entries(DATASET + "_extra.csv", "a,b\n")));
 
-        var failure = assertThrows(
-                IllegalArgumentException.class, () -> service(1024 * 1024).unzip(event(), context(PLENTY_OF_TIME)));
+        var failure = assertUnzipThrows(IllegalArgumentException.class, 1024 * 1024, PLENTY_OF_TIME);
 
         assertEquals("Missing primary CSV", failure.getMessage());
     }
@@ -123,8 +122,7 @@ final class ExtractionServiceTest {
     void rejectsUnexpectedZipMembers() throws Exception {
         stageCleanZip(zip(entries("something_else.csv", "x\n")));
 
-        var failure = assertThrows(
-                IllegalArgumentException.class, () -> service(1024 * 1024).unzip(event(), context(PLENTY_OF_TIME)));
+        var failure = assertUnzipThrows(IllegalArgumentException.class, 1024 * 1024, PLENTY_OF_TIME);
 
         assertEquals("Unexpected ZIP member", failure.getMessage());
     }
@@ -135,8 +133,7 @@ final class ExtractionServiceTest {
             s3.objects.clear();
             stageCleanZip(zip(entries(name, "x\n")));
 
-            var failure = assertThrows(
-                    IllegalArgumentException.class, () -> service(1024 * 1024).unzip(event(), context(PLENTY_OF_TIME)));
+            var failure = assertUnzipThrows(IllegalArgumentException.class, 1024 * 1024, PLENTY_OF_TIME);
 
             assertEquals("Unexpected ZIP member path", failure.getMessage(), name);
         }
@@ -146,8 +143,7 @@ final class ExtractionServiceTest {
     void rejectsAncillaryEntriesThatExceedTheExpandedSizeLimit() throws Exception {
         stageCleanZip(zip(entries(DATASET + "_big.csv", "x".repeat(200))));
 
-        var failure = assertThrows(
-                IllegalArgumentException.class, () -> service(100).unzip(event(), context(PLENTY_OF_TIME)));
+        var failure = assertUnzipThrows(IllegalArgumentException.class, 100, PLENTY_OF_TIME);
 
         assertEquals("ZIP expanded size limit", failure.getMessage());
     }
@@ -156,7 +152,7 @@ final class ExtractionServiceTest {
     void rejectsPrimaryCsvThatExceedsTheExpandedSizeLimit() throws Exception {
         stageCleanZip(zip(entries(DATASET + ".csv", header() + "\n" + "row\n".repeat(500))));
 
-        var failure = assertThrows(IOException.class, () -> service(300).unzip(event(), context(PLENTY_OF_TIME)));
+        var failure = assertUnzipThrows(IOException.class, 300, PLENTY_OF_TIME);
 
         assertEquals("Expanded archive limit", failure.getMessage());
         assertTrue(s3.completedKeys.isEmpty());
@@ -167,8 +163,7 @@ final class ExtractionServiceTest {
     void failsWhenTheDeadlineIsApproachingWhileSkippingAncillaryEntries() throws Exception {
         stageCleanZip(zip(entries(DATASET + "_extra.csv", "a,b\n")));
 
-        var failure = assertThrows(
-                IllegalArgumentException.class, () -> service(1024 * 1024).unzip(event(), context(1_000)));
+        var failure = assertUnzipThrows(IllegalArgumentException.class, 1024 * 1024, 1_000);
 
         assertEquals("Unzip deadline", failure.getMessage());
     }
@@ -178,8 +173,9 @@ final class ExtractionServiceTest {
         var properties = new AcquisitionProperties(
                 BUCKET, " ", "bus", "key", "{}", 1024, 1024, 20, Duration.ofSeconds(1), Duration.ofSeconds(1));
 
-        var failure = assertThrows(
-                IllegalArgumentException.class, () -> new ExtractionService(s3.client(), properties));
+        var client = s3.client();
+
+        var failure = assertThrows(IllegalArgumentException.class, () -> new ExtractionService(client, properties));
 
         assertEquals("Missing SCANNED_BUCKET", failure.getMessage());
     }
@@ -198,14 +194,23 @@ final class ExtractionServiceTest {
     }
 
     @Test
-    void countingInputFailsOnceTheLimitIsExceeded() {
+    void countingInputFailsOnceTheLimitIsExceeded() throws Exception {
         var in = new ExtractionService.CountingInput(new ByteArrayInputStream(new byte[]{1, 2, 3}), 2);
 
-        assertDoesNotThrow(() -> in.read());
-        assertDoesNotThrow(() -> in.read());
+        assertEquals(1, in.read());
+        assertEquals(2, in.read());
         var failure = assertThrows(IOException.class, in::read);
 
         assertEquals("Expanded archive limit", failure.getMessage());
+    }
+
+    // Builds everything first so the asserted lambda contains a single call that can fail.
+    private <T extends Throwable> T assertUnzipThrows(Class<T> expected, long maxExtractedBytes, long remainingMillis) {
+        var service = service(maxExtractedBytes);
+        var event = event();
+        var context = context(remainingMillis);
+
+        return assertThrows(expected, () -> service.unzip(event, context));
     }
 
     private ExtractionService service(long maxExtractedBytes) {

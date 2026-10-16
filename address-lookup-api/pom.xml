@@ -78,7 +78,6 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>${commons-lang-plugin.version}</version>
         </dependency>
 
         <dependency>

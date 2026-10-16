@@ -34,7 +34,7 @@ public final class Commands {
     this.json = json;
   }
 
-  void send(String action, String planKey, String dataset) throws CommandDispatchException {
+  public void send(String action, String planKey, String dataset) throws CommandDispatchException {
     send(action, Map.of("planKey", planKey, "dataset", dataset), "os.acquisition");
   }
 

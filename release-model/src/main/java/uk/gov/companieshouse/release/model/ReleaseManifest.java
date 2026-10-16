@@ -3,18 +3,24 @@ package uk.gov.companieshouse.release.model;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.time.LocalDate;
-import java.util.*;
+import java.util.EnumMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /** Validated immutable metadata; the original JSON text preserves release identity and digest. */
 public final class ReleaseManifest {
   public record Zip(String md5, String fileName, String url) {}
 
-  public record FileMetadata(String packageId, String version, OrderSummary summary, Zip zip) {}
+  public record FileMetadata(OrderSummary summary, Zip zip) {}
 
   private final UUID id;
   private final SupplyType type;
   private final LocalDate previous;
   private final LocalDate target;
+  private final String dataPackageId;
+  private final String versionId;
   private final Map<Dataset, FileMetadata> files;
   private final String document;
 
@@ -23,12 +29,16 @@ public final class ReleaseManifest {
       SupplyType type,
       LocalDate previous,
       LocalDate target,
+      String dataPackageId,
+      String versionId,
       Map<Dataset, FileMetadata> files,
       String document) {
     this.id = id;
     this.type = type;
     this.previous = previous;
     this.target = target;
+    this.dataPackageId = dataPackageId;
+    this.versionId = versionId;
     this.files = Map.copyOf(files);
     this.document = document;
   }
@@ -59,6 +69,10 @@ public final class ReleaseManifest {
     return target;
   }
 
+  public String dataPackageId() { return dataPackageId; }
+
+  public String versionId() { return versionId; }
+
   public Map<Dataset, FileMetadata> files() {
     return files;
   }
@@ -78,7 +92,8 @@ public final class ReleaseManifest {
 
   public static ReleaseManifest read(JsonNode node) throws Exception {
     if (!node.isObject()) throw new IllegalArgumentException("Manifest must be an object");
-    var allowed = new HashSet<>(List.of("releaseId", "mode", "previous", "target"));
+    var allowed = new HashSet<>(List.of("releaseId", "mode", "previous", "target",
+            "dataPackageId", "versionId"));
     for (var dataset : Dataset.values()) allowed.add(dataset.datasetName());
     node.fieldNames()
         .forEachRemaining(
@@ -91,6 +106,8 @@ public final class ReleaseManifest {
     LocalDate target = LocalDate.parse(text(node, "target"));
     LocalDate previous =
         node.hasNonNull("previous") ? LocalDate.parse(text(node, "previous")) : null;
+    String dataPackageId = text(node, "dataPackageId");
+    String versionId = text(node, "versionId");
     if (previous != null && !target.isAfter(previous))
       throw new IllegalArgumentException("Invalid release interval");
     if (type == SupplyType.COU && previous == null)
@@ -98,29 +115,31 @@ public final class ReleaseManifest {
     var files = new EnumMap<Dataset, FileMetadata>(Dataset.class);
     for (var dataset : Dataset.values()) {
       var file = node.path(dataset.datasetName());
-      var summary = file.path("summary");
-      if (!summary.path("recordCount").isIntegralNumber()
-          || !summary.path("recordCount").canConvertToLong())
-        throw new IllegalArgumentException("Invalid recordCount");
-      var order = ReleaseJson.MAPPER.treeToValue(summary, OrderSummary.class);
-      order.validate(dataset.table(), type, previous, target);
-      text(file, "package");
-      text(file, "version");
-      if (!text(file.path("zip"), "md5").matches("(?i)[a-f0-9]{32}"))
-        throw new IllegalArgumentException("Invalid ZIP MD5");
-      var zip = file.path("zip");
-      files.put(
-          dataset,
-          new FileMetadata(
-              text(file, "package"),
-              text(file, "version"),
-              order,
-              new Zip(
-                  text(zip, "md5"),
-                  zip.path("fileName").asText(null),
-                  zip.path("url").asText(null))));
+      if (file != null && ! file.isEmpty()) {
+        var summary = file.path("summary");
+        if (!summary.path("recordCount").isIntegralNumber()
+                || !summary.path("recordCount").canConvertToLong())
+          throw new IllegalArgumentException("Invalid recordCount");
+        var order = ReleaseJson.MAPPER.treeToValue(summary, OrderSummary.class);
+        order.validate(dataset.table(), type, previous, target);
+//      text(file, "package");
+//      text(file, "version");
+        if (!text(file.path("zip"), "md5").matches("(?i)[a-f0-9]{32}"))
+          throw new IllegalArgumentException("Invalid ZIP MD5");
+        var zip = file.path("zip");
+        files.put(
+                dataset,
+                new FileMetadata(
+//              text(file, "package"),
+//              text(file, "version"),
+                        order,
+                        new Zip(
+                                text(zip, "md5"),
+                                zip.path("fileName").asText(null),
+                                zip.path("url").asText(null))));
+      }
     }
-    return new ReleaseManifest(id, type, previous, target, files, node.toString());
+    return new ReleaseManifest(id, type, previous, target, dataPackageId, versionId, files, node.toString());
   }
 
   public OrderSummary summary(Dataset dataset) {

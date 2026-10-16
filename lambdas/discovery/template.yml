@@ -35,7 +35,7 @@ Resources:
           OS_PACKAGES: packages-template
       PackageType: Zip
       RecursiveLoop: Terminate
-      Runtime: java25
+      Runtime: java21
       RuntimeManagementConfig:
         UpdateRuntimeOn: Auto
       SnapStart:
@@ -72,7 +72,7 @@ Resources:
           OS_PACKAGES: packages-template
       PackageType: Zip
       RecursiveLoop: Terminate
-      Runtime: java25
+      Runtime: java21
       RuntimeManagementConfig:
         UpdateRuntimeOn: Auto
       SnapStart:

@@ -5,6 +5,7 @@
 target/
 *.jar
 *.zip
+dependency-reduced-pom.xml
 
 # IntelliJ files
 .idea/

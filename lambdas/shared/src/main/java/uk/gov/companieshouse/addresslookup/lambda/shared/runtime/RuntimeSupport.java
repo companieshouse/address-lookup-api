@@ -38,9 +38,12 @@ public final class RuntimeSupport {
         }
     }
 
-    public static JsonNode detail(String e) {
-        JsonNode jsonNode = JSON.valueToTree(e);
-        return jsonNode.has("detail") ? jsonNode.get("detail") : jsonNode;
+    public static JsonNode detail(String e) throws IOException {
+        return detailNode(JSON.readTree(e));
+    }
+
+    private static JsonNode detailNode(JsonNode node) {
+        return node.has("detail") ? node.get("detail") : node;
     }
 
     public static String required(JsonNode jsonNode, String field) {

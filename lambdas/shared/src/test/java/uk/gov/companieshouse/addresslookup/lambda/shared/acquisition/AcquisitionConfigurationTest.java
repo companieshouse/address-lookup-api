@@ -31,8 +31,7 @@ final class AcquisitionConfigurationTest {
 
         assertNotNull(os);
         assertNotNull(commands);
-        assertNotNull(configuration.discoveryService(s3, os, commands, properties));
-        assertNotNull(configuration.downloadService(s3, os, commands, properties));
+        assertNotNull(configuration.downloadService(s3, os, properties));
         assertNotNull(configuration.extractionService(s3, commands, properties));
     }
 
@@ -64,7 +63,7 @@ final class AcquisitionConfigurationTest {
                 osApiKey,
                 "{}",
                 1024L,
-                1024L,
+                null, null,1024L,
                 20,
                 Duration.ofSeconds(20),
                 Duration.ofSeconds(840));

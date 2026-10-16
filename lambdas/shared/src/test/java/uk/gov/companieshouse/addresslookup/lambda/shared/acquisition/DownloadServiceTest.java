@@ -260,40 +260,20 @@ final class DownloadServiceTest {
         var s3 = new FakeS3();
         var os = mock(OsClient.class);
         var service = new DownloadService(s3.client(), os, mock(Commands.class), properties());
-        var logger = java.util.logging.Logger.getLogger(DownloadService.class.getName());
-        var records = new java.util.ArrayList<java.util.logging.LogRecord>();
-        var handler =
-                new java.util.logging.Handler() {
-                    @Override
-                    public void publish(java.util.logging.LogRecord record) {
-                        records.add(record);
-                    }
-
-                    @Override
-                    public void flush() {}
-
-                    @Override
-                    public void close() {}
-                };
-        logger.addHandler(handler);
-
+        String expected = "Acquisition plan not found planKey=" + PLAN_KEY + " dataset=" + DATASET;
+        var out = new java.io.ByteArrayOutputStream();
+        var originalOut = System.out;
+        System.setOut(new java.io.PrintStream(out, true, StandardCharsets.UTF_8));
         try {
             var e = assertThrows(IllegalArgumentException.class, () -> service.download(event(), context()));
-
-            String expected = "Acquisition plan not found planKey=" + PLAN_KEY + " dataset=" + DATASET;
             assertEquals(expected, e.getMessage());
-            assertTrue(
-                    records.stream()
-                            .anyMatch(
-                                    r ->
-                                            r.getLevel() == java.util.logging.Level.SEVERE
-                                                    && expected.equals(r.getMessage())));
             verifyNoInteractions(os);
         } finally {
-            logger.removeHandler(handler);
+            System.setOut(originalOut);
         }
+        // LambdaRuntime.getLogger() writes to System.out outside the Lambda runtime; the level is not rendered.
+        assertTrue(out.toString(StandardCharsets.UTF_8).contains(expected));
     }
-
     @Test
     void receiptIsCreatedConditionallyAndNeverOverwritten() throws Exception {
         var s3 = new FakeS3();
@@ -355,38 +335,21 @@ final class DownloadServiceTest {
         var os = mock(OsClient.class);
         when(os.download(anyString())).thenReturn(new ByteArrayInputStream("wrong content".getBytes(StandardCharsets.UTF_8)));
         var service = new DownloadService(s3.client(), os, mock(Commands.class), properties());
-        var logger = java.util.logging.Logger.getLogger(DownloadService.class.getName());
-        var records = new java.util.ArrayList<java.util.logging.LogRecord>();
-        var handler =
-                new java.util.logging.Handler() {
-                    @Override
-                    public void publish(java.util.logging.LogRecord record) {
-                        records.add(record);
-                    }
-
-                    @Override
-                    public void flush() {}
-
-                    @Override
-                    public void close() {}
-                };
-        logger.addHandler(handler);
-
+        var out = new java.io.ByteArrayOutputStream();
+        var originalOut = System.out;
+        System.setOut(new java.io.PrintStream(out, true, StandardCharsets.UTF_8));
         try {
             assertEquals("CHECKSUM_MISMATCH", service.download(event(), context()));
         } finally {
-            logger.removeHandler(handler);
+            System.setOut(originalOut);
         }
-
+        // LambdaRuntime.getLogger() writes to System.out outside the Lambda runtime; the level is not rendered.
+        String logged = out.toString(StandardCharsets.UTF_8);
         assertTrue(
-                records.stream()
-                        .anyMatch(
-                                r ->
-                                        r.getLevel() == java.util.logging.Level.SEVERE
-                                                && r.getMessage().contains("Download checksum mismatch")
-                                                && r.getMessage().contains("expected=")
-                                                && r.getMessage().contains("actual=")),
-                "mismatch must be logged at SEVERE with both MD5 values");
+                logged.contains("Download checksum mismatch")
+                        && logged.contains("expected=")
+                        && logged.contains("actual="),
+                "mismatch must be logged with both MD5 values");
         assertTrue(s3.abortedUploads > 0, "multipart upload should be aborted");
         assertFalse(
                 s3.objects.containsKey(ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download")),

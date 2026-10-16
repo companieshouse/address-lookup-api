@@ -1,6 +1,8 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.os;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -9,13 +11,12 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.logging.Logger;
 
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 /** API key is sent only to api.os.uk, never forwarded to the signed download host. */
 public final class OsClient {
-  private static final Logger LOG = Logger.getLogger(OsClient.class.getName());
+  private static final Logger LOG = LoggerFactory.getLogger(OsClient.class);
 
   private final HttpClient http;
   private final String key;
@@ -65,12 +66,10 @@ public final class OsClient {
           "OS HTTP status " + r.statusCode());
       URI next = uri.resolve(r.headers().firstValue("location").orElseThrow());
       LOG.info(
-          "OS download redirect followed status="
-              + r.statusCode()
-              + " from="
-              + sanitizeUrl(uri.toString())
-              + " to="
-              + sanitizeUrl(next.toString()));
+          "OS download redirect followed status={} from={} to={}",
+          r.statusCode(),
+          sanitizeUrl(uri.toString()),
+          sanitizeUrl(next.toString()));
       uri = next;
     }
     throw new IOException("Too many redirects");

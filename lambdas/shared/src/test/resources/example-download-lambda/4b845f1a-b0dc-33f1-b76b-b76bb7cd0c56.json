@@ -3,9 +3,9 @@
   "mode": "FULL",
   "target": "2026-05-16",
   "previous": null,
+  "dataPackageId": "12345",
+  "versionId": "159159",
   "add_gb_builtaddress": {
-    "package": "12345",
-    "version": "159159",
     "zip": {
       "fileName": "add_gb_builtaddress.zip",
       "url": "https://api.os.uk/downloads/v1/dataPackages/12345/versions/159159/downloads?fileName=add_gb_builtaddress.zip",
@@ -21,8 +21,6 @@
     }
   },
   "add_gb_royalmailaddress": {
-    "package": "12345",
-    "version": "159159",
     "zip": {
       "fileName": "add_gb_royalmailaddress.zip",
       "url": "https://api.os.uk/downloads/v1/dataPackages/12345/versions/159159/downloads?fileName=add_gb_royalmailaddress.zip",
@@ -38,8 +36,6 @@
     }
   },
   "add_isl_builtaddress": {
-    "package": "12345",
-    "version": "159159",
     "zip": {
       "fileName": "add_isl_builtaddress.zip",
       "url": "https://api.os.uk/downloads/v1/dataPackages/12345/versions/159159/downloads?fileName=add_isl_builtaddress.zip",
@@ -55,8 +51,6 @@
     }
   },
   "add_isl_royalmailaddress": {
-    "package": "12345",
-    "version": "159159",
     "zip": {
       "fileName": "add_isl_royalmailaddress.zip",
       "url": "https://api.os.uk/downloads/v1/dataPackages/12345/versions/159159/downloads?fileName=add_isl_royalmailaddress.zip",

@@ -1,5 +1,7 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CompletedPart;
@@ -11,7 +13,6 @@ import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.function.LongSupplier;
-import java.util.logging.Logger;
 
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
@@ -19,7 +20,8 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
  * Bounded 256 MiB parts, with checksum validation before multipart completion.
  */
 public final class StreamingS3 {
-    private static final Logger LOG = Logger.getLogger(StreamingS3.class.getName());
+    private static final Logger LOG = LoggerFactory.getLogger(StreamingS3.class);
+
     private static final int PART_SIZE_BYTES = 256 * 1024 * 1024;
 
     public record Uploaded(String key, String version, String sha256, String md5, long bytes) {
@@ -42,7 +44,7 @@ public final class StreamingS3 {
     public Uploaded put(InputStream in, String bucket, String key, String expectedMd5, long limit)
             throws Exception {
         String upload = s3.createMultipartUpload(b -> b.bucket(bucket).key(key)).uploadId();
-        LOG.info("Multipart upload started bucket=" + bucket + " key=" + key);
+        LOG.info("Multipart upload started bucket={} key={}", bucket, key);
 
         var parts = new ArrayList<CompletedPart>();
         var md5 = MessageDigest.getInstance("MD5");
@@ -126,41 +128,20 @@ public final class StreamingS3 {
                     RequestBody.fromString(evidence));
 
             LOG.info(
-                    "Multipart upload completed bucket="
-                            + bucket
-                            + " key="
-                            + key
-                            + " bytes="
-                            + total
-                            + " md5="
-                            + actualMd5
-                            + " sha256="
-                            + actualSha
-                            + " version="
-                            + result.versionId());
+                    "Multipart upload completed bucket={} key={} bytes={} md5={} sha256={} version={}",
+                    bucket, key, total, actualMd5, actualSha, result.versionId());
 
             return new Uploaded(key, result.versionId(), actualSha, actualMd5, total);
         } catch (Exception e) {
-            LOG.warning(
-                    "Multipart upload failed bucket="
-                            + bucket
-                            + " key="
-                            + key
-                            + " reason="
-                            + e.getMessage());
+            LOG.warn("Multipart upload failed bucket={} key={} reason={}", bucket, key, e.getMessage(), e);
 
             // Best effort cleanup: incomplete multipart uploads should not become readable objects.
             try {
                 s3.abortMultipartUpload(b -> b.bucket(bucket).key(key).uploadId(upload));
-                LOG.info("Incomplete multipart upload cleaned up bucket=" + bucket + " key=" + key);
+                LOG.info("Incomplete multipart upload cleaned up bucket={} key={}", bucket, key);
             } catch (Exception abortFailure) {
-                LOG.warning(
-                        "Incomplete multipart upload cleanup failed bucket="
-                                + bucket
-                                + " key="
-                                + key
-                                + " reason="
-                                + abortFailure.getMessage());
+                LOG.warn("Incomplete multipart upload cleanup failed bucket={} key={} reason={}",
+                        bucket, key, abortFailure.getMessage());
             }
 
             throw e;

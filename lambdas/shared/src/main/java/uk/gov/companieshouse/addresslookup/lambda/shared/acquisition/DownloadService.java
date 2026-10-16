@@ -2,6 +2,8 @@ package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.s3.S3Client;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
@@ -9,13 +11,12 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
 
 import java.time.Instant;
 import java.util.Map;
-import java.util.logging.Logger;
 
 import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.*;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 public final class DownloadService {
-    private static final Logger LOG = Logger.getLogger(DownloadService.class.getName());
+    private static final Logger LOG = LoggerFactory.getLogger(DownloadService.class);
 
     private final S3Client s3;
     private final OsClient os;
@@ -42,18 +43,14 @@ public final class DownloadService {
         var manifest = readManifest(store, sourceBucket, downloadCommandPlanKey, downloadCommandDataset);
 
         String manifestReleaseId = releaseId(manifest).toString();
-        LOG.info(
-                "Download command accepted releaseId="
-                        + manifestReleaseId
-                        + " dataset="
-                        + downloadCommandDataset
-                        + " planKey="
-                        + downloadCommandPlanKey);
+        LOG.info("Download command accepted releaseId={} dataset={} planKey={}",
+                manifestReleaseId, downloadCommandDataset, downloadCommandPlanKey);
 
         // The receipt makes retries idempotent: if the exact release/dataset was already downloaded,
         // do not fetch the supplier ZIP again.
         if (store.receipt(sourceBucket, manifestReleaseId, downloadCommandDataset, "download") != null) {
-            LOG.info("Download skipped existing receipt releaseId=" + manifestReleaseId + " dataset=" + downloadCommandDataset);
+            LOG.info("Download skipped existing receipt releaseId={} dataset={}",
+                    manifestReleaseId, downloadCommandDataset);
             return "SKIPPED";
         }
 
@@ -71,15 +68,8 @@ public final class DownloadService {
         String datasetUrl = required(datasetZipJsonObj, "url");
         String zipUploadS3Path = ReleaseStore.downloadZipKey(manifestReleaseId, downloadCommandDataset);
 
-        LOG.info(
-                "Download started releaseId="
-                        + manifestReleaseId
-                        + " dataset="
-                        + downloadCommandDataset
-                        + " fileName="
-                        + datasetFileName
-                        + " sourceUrl="
-                        + sanitizeUrl(datasetUrl));
+        LOG.info("Download started releaseId={} dataset={} fileName={} sourceUrl={}",
+                manifestReleaseId, downloadCommandDataset, datasetFileName, sanitizeUrl(datasetUrl));
 
         // Stream the supplier ZIP directly into S3 multipart upload. StreamingS3 calculates the MD5
         // while uploading and completes the upload only when it matches the manifest value.
@@ -92,23 +82,12 @@ public final class DownloadService {
             store.downloadReceipt(
                     sourceBucket, manifestReleaseId, downloadCommandDataset, datasetFileName, expectedDatasetMd5, datasetUrl, Instant.now(), upload);
 
-            LOG.info(
-                    "Download completed releaseId="
-                            + manifestReleaseId
-                            + " dataset="
-                            + downloadCommandDataset
-                            + " s3Key="
-                            + upload.key()
-                            + " receiptKey="
-                            + ReleaseStore.receiptKey(manifestReleaseId, downloadCommandDataset, "download"));
+            LOG.info("Download completed releaseId={} dataset={} s3Key={} receiptKey={}",
+                    manifestReleaseId, downloadCommandDataset, upload.key(),
+                    ReleaseStore.receiptKey(manifestReleaseId, downloadCommandDataset, "download"));
         } catch (StreamingS3.ChecksumMismatchException e) {
-            LOG.severe(
-                    "Download checksum mismatch releaseId="
-                            + manifestReleaseId
-                            + " dataset="
-                            + downloadCommandDataset
-                            + " "
-                            + e.getMessage());
+            LOG.error("Download checksum mismatch releaseId={} dataset={} {}",
+                    manifestReleaseId, downloadCommandDataset, e.getMessage());
             return "CHECKSUM_MISMATCH";
         }
 
@@ -150,7 +129,7 @@ public final class DownloadService {
         var manifest = store.read(bucket, planKey);
         if (manifest == null) {
             String message = "Acquisition plan not found planKey=" + planKey + " dataset=" + dataset;
-            LOG.severe(message);
+            LOG.error(message);
             check(false, message);
         }
         return manifest;

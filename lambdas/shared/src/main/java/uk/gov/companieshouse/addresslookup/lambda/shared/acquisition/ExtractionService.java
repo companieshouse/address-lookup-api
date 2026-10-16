@@ -43,12 +43,14 @@ public final class ExtractionService {
     long max = properties.maxExtractedBytes(), total = 0;
     StreamingS3.Uploaded result = null;
     String key = "quarantine/csv/" + id + "/" + t.name() + "/" + UUID.randomUUID() + ".csv";
+    String sourceKey = ReleaseStore.objectKey(sourceRef);
+    String sourceVersion = ReleaseStore.objectVersion(store, bucket, sourceRef);
     try (var source =
             s3.getObject(
                 b ->
                     b.bucket(bucket)
-                        .key(required(sourceRef, "key"))
-                        .versionId(required(sourceRef, "version")));
+                        .key(sourceKey)
+                        .versionId(sourceVersion));
         var zip = new ZipInputStream(source)) {
       var names = new HashSet<String>();
       ZipEntry entry;

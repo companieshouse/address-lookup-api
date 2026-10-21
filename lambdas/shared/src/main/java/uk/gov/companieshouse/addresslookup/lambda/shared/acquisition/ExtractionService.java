@@ -93,7 +93,6 @@ public final class ExtractionService {
         check(zipVersion.equals(store.version(scanBucket, s3Key)), "ZIP version changed after scan");
 
         LOGGER.info("UNZIP STARTED - dataset={}\n", dataset);
-        LOGGER.info("UNZIP checked={}\n", checked);
 
         // Check schema version
         check(input.path("schemaVersion").isInt()

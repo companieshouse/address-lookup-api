@@ -133,6 +133,10 @@ public final class ReleaseStore {
     return "control/" + release + "/" + dataset + "/" + step + ".json";
   }
 
+  public static String extractedCsvKey(String id, String dataset) {
+    return "Scanned/" + UUID.fromString(id) + "/" + dataset + ".csv";
+  }
+
   public static String downloadZipKey(String id, String dataset) {
     return "Scanned/" + UUID.fromString(id) + "/" + dataset + ".zip";
   }

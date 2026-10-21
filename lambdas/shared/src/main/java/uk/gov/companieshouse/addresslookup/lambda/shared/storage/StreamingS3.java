@@ -14,8 +14,8 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
+
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
@@ -72,8 +72,6 @@ public final class StreamingS3 {
         var md5 = MessageDigest.getInstance("MD5");
         var sha = MessageDigest.getInstance("SHA-256");
         long total = 0;
-        int currentPart = 0;
-        String stage = "reading part";
 
         try {
             while (true) {
@@ -81,11 +79,8 @@ public final class StreamingS3 {
                         remaining.getAsLong() > 30000,
                         "Lambda deadline approaching; retry with a new object key");
 
-                int nextPart = parts.size() + 1;
-                long readStarted = System.nanoTime();
                 byte[] bytes = in.readNBytes(PART_SIZE_BYTES);
                 if (bytes.length == 0) break;
-
                 total += bytes.length;
                 check(total <= limit && parts.size() < 10000, "Object exceeds configured streaming budget");
 
@@ -94,9 +89,6 @@ public final class StreamingS3 {
                 sha.update(bytes);
 
                 final int part = parts.size() + 1;
-                currentPart = part;
-                stage = "uploading part";
-                long uploadStarted = System.nanoTime();
                 var response =
                         s3.uploadPart(
                                 b ->
@@ -110,26 +102,25 @@ public final class StreamingS3 {
             }
 
             check(total > 0, "Empty object");
-            stage = "completing multipart upload";
             String actualMd5 = HexFormat.of().formatHex(md5.digest()),
                     actualSha = HexFormat.of().formatHex(sha.digest());
 
             // Complete the multipart upload only after proving the supplier checksum matches.
             if (expectedMd5 != null && !expectedMd5.equalsIgnoreCase(actualMd5))
                 throw new ChecksumMismatchException(expectedMd5, actualMd5);
+            String version;
             try {
-                long completionStarted = System.nanoTime();
-            var result =
-                    s3.completeMultipartUpload(
-                            b ->
-                                    b.bucket(bucket)
-                                            .key(key)
-                                            .uploadId(upload)
-                                            .ifNoneMatch("*")
-                                            .multipartUpload(m -> m.parts(parts)));
-            check(
-                    result.versionId() != null && !result.versionId().equals("null"),
-                    "S3 versioning must be enabled");
+                var result =
+                        s3.completeMultipartUpload(
+                                b ->
+                                        b.bucket(bucket)
+                                                .key(key)
+                                                .uploadId(upload)
+                                                .ifNoneMatch("*")
+                                                .multipartUpload(m -> m.parts(parts)));
+                check(
+                        result.versionId() != null && !result.versionId().equals("null"),
+                        "S3 versioning must be enabled");
                 version = result.versionId();
             } catch (S3Exception e) {
                 if (!reuseExisting || !ReleaseStore.isPreconditionFailed(e)) throw e;
@@ -151,7 +142,6 @@ public final class StreamingS3 {
             check(
                     version != null && !"null".equals(version),
                     "S3 versioning must be enabled");
-            stage = "writing checksum evidence";
             // Store immutable checksum evidence separately from the receipt used by the workflow.
             String checksumKey = checksumKey(key);
 
@@ -163,7 +153,7 @@ public final class StreamingS3 {
                                     "key",
                                     key,
                                     "versionId",
-                                    result.versionId(),
+                                    version,
                                     "md5",
                                     actualMd5,
                                     "sha256",
@@ -178,7 +168,7 @@ public final class StreamingS3 {
 
                 LOG.info(
                         "Multipart upload completed bucket={} key={} bytes={} md5={} sha256={} version={}",
-                        bucket, key, total, actualMd5, actualSha, result.versionId());
+                        bucket, key, total, actualMd5, actualSha, version);
 
             } catch (S3Exception e) {
                 if (!reuseExisting || !ReleaseStore.isPreconditionFailed(e)) throw e;
@@ -186,7 +176,7 @@ public final class StreamingS3 {
                 check(recorded != null && JSON.readTree(evidence).equals(recorded),
                         "Existing checksum evidence differs from the extracted CSV");
             }
-            return new Uploaded(key, result.versionId(), actualSha, actualMd5, total);
+            return new Uploaded(key, version, actualSha, actualMd5, total);
         } catch (Exception e) {
             abortIncompleteUpload(bucket, key, upload, e.getMessage());
             throw e;
@@ -205,5 +195,4 @@ public final class StreamingS3 {
                     bucket, key, abortFailure.getMessage());
         }
     }
-  }
 }

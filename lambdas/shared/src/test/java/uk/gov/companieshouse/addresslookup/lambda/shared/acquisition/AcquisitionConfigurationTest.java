@@ -29,7 +29,7 @@ final class AcquisitionConfigurationTest {
         assertNotNull(configuration.discoveryService(s3, os, commands, properties));
         assertNotNull(configuration.downloadService(s3, os, commands, properties));
         assertNotNull(configuration.scanResultsService(s3, commands, properties));
-        assertNotNull(configuration.extractionService(s3, properties));
+        assertNotNull(configuration.extractionService(s3, commands, properties));
     }
 
     @Test
@@ -65,4 +65,3 @@ final class AcquisitionConfigurationTest {
                 Duration.ofSeconds(840));
     }
 }
-

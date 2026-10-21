@@ -15,7 +15,8 @@ public final class Handler implements RequestHandler<Map<String, Object>, String
     try {
       return service.unzip(event, context);
     } catch (Exception e) {
-      throw new RuntimeException("unzip failed; durable state allows retry", e);
+      String reason = e.getMessage();
+      throw new RuntimeException("unzip failed {" + reason + "}", e);
     }
   }
 }

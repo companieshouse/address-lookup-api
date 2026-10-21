@@ -34,4 +34,21 @@ final class Commands {
         response.failedEntryCount() == 0,
         "EventBridge rejected command; S3 reconciliation will retry");
   }
+
+  void send(String action, String dataset) throws Exception {
+    String detail = json.writeValueAsString(Map.of("dataset", dataset));
+    var response =
+            events.putEvents(
+                    b ->
+                            b.entries(
+                                    PutEventsRequestEntry.builder()
+                                            .eventBusName(bus)
+                                            .source("os.acquisition")
+                                            .detailType(action)
+                                            .detail(detail)
+                                            .build()));
+    check(
+            response.failedEntryCount() == 0,
+            "EventBridge rejected command; S3 reconciliation will retry");
+  }
 }

@@ -1,11 +1,16 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
+import uk.gov.companieshouse.release.model.DatasetCatalog;
 
+import java.net.HttpURLConnection;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -49,7 +54,7 @@ public final class ReleaseStore {
               .build(),
           RequestBody.fromString(value.toString()));
     } catch (S3Exception e) {
-      if (e.statusCode() != 412) throw e;
+      if (!isPreconditionFailed(e)) throw e;
     }
   }
 
@@ -109,7 +114,11 @@ public final class ReleaseStore {
   }
 
   public static String receiptKey(String id, String dataset, String step) {
-    return "control/" + UUID.fromString(id) + "/" + dataset + "/" + step + ".json";
+    return "Scanned/" + UUID.fromString(id) + "/" + dataset + "/" + step + ".json";
+  }
+
+  public static String extractedCsvKey(String id, String dataset) {
+    return "Scanned/" + UUID.fromString(id) + "/" + dataset + ".csv";
   }
 
   public JsonNode receipt(String bucket, String id, String dataset, String step) throws Exception {
@@ -120,5 +129,26 @@ public final class ReleaseStore {
       String bucket, String id, String dataset, String step, StreamingS3.Uploaded upload)
       throws Exception {
     immutable(bucket, receiptKey(id, dataset, step), JSON.valueToTree(upload));
+  }
+
+  public void receipt(
+      String bucket, String releaseId, String dataset, String step, JsonNode receipt) throws Exception {
+    immutable(bucket, receiptKey(releaseId, dataset, step), receipt);
+  }
+
+  public void receiptOnce(
+      String bucket, String releaseId, String dataset, String step, JsonNode receipt) {
+    s3.putObject(
+        PutObjectRequest.builder()
+            .bucket(bucket)
+            .key(receiptKey(releaseId, dataset, step))
+            .ifNoneMatch("*")
+            .contentType("application/json")
+            .build(),
+        RequestBody.fromString(receipt.toString()));
+  }
+
+  public static boolean isPreconditionFailed(S3Exception e) {
+    return e.statusCode() == HttpURLConnection.HTTP_PRECON_FAILED;
   }
 }

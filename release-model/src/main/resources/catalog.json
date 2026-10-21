@@ -1,7 +1,7 @@
 [
   {
     "name": "add_gb_royalmailaddress",
-    "version": "1.0",
+    "version": "2.0",
     "physical": "add_gb_royalmailaddress_v1",
     "key": "udprn",
     "columns": [
@@ -264,7 +264,7 @@
   },
   {
     "name": "add_isl_royalmailaddress",
-    "version": "1.0",
+    "version": "2.0",
     "physical": "add_isl_royalmailaddress_v1",
     "key": "udprn",
     "columns": [

@@ -53,8 +53,6 @@ import software.amazon.awssdk.services.s3.model.Tag;
 import software.amazon.awssdk.services.s3.model.UploadPartResponse;
 import uk.gov.companieshouse.release.model.DatasetCatalog;
 
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
-
 final class ExtractionServiceTest {
     private static final String DATASET = "add_gb_royalmailaddress";
     private static final String ID = "12345678-1234-1234-1234-123456789abc";
@@ -404,13 +402,19 @@ final class ExtractionServiceTest {
     @Test
     void rejectsReceiptForDifferentZipVersion() throws Exception {
         cleanZip(validZip());
-        objects.put(
-                stored(SOURCE, RECEIPT_KEY),
-                ("{\"releaseId\":\"" + ID + "\",\"dataset\":\"" + DATASET
-                        + "\",\"zipS3Key\":\"" + ZIP_KEY + "\",\"zipVersion\":\"other-version\","
-                        + "\"key\":\"" + csvKey()
-                        + "\",\"status\":\"EXTRACTED\",\"version\":\"csv-version\",\"sha256\":\"abc\"}")
-                        .getBytes(StandardCharsets.UTF_8));
+        var receipt = """
+                {
+                  "releaseId": "%s",
+                  "dataset": "%s",
+                  "zipS3Key": "%s",
+                  "zipVersion": "other-version",
+                  "key": "%s",
+                  "status": "EXTRACTED",
+                  "version": "csv-version",
+                  "sha256": "abc"
+                }
+                """.formatted(ID, DATASET, ZIP_KEY, csvKey());
+        objects.put(stored(SOURCE, RECEIPT_KEY), receipt.getBytes(StandardCharsets.UTF_8));
         var request = event();
 
         assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));

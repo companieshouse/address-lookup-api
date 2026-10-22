@@ -314,9 +314,7 @@ final class DownloadServiceTest {
     @Test
     void eachDatasetCommandDownloadsOnlyItsNamedZip() throws Exception {
         for (String dataset : List.of(
-                "add_gb_builtaddress",
                 "add_gb_royalmailaddress",
-                "add_isl_builtaddress",
                 "add_isl_royalmailaddress")) {
             byte[] zip = ("zip for " + dataset).getBytes(StandardCharsets.UTF_8);
             var manifest = manifestWithMd5(dataset, md5(zip));

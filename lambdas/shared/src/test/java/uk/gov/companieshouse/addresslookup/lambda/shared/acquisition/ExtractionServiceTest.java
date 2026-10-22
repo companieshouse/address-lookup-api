@@ -5,18 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -53,6 +49,7 @@ import software.amazon.awssdk.services.s3.model.Tag;
 import software.amazon.awssdk.services.s3.model.UploadPartResponse;
 import uk.gov.companieshouse.release.model.DatasetCatalog;
 
+@ExtendWith(MockitoExtension.class)
 final class ExtractionServiceTest {
     private static final String DATASET = "add_gb_royalmailaddress";
     private static final String ID = "12345678-1234-1234-1234-123456789abc";
@@ -64,27 +61,31 @@ final class ExtractionServiceTest {
     private record StoredObject(String bucket, String key) {
     }
 
-    private final S3Client s3 = mock(S3Client.class);
-    private final Commands commands = mock(Commands.class);
-    private final Context context = mock(Context.class);
+    @Mock
+    private S3Client s3;
+    @Mock
+    private Commands commands;
+    @Mock
+    private Context context;
     private final Map<StoredObject, byte[]> objects = new HashMap<>();
     private byte[] uploaded;
     private boolean failReceiptOnce;
     private boolean failEvidenceOnce;
     private boolean conflictReceiptOnce;
     private boolean conflictingReceiptOnce;
-    private final ExtractionService service =
-            new ExtractionService(
-                    s3,
-                    commands,
-                    new AcquisitionProperties(
-                            SOURCE, CHECKED, "events", "key", "packages", 1024 * 1024, 1024 * 1024, 20,
-                            Duration.ofSeconds(20), Duration.ofSeconds(60)));
+    private ExtractionService service;
 
     @BeforeEach
     void setUp() throws Exception {
-        when(context.getRemainingTimeInMillis()).thenReturn(900_000);
-        when(s3.listObjectsV2(any(ListObjectsV2Request.class)))
+        service = new ExtractionService(
+                s3,
+                commands,
+                new AcquisitionProperties(
+                        SOURCE, CHECKED, "events", "key", "packages", 1024 * 1024, 1024 * 1024, 20,
+                        Duration.ofSeconds(20), Duration.ofSeconds(60)));
+
+        lenient().when(context.getRemainingTimeInMillis()).thenReturn(900_000);
+        lenient().when(s3.listObjectsV2(any(ListObjectsV2Request.class)))
                 .thenAnswer(
                         call -> {
                             var request = call.getArgument(0, ListObjectsV2Request.class);
@@ -94,7 +95,7 @@ final class ExtractionServiceTest {
                                     .build()
                                     : ListObjectsV2Response.builder().build();
                         });
-        when(s3.getObject(any(GetObjectRequest.class)))
+        lenient().when(s3.getObject(any(GetObjectRequest.class)))
                 .thenAnswer(
                         call -> {
                             var request = call.getArgument(0, GetObjectRequest.class);
@@ -105,12 +106,12 @@ final class ExtractionServiceTest {
                                     GetObjectResponse.builder().build(),
                                     AbortableInputStream.create(new ByteArrayInputStream(content)));
                         });
-        when(s3.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+        lenient().when(s3.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
                 .thenAnswer(
                         call -> recordObject(
                                 call.getArgument(0, PutObjectRequest.class),
                                 call.getArgument(1, RequestBody.class)));
-        when(s3.putObject(any(Consumer.class), any(RequestBody.class)))
+        lenient().when(s3.putObject(any(Consumer.class), any(RequestBody.class)))
                 .thenAnswer(
                         call -> {
                             var builder = PutObjectRequest.builder();
@@ -433,12 +434,12 @@ final class ExtractionServiceTest {
 
     private void cleanZip(byte[] content) throws Exception {
         objects.put(stored(SOURCE, ZIP_KEY), content);
-        when(s3.getObjectTagging(any(GetObjectTaggingRequest.class)))
+        lenient().when(s3.getObjectTagging(any(GetObjectTaggingRequest.class)))
                 .thenReturn(
                         GetObjectTaggingResponse.builder()
                                 .tagSet(Tag.builder().key("GuardDutyMalwareScanStatus").value("NO_THREATS_FOUND").build())
                                 .build());
-        when(s3.headObject(any(HeadObjectRequest.class)))
+        lenient().when(s3.headObject(any(HeadObjectRequest.class)))
                 .thenAnswer(
                         call -> HeadObjectResponse.builder()
                                 .versionId(CHECKED.equals(call.getArgument(0, HeadObjectRequest.class).bucket())
@@ -481,7 +482,7 @@ final class ExtractionServiceTest {
                             assertEquals(csvKey(), builder.build().key());
                             return CreateMultipartUploadResponse.builder().uploadId("upload-id").build();
                         });
-        when(s3.uploadPart(any(Consumer.class), any(RequestBody.class)))
+        lenient().when(s3.uploadPart(any(Consumer.class), any(RequestBody.class)))
                 .thenAnswer(
                         call -> {
                             try (var in = call.getArgument(1, RequestBody.class)
@@ -490,7 +491,7 @@ final class ExtractionServiceTest {
                             }
                             return UploadPartResponse.builder().eTag("etag").build();
                         });
-        when(s3.completeMultipartUpload(any(Consumer.class)))
+        lenient().when(s3.completeMultipartUpload(any(Consumer.class)))
                 .thenAnswer(
                         call -> {
                             if (objects.containsKey(stored(CHECKED, csvKey())))

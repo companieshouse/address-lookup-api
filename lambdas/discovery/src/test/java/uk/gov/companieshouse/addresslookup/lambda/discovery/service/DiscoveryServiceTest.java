@@ -9,22 +9,19 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToJsonNode;
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToObject;
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.readFileFromClasspath;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentMatcher;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
-import org.mockito.MockitoAnnotations;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -43,6 +40,7 @@ import uk.gov.companieshouse.release.model.ReleaseManifest;
 import java.util.List;
 import java.util.UUID;
 
+@ExtendWith(MockitoExtension.class)
 public class DiscoveryServiceTest {
 
     private static final String COU_REQUEST_JSON = """    
@@ -59,9 +57,29 @@ public class DiscoveryServiceTest {
      }
      """;
 
-    private static final String TEST_CURSOR_JSON = "{\"dataPackageId\": \"20780\", \"lastProcessedVersionId\": \"150035\" , \"lastProcessedDate\": \"2026-10-05\"}";
-    private static final String TEST_COU_UPDATE_CURSOR_JSON = "{\"dataPackageId\": \"20780\", \"lastProcessedVersionId\": \"150104\" , \"lastProcessedDate\": \"2026-10-06\"}";
-    private static final String TEST_FULL_UPDATE_CURSOR_JSON = "{\"dataPackageId\": \"20780\", \"lastProcessedVersionId\": \"130989\" , \"lastProcessedDate\": \"2026-05-01\"}";
+    private static final String TEST_CURSOR_JSON = """
+    {
+      "dataPackageId": "20780",
+      "lastProcessedVersionId": "150035",
+      "lastProcessedDate": "2026-10-05"
+    }
+    """;
+
+    private static final String TEST_COU_UPDATE_CURSOR_JSON = """
+      {
+        "dataPackageId": "20780",
+        "lastProcessedVersionId": "150104",
+        "lastProcessedDate": "2026-10-06"
+      }
+    """;
+
+    private static final String TEST_FULL_UPDATE_CURSOR_JSON = """
+      {
+        "dataPackageId": "20780",
+        "lastProcessedVersionId": "130989",
+        "lastProcessedDate": "2026-05-01"
+      }
+    """;
 
     private static final String TEST_SOURCE_BUCKET = "source-bucket",
             CURSOR_KEY = "control/address-release/active.json";
@@ -86,31 +104,18 @@ public class DiscoveryServiceTest {
     private UUID testUUID;
 
     private ObjectMapper objectMapper;
-    private AutoCloseable closeable;
-
-    Logger LOG = LoggerFactory.getLogger(this.getClass());
 
     @BeforeEach
     public void setUp() {
-        closeable = MockitoAnnotations.openMocks(this);
-        when(properties.datasets()).thenReturn(List.of(new DatasetDefault("add_gb_royalmailaddress","2.0"),
-                new DatasetDefault("add_isl_royalmailaddress","2.0")));
-        when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
-        when(properties.osHttpURLTemplate())
-                .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
-
-        when(testUUID.toString()).thenReturn(TEST_RELEASE_ID);
+        when(properties.datasets()).thenReturn(List.of(
+                new DatasetDefault("add_gb_royalmailaddress","2.0"),
+                new DatasetDefault("add_isl_royalmailaddress","2.0")
+        ));
 
         objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
 
         discoveryService = new DiscoveryService(s3Client, osClient, objectMapper, commands, properties);
-    }
-
-    @AfterEach
-    public void tearDown() throws Exception {
-        verifyNoMoreInteractions(s3Client, osClient, commands);
-        closeable.close();
     }
 
     @Test
@@ -138,6 +143,12 @@ public class DiscoveryServiceTest {
         S3PutReleaseManifestRequestBodyMatcher manifestMatcher = new S3PutReleaseManifestRequestBodyMatcher(ReleaseManifest.read(
                 objectMapper.readTree(
                 readFileFromClasspath("output/output-manifest-COU.json"))));
+
+        when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+        when(properties.osHttpURLTemplate())
+                .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
+
+        when(testUUID.toString()).thenReturn(TEST_RELEASE_ID);
 
         when(s3Client.getObject(request))
                 .thenReturn(TestUtils.createResponseInputStream(TEST_CURSOR_JSON));
@@ -197,6 +208,12 @@ public class DiscoveryServiceTest {
                 objectMapper.readTree(
                         readFileFromClasspath("output/output-manifest-Full.json"))));
 
+        when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+        when(properties.osHttpURLTemplate())
+                .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
+
+        when(testUUID.toString()).thenReturn(TEST_RELEASE_ID);
+
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989"))
                 .thenReturn(jsonFileToJsonNode("OsData/Full/full-data-package-20780-version-130989-data.json", objectMapper));
 
@@ -232,6 +249,11 @@ public class DiscoveryServiceTest {
         GetObjectRequest request = GetObjectRequest.builder()
                 .bucket(TEST_SOURCE_BUCKET)
                 .key(CURSOR_KEY).build();
+
+        when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+        when(properties.osHttpURLTemplate())
+                .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
+
         when(s3Client.getObject(request))
                 .thenReturn(TestUtils.createResponseInputStream(TEST_CURSOR_JSON));
 
@@ -270,6 +292,8 @@ public class DiscoveryServiceTest {
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_isl_royalmailaddress_orderSummary.json"))
                 .thenReturn(jsonFileToJsonNode("OsData/Full/add_isl_royalmailaddress_orderSummary.json", objectMapper));
+        when(properties.osHttpURLTemplate())
+                .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
 
         String response = discoveryService.discover(FULL_REQUEST_JSON);
 
@@ -294,6 +318,8 @@ public class DiscoveryServiceTest {
     @Test
     public void shouldThrowExceptionForCOUWithNoCursor() {
 
+        when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+
         try {
             discoveryService.discover(COU_REQUEST_JSON);
             fail("Should have thrown an exception");
@@ -307,6 +333,7 @@ public class DiscoveryServiceTest {
 
     @Test
     public void shouldThrowExceptionForFULLWithMissingDataPackageParameter() {
+
         try {
             discoveryService.discover("""
      {
@@ -360,6 +387,11 @@ public class DiscoveryServiceTest {
         GetObjectRequest request = GetObjectRequest.builder()
                 .bucket(TEST_SOURCE_BUCKET)
                 .key(CURSOR_KEY).build();
+
+        when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+
+        when(properties.osHttpURLTemplate())
+                .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
 
         when(s3Client.getObject(request))
                 .thenReturn(TestUtils.createResponseInputStream(TEST_CURSOR_JSON));

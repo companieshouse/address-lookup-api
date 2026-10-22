@@ -122,16 +122,12 @@ public final class ReleaseManifest {
           throw new IllegalArgumentException("Invalid recordCount");
         var order = ReleaseJson.MAPPER.treeToValue(summary, OrderSummary.class);
         order.validate(dataset.table(), type, previous, target);
-//      text(file, "package");
-//      text(file, "version");
         if (!text(file.path("zip"), "md5").matches("(?i)[a-f0-9]{32}"))
           throw new IllegalArgumentException("Invalid ZIP MD5");
         var zip = file.path("zip");
         files.put(
                 dataset,
                 new FileMetadata(
-//              text(file, "package"),
-//              text(file, "version"),
                         order,
                         new Zip(
                                 text(zip, "md5"),

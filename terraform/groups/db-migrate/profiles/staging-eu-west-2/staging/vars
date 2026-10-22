@@ -1,0 +1,15 @@
+aws_profile = "staging-eu-west-2"
+environment = "staging"
+
+# TODO: replace placeholders with real values for this environment
+vpc_name                      = "TODO"
+private_subnet_pattern        = "TODO"
+aurora_security_group_id      = "TODO"
+lambda_artefact_bucket        = "TODO"
+lambda_artefact_key           = "TODO"
+snapshot_bucket_name          = "TODO"
+snapshot_kms_key_arn          = "TODO"
+db_credentials_parameter_name = "/address-lookup/staging/db/schema-owner"
+db_credentials_kms_key_arn    = "TODO"
+concourse_role_arn            = "TODO"
+alarm_sns_topic_arn           = "TODO"

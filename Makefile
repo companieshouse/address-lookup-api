@@ -16,11 +16,12 @@ liquibase_lambda_artifact := address-lookup-liquibase-lambda
 db_bootstrap_lambda_module   := lambdas/db-bootstrap
 db_bootstrap_lambda_artifact := address-lookup-db-bootstrap
 
-# Flyway migrations in database/migrations, released on the db-schema-X.Y.Z tag
-# stream. Local repeatable seeds in database/local are never packaged.
+# Liquibase changelogs in $(api_module)/src/main/resources/db/changelog, released on the
+# db-schema-X.Y.Z tag stream. Only the master changelog and what it includes are
+# shipped; seeds and data are local only.
 db_schema_artifact  := address-lookup-db-schema
-db_schema_root      := database
-db_schema_contents  := migrations
+db_schema_root      := $(api_module)/src/main/resources
+db_schema_contents  := db/changelog/db.changelog-master.yaml db/changelog/changes/creation
 
 .PHONY: all
 all: build
@@ -55,12 +56,6 @@ test-unit:
 test-integration:
 	@# Help: Run integration tests
 	mvn -pl $(api_module),$(liquibase_lambda_module) -am integration-test verify -Dskip.unit.tests=true failsafe:verify
-
-.PHONY: test-flyway
-test-flyway:
-	@# Help: Test the Flyway database feed against fresh PostGIS
-	bash tests/test_database_layout.sh
-	mvn -pl $(api_module) -am -Dit.test=DatabaseFeedIT -Dfailsafe.failIfNoSpecifiedTests=false -Dskip.unit.tests=true test-compile failsafe:integration-test failsafe:verify
 
 # .PHONY: test-liquibase
 # test-liquibase:
@@ -117,7 +112,7 @@ endif
 
 .PHONY: package-db-schema
 package-db-schema:
-	@# Help: Package production Flyway migrations as $(db_schema_artifact)-<version>.zip
+	@# Help: Package the Liquibase changelogs as $(db_schema_artifact)-<version>.zip
 ifndef version
 	$(error No version given. Aborting)
 endif

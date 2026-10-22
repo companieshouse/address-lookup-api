@@ -39,8 +39,7 @@ public class AcquisitionConfiguration {
   }
 
   @Bean
-  DownloadService downloadService(
-      S3Client s3, OsClient os, Commands commands, AcquisitionProperties properties) {
+  DownloadService downloadService(S3Client s3, OsClient os, AcquisitionProperties properties) {
     return new DownloadService(s3, os, properties);
   }
 

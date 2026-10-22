@@ -1,0 +1,248 @@
+--liquibase formatted sql
+
+--changeset address-lookup-api:001-create-postgis-extension
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+--changeset address-lookup-api:002-create-add-gb-royalmailaddress
+CREATE TABLE add_gb_royalmailaddress (
+    udprn integer not null,
+    versiondate date not null,
+    versionavailablefromdate timestamp not null,
+    versionavailabletodate timestamp,
+    changetype varchar(50) not null,
+    theme varchar(40) not null,
+    description varchar(50) not null,
+    organisationname varchar(60),
+    departmentname varchar(60),
+    subbuildingname varchar(30),
+    buildingname varchar(50),
+    buildingnumber integer,
+    dependentthoroughfare varchar(80),
+    thoroughfare varchar(80),
+    doubledependentlocality varchar(35),
+    dependentlocality varchar(35),
+    posttown varchar(30) not null,
+    postcode varchar(8) not null,
+    postcodetype varchar(10) not null,
+    deliverypointsuffix varchar(2) not null,
+    welshdependentthoroughfare varchar(80),
+    welshthoroughfare varchar(80),
+    welshdoubledependentlocality varchar(35),
+    welshdependentlocality varchar(35),
+    welshposttown varchar(30),
+    poboxnumber varchar(13),
+    updatedate date not null,
+    entrydate date not null,
+    easting numeric(8,2) not null,
+    northing numeric(9,2) not null,
+    latitude numeric(9,7) not null,
+    longitude numeric(9,7) not null,
+    geometry geometry(Point, 27700) not null,
+    positionalaccuracy varchar(25) not null,
+    geometryallocationmethod varchar(25) not null,
+    unmatchedreason varchar(100),
+    unmatchedreasondate date,
+    uprn bigint,
+    matchedaddressfeaturetype varchar(25),
+    matchtype varchar(20) not null,
+    matchdate date,
+    matchmethod varchar(10),
+    matchingorganisation varchar(25),
+    PRIMARY KEY (udprn)
+);
+
+--reollback DROP TABLE add_gb_royalmailaddress;
+
+
+--changeset address-lookup-api:003-create-add-gb-builtaddress
+CREATE TABLE add_gb_builtaddress (
+    uprn bigint not null,
+    versiondate date not null,
+    versionavailablefromdate timestamp not null,
+    versionavailabletodate timestamp,
+    changetype varchar(50) not null,
+    theme varchar(40) not null,
+    description varchar(50) not null,
+    organisationname varchar(100),
+    poboxnumber varchar(13),
+    subname varchar(500),
+    name varchar(110),
+    "number" varchar(13),
+    streetname varchar(100) not null,
+    locality varchar(35),
+    townname varchar(35),
+    islandname varchar(50),
+    postcode varchar(8) not null,
+    fulladdress varchar(1000) not null,
+    country varchar(16) not null,
+    alternatelanguagesubname varchar(500),
+    alternatelanguagename varchar(110),
+    alternatelanguagenumber varchar(13),
+    alternatelanguagestreetname varchar(100),
+    alternatelanguagelocality varchar(35),
+    alternatelanguagetownname varchar(35),
+    alternatelanguageislandname varchar(50),
+    alternatelanguage varchar(3),
+    alternatelanguagefulladdress varchar(1000),
+    floorlevel varchar(30),
+    lowestfloorlevel numeric(3,1),
+    highestfloorlevel numeric(3,1),
+    classificationcode varchar(6) not null,
+    classificationdescription varchar(230) not null,
+    primaryclassificationdescription varchar(120) not null,
+    secondaryclassificationdescription varchar(120),
+    tertiaryclassificationdescription varchar(120),
+    quaternaryclassificationdescription varchar(120),
+    buildstatus varchar(18) not null,
+    buildstatusdate date,
+    addressstatus varchar(11) not null,
+    postcodesource varchar(148) not null,
+    parentuprn bigint,
+    rootuprn bigint,
+    hierarchylevel integer not null,
+    usrn integer not null,
+    usrnmatchindicator varchar(17) not null,
+    localcustodiancode integer not null,
+    localcustodiandescription varchar(35) not null,
+    lowertierlocalauthoritygsscode varchar(9),
+    easting numeric(8,2) not null,
+    northing numeric(9,2) not null,
+    latitude numeric(9,7) not null,
+    longitude numeric(9,7) not null,
+    geometry geometry(Point, 27700) not null,
+    positionalaccuracy varchar(25) not null,
+    effectivestartdate date not null,
+    effectiveenddate date,
+    PRIMARY KEY (uprn)
+);
+
+--rollback DROP TABLE add_gb_builtaddress;
+
+
+--changeset address-lookup-api:004-create-add-isl-royalmailaddress
+CREATE TABLE add_isl_royalmailaddress (
+    udprn integer not null,
+    versiondate date not null,
+    versionavailablefromdate timestamp not null,
+    versionavailabletodate timestamp,
+    changetype varchar(50) not null,
+    theme varchar(40) not null,
+    description varchar(50) not null,
+    organisationname varchar(60),
+    departmentname varchar(60),
+    subbuildingname varchar(30),
+    buildingname varchar(50),
+    buildingnumber integer,
+    dependentthoroughfare varchar(80),
+    thoroughfare varchar(80),
+    doubledependentlocality varchar(35),
+    dependentlocality varchar(35),
+    posttown varchar(30) not null,
+    postcode varchar(8) not null,
+    postcodetype varchar(10) not null,
+    deliverypointsuffix varchar(2) not null,
+    welshdependentthoroughfare varchar(80),
+    welshthoroughfare varchar(80),
+    welshdoubledependentlocality varchar(35),
+    welshdependentlocality varchar(35),
+    welshposttown varchar(30),
+    poboxnumber varchar(13),
+    updatedate date not null,
+    entrydate date not null,
+    easting numeric(8,2),
+    northing numeric(9,2),
+    latitude numeric(9,7) not null,
+    longitude numeric(9,7) not null,
+    geometry geometry(Point, 4258) not null,
+    positionalaccuracy varchar(25) not null,
+    geometryallocationmethod varchar(25) not null,
+    unmatchedreason varchar(100),
+    unmatchedreasondate date,
+    uprn bigint,
+    matchedaddressfeaturetype varchar(25),
+    matchtype varchar(20) not null,
+    matchdate date,
+    matchmethod varchar(10),
+    matchingorganisation varchar(25),
+    PRIMARY KEY (udprn)
+);
+
+--rollback DROP TABLE add_isl_royalmailaddress;
+
+
+--changeset address-lookup-api:005-create-add-isl-builtaddress
+CREATE TABLE add_isl_builtaddress (
+    uprn bigint not null,
+    versiondate date not null,
+    versionavailablefromdate timestamp not null,
+    versionavailabletodate timestamp,
+    changetype varchar(50) not null,
+    theme varchar(40) not null,
+    description varchar(50) not null,
+    organisationname varchar(100),
+    poboxnumber varchar(13),
+    subname varchar(500),
+    name varchar(110),
+    "number" varchar(13),
+    streetname varchar(100) not null,
+    locality varchar(35),
+    townname varchar(35),
+    islandname varchar(50),
+    postcode varchar(8) not null,
+    fulladdress varchar(1000) not null,
+    country varchar(16) not null,
+    alternatelanguagesubname varchar(500),
+    alternatelanguagename varchar(110),
+    alternatelanguagenumber varchar(13),
+    alternatelanguagestreetname varchar(100),
+    alternatelanguagelocality varchar(35),
+    alternatelanguagetownname varchar(35),
+    alternatelanguageislandname varchar(50),
+    alternatelanguage varchar(3),
+    alternatelanguagefulladdress varchar(1000),
+    floorlevel varchar(30),
+    lowestfloorlevel numeric(3,1),
+    highestfloorlevel numeric(3,1),
+    classificationcode varchar(6) not null,
+    classificationdescription varchar(230) not null,
+    primaryclassificationdescription varchar(120) not null,
+    secondaryclassificationdescription varchar(120),
+    tertiaryclassificationdescription varchar(120),
+    quaternaryclassificationdescription varchar(120),
+    buildstatus varchar(18) not null,
+    buildstatusdate date,
+    addressstatus varchar(11) not null,
+    postcodesource varchar(148) not null,
+    parentuprn bigint,
+    rootuprn bigint,
+    hierarchylevel integer not null,
+    usrn integer not null,
+    usrnmatchindicator varchar(17) not null,
+    localcustodiancode integer not null,
+    localcustodiandescription varchar(35) not null,
+    lowertierlocalauthoritygsscode varchar(9),
+    easting numeric(8,2),
+    northing numeric(9,2),
+    latitude numeric(9,7) not null,
+    longitude numeric(9,7) not null,
+    geometry geometry(Point, 4258) not null,
+    positionalaccuracy varchar(25) not null,
+    effectivestartdate date not null,
+    effectiveenddate date,
+    PRIMARY KEY (uprn)
+);
+
+--rollback DROP TABLE add_isl_builtaddress;
+
+--changeset address-lookup-api:006-create-add-gb-royalmailaddress-postcode-index
+CREATE INDEX idx_royalmailaddress_postcode_normalized
+ON add_gb_royalmailaddress (upper(replace(postcode, ' ', '')));
+
+--rollback DROP INDEX idx_royalmailaddress_postcode_normalized;
+
+
+--changeset address-lookup-api:007-create-add-isl-royalmailaddress-postcode-index
+CREATE INDEX idx_isl_royalmailaddress_postcode_normalized
+ON add_isl_royalmailaddress (upper(replace(postcode, ' ', '')));
+
+--rollback DROP INDEX idx_isl_royalmailaddress_postcode_normalized;

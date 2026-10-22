@@ -14,20 +14,14 @@ mvn -pl address-lookup-api -am package -Dskip.unit.tests=true -Dskip.integration
 
 ## Running locally
 
-ALS-83 moves database migrations and local seed SQL to the repository-root
-`database/` directory and removes the API module's Liquibase changelog
-resources. API Flyway wiring is deferred to ALS-84, so the existing API `local`
-profile is not yet connected to the new database feed. Do not rely on the
-previous Liquibase-based API startup instructions until ALS-84 is implemented.
-See [`database/README.md`](database/README.md) for the database feed layout and
-conventions.
+The application uses Spring Boot Docker Compose support to start a local PostGIS
+Postgres database from `compose.yaml`. The `local` profile uses
+`db.changelog-local.yaml`, which creates and seeds the `add_gb_royalmailaddress`
+table from `gb_royalmailaddress.csv`.
 
-Production database packages are built from `database/migrations/` with
-`make package-db-schema version=<version>`. The local-only seed files under
-`database/local/` are not included.
-
-Run the database feed layout checks and PostGIS integration test with
-`make test-flyway`. Docker is required for the integration test.
+```bash
+mvn -pl address-lookup-api spring-boot:run -Dspring-boot.run.profiles=local
+```
 
 Look up addresses by postcode:
 
@@ -41,9 +35,13 @@ Look up addresses in the legacy response format:
 curl "http://localhost:8080/address-lookup-api/multiple-addresses?postcode=WF2%207QD"
 ```
 
-The local PostGIS database is exposed on port `5433` to avoid clashing with any
-existing Postgres running on the default `5432` port. API database startup and
-external datasource configuration remain part of the ALS-84 wiring work.
+The local database is exposed on port `5433` to avoid clashing with any existing
+Postgres running on the default `5432` port.
+
+Without the `local` profile, Liquibase uses `db.changelog-master.yaml`, which
+creates the schema without loading seed data. Provide `SPRING_DATASOURCE_URL`,
+`SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD` when connecting to
+an externally hosted database.
 
 ## Environment variables
 

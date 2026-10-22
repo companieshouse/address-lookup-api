@@ -5,6 +5,7 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -14,6 +15,8 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 /** S3 progress records and scan evidence; no database dependency. */
 public final class ReleaseStore {
   public static final String CLEAN = "NO_THREATS_FOUND";
+  private static final String FIELD_S3_KEY = "s3Key";
+  private static final String FIELD_VERSION = "version";
   private final S3Client s3;
 
   public ReleaseStore(S3Client s3) {
@@ -98,10 +101,19 @@ public final class ReleaseStore {
   }
 
   public boolean clean(String bucket, JsonNode ref) {
-    String key = required(ref, "key"), version = required(ref, "version");
+    String key = ref.hasNonNull(FIELD_S3_KEY) ? required(ref, FIELD_S3_KEY) : required(ref, "key");
+    String version = ref.hasNonNull(FIELD_VERSION) ? required(ref, FIELD_VERSION) : version(bucket, key);
     if (!isClean(bucket, key, version)) return false;
     check(version.equals(version(bucket, key)), "Object changed after certification: " + key);
     return true;
+  }
+
+  public static String objectKey(JsonNode ref) {
+    return ref.hasNonNull(FIELD_S3_KEY) ? required(ref, FIELD_S3_KEY) : required(ref, "key");
+  }
+
+  public static String objectVersion(ReleaseStore store, String bucket, JsonNode ref) {
+    return ref.hasNonNull(FIELD_VERSION) ? required(ref, FIELD_VERSION) : store.version(bucket, objectKey(ref));
   }
 
   public static String planKey(JsonNode plan) {
@@ -109,7 +121,15 @@ public final class ReleaseStore {
   }
 
   public static String receiptKey(String id, String dataset, String step) {
-    return "control/" + UUID.fromString(id) + "/" + dataset + "/" + step + ".json";
+    UUID release = UUID.fromString(id);
+    if ("download".equals(step)) {
+      return "Scanned/" + release + "/" + dataset + ".receipt.json";
+    }
+    return "control/" + release + "/" + dataset + "/" + step + ".json";
+  }
+
+  public static String downloadZipKey(String id, String dataset) {
+    return "Scanned/" + UUID.fromString(id) + "/" + dataset + ".zip";
   }
 
   public JsonNode receipt(String bucket, String id, String dataset, String step) throws Exception {
@@ -120,5 +140,30 @@ public final class ReleaseStore {
       String bucket, String id, String dataset, String step, StreamingS3.Uploaded upload)
       throws Exception {
     immutable(bucket, receiptKey(id, dataset, step), JSON.valueToTree(upload));
+  }
+
+  /** Supplier ZIP details recorded in the download receipt. */
+  public record DownloadReceipt(
+      String releaseId,
+      String dataset,
+      String fileName,
+      String expectedMd5,
+      String sourceUrl,
+      Instant downloadedAt) {}
+
+  public void downloadReceipt(String bucket, DownloadReceipt details, StreamingS3.Uploaded upload)
+      throws Exception {
+    var receipt = JSON.createObjectNode();
+    receipt.put("releaseId", details.releaseId());
+    receipt.put("dataset", details.dataset());
+    receipt.put("fileName", details.fileName());
+    receipt.put(FIELD_S3_KEY, upload.key());
+    receipt.put("downloadedBytes", upload.bytes());
+    receipt.put("calculatedMd5", upload.md5());
+    receipt.put("expectedMd5", details.expectedMd5());
+    receipt.put("status", "DOWNLOADED");
+    receipt.put("downloadedAt", details.downloadedAt().toString());
+    receipt.put("sourceUrl", details.sourceUrl());
+    immutable(bucket, receiptKey(details.releaseId(), details.dataset(), "download"), receipt);
   }
 }

@@ -9,6 +9,58 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class KeyLayoutTest {
   @Test
+  void parsesReceiptsForAllDatasets() {
+    String releaseId = "f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4";
+    for (Dataset dataset : Dataset.values()) {
+      String key = "Scanned/" + releaseId + "/" + dataset.datasetName() + ".receipt.json";
+      var parsed = KeyLayout.parseObjectKey(key);
+      assertEquals(releaseId, parsed.releaseId());
+      assertEquals(dataset, parsed.dataset());
+      assertEquals(KeyLayout.FileType.RECEIPT, parsed.fileType());
+      assertThrows(IllegalArgumentException.class, () -> KeyLayout.parseZipKey(key));
+      assertThrows(IllegalArgumentException.class, () -> KeyLayout.parseCsvKey(key));
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {
+      "Scanned/../add_gb_builtaddress.receipt.json",
+      "Scanned/12345678-1234-1234-1234-123456789abc/extra/add_gb_builtaddress.receipt.json",
+      "Scanned/12345678-1234-1234-1234-123456789abc/unknown.receipt.json",
+      "Scanned/not-a-uuid/add_gb_builtaddress.receipt.json",
+      "Scanned/12345678-1234-1234-1234-123456789abc/add_gb_builtaddress.json"
+  })
+  void rejectsInvalidReceiptKeys(String key) {
+    assertThrows(IllegalArgumentException.class, () -> KeyLayout.parseObjectKey(key));
+  }
+
+  @Test
+  void parsesScannedZipWithUuidReleaseId() {
+    String releaseId = "12345678-1234-1234-1234-123456789abc";
+    for (Dataset dataset : Dataset.values()) {
+      String key = "Scanned/" + releaseId + "/" + dataset.datasetName() + ".zip";
+      var parsed = KeyLayout.parseObjectKey(key);
+      assertEquals(releaseId, parsed.releaseId());
+      assertEquals(dataset, parsed.dataset());
+      assertEquals(KeyLayout.FileType.ZIP, parsed.fileType());
+      assertEquals(key, KeyLayout.zipKey(releaseId, dataset));
+      assertEquals(releaseId, KeyLayout.parseZipKey(key).releaseId());
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {
+      "Scanned/../add_gb_builtaddress.zip",
+      "Scanned/12345678-1234-1234-1234-123456789abc/extra/add_gb_builtaddress.zip",
+      "Scanned/12345678-1234-1234-1234-123456789abc/unknown.zip",
+      "Scanned/not-a-uuid/add_gb_builtaddress.zip",
+      "Scanned/12345678-1234-1234-1234-123456789abc/add_gb_builtaddress.csv"
+  })
+  void rejectsInvalidScannedKeys(String key) {
+    assertThrows(IllegalArgumentException.class, () -> KeyLayout.parseObjectKey(key));
+  }
+
+  @Test
   void parsesReleaseAndDataset() {
     var key = KeyLayout.parseZipKey("zips/20780-131061/add_gb_builtaddress.zip");
 

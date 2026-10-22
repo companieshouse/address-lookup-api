@@ -21,6 +21,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 
 class ScanResultsServiceTest {
+  private static final String RECEIPT_RELEASE = "f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4";
+  private static final String RECEIPT_KEY =
+      "Scanned/" + RECEIPT_RELEASE + "/add_gb_royalmailaddress.receipt.json";
   private static final String BUCKET = "ingest-bucket";
   private static final String CLEAN_BUCKET = "clean-bucket";
   private static final String KEY = "zips/20780-131061/add_gb_builtaddress.zip";
@@ -54,6 +57,79 @@ class ScanResultsServiceTest {
   }
 
   @Test
+  void cleanReceiptPublishesOnlyReceiptReadyWithExactObject() throws Exception {
+    assertEquals("ReceiptReady",
+        service.scan(event(BUCKET, RECEIPT_KEY, VERSION, "NO_THREATS_FOUND")));
+    assertEquals(List.of("ReceiptReady"), types());
+    assertEquals(INGEST_SOURCE, sent.get(0).entries().get(0).source());
+    assertEquals(JSON.valueToTree(Map.of(
+        "schemaVersion", 1,
+        "releaseId", RECEIPT_RELEASE,
+        "dataset", "add_gb_royalmailaddress",
+        "object", Map.of("bucket", BUCKET, "key", RECEIPT_KEY, "versionId", VERSION))),
+        detail(0));
+  }
+
+  @Test
+  void infectedReceiptPublishesOnlyRejectionWithThreatNames() throws Exception {
+    service.scan(eventWithThreats(BUCKET, RECEIPT_KEY, VERSION));
+    assertEquals(List.of("StepRejected"), types());
+    assertEquals("MALWARE_FOUND", detail(0).path("code").asText());
+    assertEquals("receipt-scan", detail(0).path("step").asText());
+    assertEquals("Example.Malware", detail(0).path("message").asText());
+    assertEquals(RECEIPT_KEY, detail(0).path("object").path("key").asText());
+    assertEquals(VERSION, detail(0).path("object").path("versionId").asText());
+  }
+
+  @Test
+  void inconclusiveReceiptsPublishOnlyRejections() throws Exception {
+    for (String result : List.of("FAILED", "UNSUPPORTED", "ACCESS_DENIED", "UNKNOWN")) {
+      sent.clear();
+      service.scan(event(BUCKET, RECEIPT_KEY, VERSION, result));
+      assertEquals(List.of("StepRejected"), types());
+      assertEquals("SCAN_INCONCLUSIVE", detail(0).path("code").asText());
+      assertEquals("receipt-scan", detail(0).path("step").asText());
+      assertEquals(result, detail(0).path("message").asText());
+    }
+  }
+
+  @Test
+  void receiptRequiresIngestBucketAndVersion() throws Exception {
+    for (var input : List.of(
+        event(CLEAN_BUCKET, RECEIPT_KEY, VERSION, "NO_THREATS_FOUND"),
+        event(BUCKET, RECEIPT_KEY, null, "NO_THREATS_FOUND"))) {
+      sent.clear();
+      service.scan(input);
+      assertEquals(List.of("StepRejected"), types());
+      assertEquals("INVALID_INPUT", detail(0).path("code").asText());
+    }
+  }
+
+  @Test
+  void duplicateReceiptsAreRepublishedAndPublicationFailuresPropagate() throws Exception {
+    var input = event(BUCKET, RECEIPT_KEY, VERSION, "NO_THREATS_FOUND");
+    service.scan(input);
+    service.scan(input);
+    assertEquals(List.of("ReceiptReady", "ReceiptReady"), types());
+    rejectEntries = true;
+    assertThrows(IllegalArgumentException.class, () -> service.scan(input));
+  }
+
+  @Test
+  void scannedZipPreservesUuidReleaseAndExactObject() throws Exception {
+    String releaseId = "f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4";
+    String key = "Scanned/" + releaseId + "/add_isl_royalmailaddress.zip";
+    service.scan(event(BUCKET, key, VERSION, "NO_THREATS_FOUND"));
+    assertEquals(List.of("ExtractRequested"), types());
+    JsonNode payload = detail(0);
+    assertEquals(releaseId, payload.path("releaseId").asText());
+    assertEquals("add_isl_royalmailaddress", payload.path("dataset").asText());
+    assertEquals(BUCKET, payload.path("object").path("bucket").asText());
+    assertEquals(key, payload.path("object").path("key").asText());
+    assertEquals(VERSION, payload.path("object").path("versionId").asText());
+  }
+
+  @Test
   void cleanZipPublishesExtractRequestedWithExactVersion() throws Exception {
     assertEquals("ExtractRequested", service.scan(event(BUCKET, KEY, VERSION, "NO_THREATS_FOUND")));
 
@@ -61,7 +137,8 @@ class ScanResultsServiceTest {
     JsonNode d = detail(0);
     assertEquals(INGEST_SOURCE, sent.get(0).entries().get(0).source());
     assertEquals("bus", sent.get(0).entries().get(0).eventBusName());
-    assertEquals(1, d.get("schemaVersion").asInt());
+    assertTrue(d.get("schemaVersion").isInt());
+    assertEquals(1, d.get("schemaVersion").intValue());
     assertEquals("20780-131061", d.get("releaseId").asText());
     assertEquals("add_gb_builtaddress", d.get("dataset").asText());
     assertEquals(BUCKET, d.path("object").get("bucket").asText());
@@ -77,7 +154,8 @@ class ScanResultsServiceTest {
     assertEquals(List.of("DatasetReady"), types());
     JsonNode d = detail(0);
     assertEquals(INGEST_SOURCE, sent.get(0).entries().get(0).source());
-    assertEquals(1, d.get("schemaVersion").asInt());
+    assertTrue(d.get("schemaVersion").isInt());
+    assertEquals(1, d.get("schemaVersion").intValue());
     assertEquals("20780-131061", d.get("releaseId").asText());
     assertEquals("add_gb_builtaddress", d.get("dataset").asText());
     assertEquals(CLEAN_BUCKET, d.path("object").get("bucket").asText());

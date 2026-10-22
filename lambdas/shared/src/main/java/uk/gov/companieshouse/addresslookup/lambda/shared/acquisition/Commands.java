@@ -1,5 +1,7 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsRequestEntry;
 
@@ -8,6 +10,7 @@ import java.util.Map;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 public final class Commands {
+  private static final Logger LOG = LoggerFactory.getLogger(Commands.class);
   private static final String INGEST_SOURCE = "uk.gov.companieshouse.address-lookup.ingest";
 
   private final EventBridgeClient events;
@@ -29,7 +32,20 @@ public final class Commands {
   }
 
   public void sendIngestion(String action, Map<String, ?> payload) throws Exception {
+    String receipt = null;
+    if (LOG.isInfoEnabled()) {
+      receipt =
+          json.writerWithDefaultPrettyPrinter()
+              .writeValueAsString(
+                  Map.of(
+                      "source", INGEST_SOURCE,
+                      "detail-type", action,
+                      "detail", payload));
+    }
     send(action, payload, INGEST_SOURCE);
+    if (receipt != null) {
+      LOG.info("Published ingestion event to bus={}:\n{}", bus, receipt);
+    }
   }
 
   private void send(String action, Map<String, ?> payload, String source) throws Exception {

@@ -3,10 +3,13 @@ package uk.gov.companieshouse.release.model;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Shared S3 key layout for scanned ZIPs and extracted CSVs. */
+/** Shared S3 key layout for scanned ZIPs, receipts and extracted CSVs. */
 public final class KeyLayout {
   private static final Pattern OBJECT =
       Pattern.compile("^(zips|csv)/([A-Za-z0-9_]+-[A-Za-z0-9_]+)/([a-z0-9_]+)\\.(zip|csv)$");
+  private static final Pattern SCANNED_OBJECT =
+      Pattern.compile(
+          "^Scanned/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/([a-z0-9_]+)\\.(zip|receipt\\.json)$");
 
   private KeyLayout() {}
 
@@ -14,12 +17,15 @@ public final class KeyLayout {
 
   public enum FileType {
     ZIP,
-    CSV
+    CSV,
+    RECEIPT
   }
 
   public record ObjectKey(String releaseId, Dataset dataset, FileType fileType) {}
 
   public static String zipKey(String releaseId, Dataset dataset) {
+    String scannedKey = "Scanned/" + releaseId + "/" + dataset.datasetName() + ".zip";
+    if (SCANNED_OBJECT.matcher(scannedKey).matches()) return scannedKey;
     return "zips/" + releaseId + "/" + dataset.datasetName() + ".zip";
   }
 
@@ -28,10 +34,16 @@ public final class KeyLayout {
   }
 
   /**
-   * @throws IllegalArgumentException if the key is not an exact supported ZIP or CSV key
+   * @throws IllegalArgumentException if the key is not an exact supported ZIP, CSV or receipt key
    */
   public static ObjectKey parseObjectKey(String key) {
     if (key == null) throw new IllegalArgumentException("Missing S3 key");
+    Matcher scanned = SCANNED_OBJECT.matcher(key);
+    if (scanned.matches()) {
+      return new ObjectKey(
+          scanned.group(1), Dataset.named(scanned.group(2)),
+          "zip".equals(scanned.group(3)) ? FileType.ZIP : FileType.RECEIPT);
+    }
     Matcher m = OBJECT.matcher(key);
     if (!m.matches()) throw new IllegalArgumentException("Invalid object key");
     boolean zipKey = "zip".equals(m.group(4)) && "zips".equals(m.group(1));

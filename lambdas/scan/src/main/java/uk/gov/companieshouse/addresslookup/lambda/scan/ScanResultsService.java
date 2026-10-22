@@ -59,7 +59,7 @@ public final class ScanResultsService {
     } else if (versionId == null) {
       invalidReason = "missing versionId";
     } else {
-      String expectedBucket = parsed.fileType() == FileType.ZIP ? ingestBucket : cleanBucket;
+      String expectedBucket = parsed.fileType() == FileType.CSV ? cleanBucket : ingestBucket;
       if (!expectedBucket.equals(bucket)) invalidReason = "unknown bucket for object key";
     }
 
@@ -74,7 +74,11 @@ public final class ScanResultsService {
       rejectionCode = "INVALID_INPUT";
       decision = reject(payload, parsed, rejectionCode, invalidReason);
     } else if ("NO_THREATS_FOUND".equals(result)) {
-      decision = parsed.fileType() == FileType.ZIP ? "ExtractRequested" : "DatasetReady";
+      decision = switch (parsed.fileType()) {
+        case ZIP -> "ExtractRequested";
+        case CSV -> "DatasetReady";
+        case RECEIPT -> "ReceiptReady";
+      };
       commands.sendIngestion(decision, payload);
     } else {
       rejectionCode = "THREATS_FOUND".equals(result) ? "MALWARE_FOUND" : "SCAN_INCONCLUSIVE";
@@ -125,7 +129,11 @@ public final class ScanResultsService {
   }
 
   private static String step(FileType fileType) {
-    return fileType == FileType.ZIP ? "zip-scan" : "csv-scan";
+    return switch (fileType) {
+      case ZIP -> "zip-scan";
+      case CSV -> "csv-scan";
+      case RECEIPT -> "receipt-scan";
+    };
   }
 
   private static String threatNames(JsonNode detail, String fallback) {

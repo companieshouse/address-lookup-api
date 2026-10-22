@@ -23,6 +23,8 @@ import org.mockito.ArgumentMatcher;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.MockitoAnnotations;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -57,8 +59,8 @@ public class DiscoveryServiceTest {
      }
      """;
 
-    private static final String TEST_CURSOR_JSON = "{\"dataPackageId\": \"20780\", \"lastProcessedVersionId\": \"150035\" , \"lastProcessedDate\": \"2026-05-05\"}";
-    private static final String TEST_COU_UPDATE_CURSOR_JSON = "{\"dataPackageId\": \"20780\", \"lastProcessedVersionId\": \"150104\" , \"lastProcessedDate\": \"2026-10-07\"}";
+    private static final String TEST_CURSOR_JSON = "{\"dataPackageId\": \"20780\", \"lastProcessedVersionId\": \"150035\" , \"lastProcessedDate\": \"2026-10-05\"}";
+    private static final String TEST_COU_UPDATE_CURSOR_JSON = "{\"dataPackageId\": \"20780\", \"lastProcessedVersionId\": \"150104\" , \"lastProcessedDate\": \"2026-10-06\"}";
     private static final String TEST_FULL_UPDATE_CURSOR_JSON = "{\"dataPackageId\": \"20780\", \"lastProcessedVersionId\": \"130989\" , \"lastProcessedDate\": \"2026-05-01\"}";
 
     private static final String TEST_SOURCE_BUCKET = "source-bucket",
@@ -86,11 +88,13 @@ public class DiscoveryServiceTest {
     private ObjectMapper objectMapper;
     private AutoCloseable closeable;
 
+    Logger LOG = LoggerFactory.getLogger(this.getClass());
+
     @BeforeEach
     public void setUp() {
         closeable = MockitoAnnotations.openMocks(this);
-        when(properties.datasets()).thenReturn(List.of(new DatasetDefault("add_gb_royalmailaddress","1.0"),
-                new DatasetDefault("add_isl_royalmailaddress","1.0")));
+        when(properties.datasets()).thenReturn(List.of(new DatasetDefault("add_gb_royalmailaddress","2.0"),
+                new DatasetDefault("add_isl_royalmailaddress","2.0")));
         when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
         when(properties.osHttpURLTemplate())
                 .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
@@ -118,17 +122,16 @@ public class DiscoveryServiceTest {
         PutObjectRequest updateCursorRequest = PutObjectRequest.builder()
                 .bucket(TEST_SOURCE_BUCKET)
                 .key(CURSOR_KEY)
-                .ifNoneMatch("*")
                 .contentType("application/json")
                 .build();
         PutObjectRequest saveManifestRequest = PutObjectRequest.builder()
                 .bucket(TEST_SOURCE_BUCKET)
-                .key("acquisitions/2026-10-07/" + TEST_RELEASE_ID + ".json")
+                .key("acquisitions/2026-10-06/" + TEST_RELEASE_ID + ".json")
                 .ifNoneMatch("*")
                 .contentType("application/json")
                 .build();
 
-        String expectedPlanKey = "acquisitions/2026-10-07/" + TEST_RELEASE_ID + ".json";
+        String expectedPlanKey = "acquisitions/2026-10-06/" + TEST_RELEASE_ID + ".json";
 
         S3PutRequestBodyMatcher<VersionCursor> cursorUpdateMatcher = new S3PutRequestBodyMatcher<>(TEST_COU_UPDATE_CURSOR_JSON, VersionCursor.class);
 
@@ -177,7 +180,6 @@ public class DiscoveryServiceTest {
         PutObjectRequest updateCursorRequest = PutObjectRequest.builder()
                 .bucket(TEST_SOURCE_BUCKET)
                 .key(CURSOR_KEY)
-                .ifNoneMatch("*")
                 .contentType("application/json")
                 .build();
         PutObjectRequest saveManifestRequest = PutObjectRequest.builder()
@@ -457,12 +459,12 @@ public class DiscoveryServiceTest {
             boolean valid = false;
             try {
                 ReleaseManifest test = ReleaseManifest.read(objectMapper.readTree(requestBody.contentStreamProvider().newStream()));
-                if (expectedManifest != null && expectedManifest.equals(test)) {
-                    valid = true;
+                if (expectedManifest != null) {
+                    assertEquals(expectedManifest.json(), test.json());
                 }
+                valid = true;
             } catch (Exception exception) {
                 exception.printStackTrace();
-                return false;
             }
             return valid;
         }

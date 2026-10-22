@@ -4,6 +4,7 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.detail;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.TreeNode;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -21,6 +22,7 @@ import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
+import uk.gov.companieshouse.addresslookup.lambda.discovery.model.OrderSummary;
 import uk.gov.companieshouse.addresslookup.lambda.discovery.model.VersionCursor;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
@@ -28,7 +30,6 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.release.model.DatasetDefault;
 import uk.gov.companieshouse.release.model.DetailType;
 import uk.gov.companieshouse.release.model.Download;
-import uk.gov.companieshouse.release.model.OrderSummary;
 import uk.gov.companieshouse.release.model.PackageVersionData;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
 import uk.gov.companieshouse.release.model.SupplyType;
@@ -102,7 +103,7 @@ public final class DiscoveryService {
         LOG.debug("Start Discovery, mode [{}]", mode);
 
         String urlPackageVersionData = "";
-        VersionCursor cursor;
+        VersionCursor cursor = null;
         String packageId = null;
         switch (mode) {
             case FULL:
@@ -123,6 +124,10 @@ public final class DiscoveryService {
                 packageId = cursor.dataPackageId();
 
                 urlPackageVersionData = getNextVersionUrl(cursor);
+                if (urlPackageVersionData == null) {
+                    LOG.error("For mode [{}], failed to get next Version URL", mode);
+                    return "No Next Version URL";
+                }
         }
 
         PackageVersionData packageVersionData = getPackageVersionData(urlPackageVersionData);
@@ -144,7 +149,8 @@ public final class DiscoveryService {
         }
 
         ReleaseManifest releaseManifest = generateReleaseManifest(datasetDownloadsMap, packageVersionData,
-                packageId, orderSummaries, targetDate);
+                packageId, orderSummaries, targetDate,
+                cursor != null ? cursor.lastProcessedDate() : null);
 
         LOG.debug("Generated Release Manifest: [{}]", releaseManifest.json());
 
@@ -157,9 +163,12 @@ public final class DiscoveryService {
                 packageVersionData.id(),
                 targetDate.format(DateTimeFormatter.ISO_LOCAL_DATE));
 
-        saveToS3Bucket(cursor, CURSOR_KEY);
+        saveOrUpdateToS3Bucket(cursor, CURSOR_KEY);
 
-        return releaseManifest.id().toString();
+        String releaseId = releaseManifest.id().toString();
+        LOG.info("Discovery completed successfully, Release ID [{}]", releaseId);
+
+        return releaseId;
     }
 
     private SupplyType deriveMode(JsonNode input) {
@@ -178,33 +187,45 @@ public final class DiscoveryService {
         return objectMapper.readValue(response, VersionCursor.class);
     }
 
-    private void saveToS3Bucket(Object payload, String key) throws JsonProcessingException {
+    private void saveOrUpdateToS3Bucket(Object payload, String key) throws JsonProcessingException {
+        saveToS3Bucket(payload, key, false);
+    }
+
+    private void saveNewOnlyToS3Bucket(Object payload, String key) throws JsonProcessingException {
+        saveToS3Bucket(payload, key, true);
+    }
+
+    private void saveToS3Bucket(Object payload, String key, boolean ifNoneMatch) throws JsonProcessingException {
         try {
             s3Client.putObject(
                     PutObjectRequest.builder()
                             .bucket(properties.sourceBucket())
                             .key(key)
-                            .ifNoneMatch("*")
+                            .ifNoneMatch(ifNoneMatch ? "*" : null)
                             .contentType("application/json")
                             .build(),
                     RequestBody.fromString(objectMapper.writeValueAsString(payload)));
         } catch (S3Exception e) {
+            String error  = "Failed to save to S3 Bucket [" + properties.sourceBucket() + "] key [" + key + "], error: ";
+            LOG.error(error,e);
             if (e.statusCode() != 412) throw e;
         }
     }
 
-    private String getNextVersionUrl(@NotNull VersionCursor cursor) throws Exception {
+    private String getNextVersionUrl(@NotNull VersionCursor cursor) {
         String urlForPrevious = generatePackageVersionDataOsUrl(cursor.lastProcessedVersionId(),
                 cursor.dataPackageId());
 
-        PackageVersionData packageVersionData = objectMapper.treeToValue(osClient.json(urlForPrevious), PackageVersionData.class);
-
+        PackageVersionData packageVersionData = retrieveOSData(urlForPrevious, PackageVersionData.class);
+        if (packageVersionData == null) {
+            return null;
+        }
         return packageVersionData.nextVersionUrl();
     }
 
-    private PackageVersionData getPackageVersionData(String url) throws Exception {
+    private PackageVersionData getPackageVersionData(String url) {
         LOG.info("Discovery Lambda, Package Version Data URL: {}", url);
-        return objectMapper.treeToValue(osClient.json(url), PackageVersionData.class);
+        return retrieveOSData(url, PackageVersionData.class);
     }
 
     private Map<DatasetDefault, DownloadDoublet> verifyPackageVersionDataAndReturnDownloads(PackageVersionData packageVersionData) {
@@ -248,8 +269,11 @@ public final class DiscoveryService {
                                                  Map<String, OrderSummary> orderSummaries) {
         try {
             String url = entry.getValue().orderSummaryDownload.url();
-            OrderSummary orderSummary = objectMapper.treeToValue(osClient.json(url),
-                    OrderSummary.class);
+            OrderSummary orderSummary = retrieveOSData(url, OrderSummary.class);
+            if (orderSummary == null) {
+                LOG.error("Failed to retrieve Order Summary data for URL [{}]", url);
+                return;
+            }
             verifyOrderSummary(orderSummary, entry.getKey());
             orderSummaries.put(entry.getKey().name(), orderSummary);
         } catch (Exception e) {
@@ -274,7 +298,7 @@ public final class DiscoveryService {
 
         check(datasetDefault.version().equals(orderSummary.schemaVersion()),
                 String.format("Order summary version wrong, expecting [%s], actual [%s], for dataset [%s]",
-                        orderSummary.schemaVersion(), datasetDefault.version(), datasetDefault.name()));
+                        datasetDefault.version(), orderSummary.schemaVersion(), datasetDefault.name()));
 
         check(orderSummary.recordCount() > -1, String.format("Order summary record count invalid [%s], for dataset [%s]",
                 orderSummary.recordCount(), datasetDefault.name()));
@@ -301,15 +325,18 @@ public final class DiscoveryService {
         return targetDate;
     }
 
-    private ReleaseManifest generateReleaseManifest(Map<DatasetDefault, DownloadDoublet> datasets, PackageVersionData packageVersionData, String dataPackageId,
-                                                    Map<String, OrderSummary> orderSummaries, LocalDate targetDate) throws Exception {
+    private ReleaseManifest generateReleaseManifest(Map<DatasetDefault, DownloadDoublet> datasets,
+                                                    PackageVersionData packageVersionData, String dataPackageId,
+                                                    Map<String, OrderSummary> orderSummaries,
+                                                    LocalDate targetDate, String previousDate) throws Exception {
 
         final ObjectNode rootNode = objectMapper.createObjectNode();
         String mode = packageVersionData.supplyType().name();
         rootNode.put("mode", mode);
         rootNode.put("target", targetDate.format(DateTimeFormatter.ISO_DATE));
-        rootNode.put("previous", SupplyType.COU.name().equals(mode) ?
-                packageVersionData.productVersion() : null);
+        if (previousDate != null) {
+            rootNode.put("previous", previousDate);
+        }
         rootNode.put("dataPackageId", dataPackageId);
         rootNode.put("versionId", packageVersionData.id());
 
@@ -353,16 +380,43 @@ public final class DiscoveryService {
         String pathKey = String.format(PATH_KEY_STUB,
                 releaseManifest.target(), releaseManifest.id());
 
-        saveToS3Bucket(releaseManifest.json(), pathKey);
+        saveNewOnlyToS3Bucket(releaseManifest.json(), pathKey);
         return pathKey;
     }
 
     private void publishDownloadCommands(String planKey, String dataset) throws RuntimeException {
         try {
             commands.send(DetailType.DOWNLOAD.name(), planKey, dataset);
+            LOG.info("Published command DOWNLOAD for dataset [{}], planKey [{}]", dataset, planKey);
         } catch (Throwable throwable) {
             LOG.error(throwable.getMessage(), throwable);
             throw new RuntimeException("An exception occurred whilst attempting to send a DOWNLOAD command to the EventBridge", throwable);
         }
+    }
+
+    private <T> T retrieveOSData(String url, Class<T> clazz) {
+        TreeNode treeNode;
+        try {
+            treeNode = osClient.json(url);
+        } catch (Exception e) {
+            LOG.error("Failed to get data from OS for URL [{}]", url);
+            throw new RuntimeException(e);
+        }
+        if (treeNode == null || treeNode.size() == 0) {
+            LOG.error("Failed to get data from OS for URL [{}]", url);
+            return null;
+        }
+        T t;
+
+        try {
+            t = objectMapper.treeToValue(treeNode,
+                    clazz);
+        } catch (JsonProcessingException e) {
+            LOG.error("Error parsing returned OS data to class [{}], returned Data:\n{}",
+                    clazz.getName(), treeNode);
+            throw new RuntimeException(e);
+        }
+
+        return t;
     }
 }

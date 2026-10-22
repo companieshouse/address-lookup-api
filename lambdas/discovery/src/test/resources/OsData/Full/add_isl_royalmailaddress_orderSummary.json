@@ -1,7 +1,7 @@
 {
   "featureName": "add-isl-royalmailaddress",
   "crs": "http://www.opengis.net/def/crs/EPSG/0/4258",
-  "schemaVersion": "1.0",
+  "schemaVersion": "2.0",
   "validToDate": "2026-05-01",
   "recordCount": 1035955
 }

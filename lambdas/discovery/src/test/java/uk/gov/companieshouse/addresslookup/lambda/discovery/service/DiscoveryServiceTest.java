@@ -59,9 +59,29 @@ public class DiscoveryServiceTest {
      }
      """;
 
-    private static final String TEST_CURSOR_JSON = "{\"dataPackageId\": \"20780\", \"lastProcessedVersionId\": \"150035\" , \"lastProcessedDate\": \"2026-10-05\"}";
-    private static final String TEST_COU_UPDATE_CURSOR_JSON = "{\"dataPackageId\": \"20780\", \"lastProcessedVersionId\": \"150104\" , \"lastProcessedDate\": \"2026-10-06\"}";
-    private static final String TEST_FULL_UPDATE_CURSOR_JSON = "{\"dataPackageId\": \"20780\", \"lastProcessedVersionId\": \"130989\" , \"lastProcessedDate\": \"2026-05-01\"}";
+    private static final String TEST_CURSOR_JSON = """
+    {
+      "dataPackageId": "20780",
+      "lastProcessedVersionId": "150035",
+      "lastProcessedDate": "2026-10-05"
+    }
+    """;
+
+    private static final String TEST_COU_UPDATE_CURSOR_JSON = """
+      {
+        "dataPackageId": "20780",
+        "lastProcessedVersionId": "150104",
+        "lastProcessedDate": "2026-10-06"
+      }
+    """;
+
+    private static final String TEST_FULL_UPDATE_CURSOR_JSON = """
+      {
+        "dataPackageId": "20780",
+        "lastProcessedVersionId": "130989",
+        "lastProcessedDate": "2026-05-01"
+      }
+    """;
 
     private static final String TEST_SOURCE_BUCKET = "source-bucket",
             CURSOR_KEY = "control/address-release/active.json";
@@ -129,6 +149,12 @@ public class DiscoveryServiceTest {
                 JSON.readTree(
                 readFileFromClasspath("output/output-manifest-COU.json"))));
 
+        when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+        when(properties.osHttpURLTemplate())
+                .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
+
+        when(testUUID.toString()).thenReturn(TEST_RELEASE_ID);
+
         when(s3Client.getObject(request))
                 .thenReturn(TestUtils.createResponseInputStream(TEST_CURSOR_JSON));
 
@@ -187,6 +213,12 @@ public class DiscoveryServiceTest {
                 JSON.readTree(
                         readFileFromClasspath("output/output-manifest-Full.json"))));
 
+        when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+        when(properties.osHttpURLTemplate())
+                .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
+
+        when(testUUID.toString()).thenReturn(TEST_RELEASE_ID);
+
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989"))
                 .thenReturn(jsonFileToJsonNode("OsData/Full/full-data-package-20780-version-130989-data.json", JSON));
 
@@ -222,6 +254,11 @@ public class DiscoveryServiceTest {
         GetObjectRequest request = GetObjectRequest.builder()
                 .bucket(TEST_SOURCE_BUCKET)
                 .key(CURSOR_KEY).build();
+
+        when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+        when(properties.osHttpURLTemplate())
+                .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
+
         when(s3Client.getObject(request))
                 .thenReturn(TestUtils.createResponseInputStream(TEST_CURSOR_JSON));
 
@@ -260,6 +297,8 @@ public class DiscoveryServiceTest {
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_isl_royalmailaddress_orderSummary.json"))
                 .thenReturn(jsonFileToJsonNode("OsData/Full/add_isl_royalmailaddress_orderSummary.json", JSON));
+        when(properties.osHttpURLTemplate())
+                .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
 
         String response = discoveryService.discover(FULL_REQUEST_JSON);
 
@@ -284,6 +323,8 @@ public class DiscoveryServiceTest {
     @Test
     public void shouldThrowExceptionForCOUWithNoCursor() {
 
+        when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+
         try {
             discoveryService.discover(COU_REQUEST_JSON);
             fail("Should have thrown an exception");
@@ -297,6 +338,7 @@ public class DiscoveryServiceTest {
 
     @Test
     public void shouldThrowExceptionForFULLWithMissingDataPackageParameter() {
+
         try {
             discoveryService.discover("""
      {
@@ -350,6 +392,11 @@ public class DiscoveryServiceTest {
         GetObjectRequest request = GetObjectRequest.builder()
                 .bucket(TEST_SOURCE_BUCKET)
                 .key(CURSOR_KEY).build();
+
+        when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+
+        when(properties.osHttpURLTemplate())
+                .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
 
         when(s3Client.getObject(request))
                 .thenReturn(TestUtils.createResponseInputStream(TEST_CURSOR_JSON));

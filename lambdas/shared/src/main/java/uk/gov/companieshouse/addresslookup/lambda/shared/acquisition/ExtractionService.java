@@ -4,6 +4,7 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.jspecify.annotations.NonNull;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -43,7 +44,7 @@ public final class ExtractionService {
     private static final String VERSION_FIELD = "version";
     private static final String SHA256_FIELD = "sha256";
     private static final String CSV_SCAN_STATUS = "CSV_SCAN";
-    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger(ExtractionService.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExtractionService.class);
 
     private record ReceiptIdentity(String releaseId, String dataset, String zipKey,
                                    String zipVersion, String csvKey, String schemaVersion) {

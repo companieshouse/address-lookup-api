@@ -1,6 +1,8 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.os;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -14,6 +16,8 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 
 /** API key is sent only to api.os.uk, never forwarded to the signed download host. */
 public final class OsClient {
+  private static final Logger LOG = LoggerFactory.getLogger(OsClient.class);
+
   private final HttpClient http;
   private final String key;
   private final Duration requestTimeout;
@@ -34,6 +38,17 @@ public final class OsClient {
             .build();
   }
 
+  OsClient(
+      String key,
+      Duration requestTimeout,
+      com.fasterxml.jackson.databind.ObjectMapper json,
+      HttpClient http) {
+    this.key = key;
+    this.requestTimeout = requestTimeout;
+    this.json = json;
+    this.http = http;
+  }
+
   public InputStream download(String url) throws Exception {
     URI uri = URI.create(url);
     check(
@@ -49,7 +64,15 @@ public final class OsClient {
       check(
           java.util.Set.of(301, 302, 303, 307, 308).contains(r.statusCode()),
           "OS HTTP status " + r.statusCode());
-      uri = uri.resolve(r.headers().firstValue("location").orElseThrow());
+      URI next = uri.resolve(r.headers().firstValue("location").orElseThrow());
+      String sanitizedFromUrl = sanitizeUrl(uri.toString());
+      String sanitizedToUrl = sanitizeUrl(next.toString());
+      LOG.info(
+          "OS download redirect followed status={} from={} to={}",
+          r.statusCode(),
+          sanitizedFromUrl,
+          sanitizedToUrl);
+      uri = next;
     }
     throw new IOException("Too many redirects");
   }

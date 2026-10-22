@@ -126,8 +126,9 @@ final class ExtractionServiceTest {
     void rejectsMissingSourceZip() throws Exception {
         when(s3.getObjectTagging(any(GetObjectTaggingRequest.class)))
                 .thenThrow(S3Exception.builder().statusCode(404).build());
+        var unzipEvent = event();
 
-        assertThrows(S3Exception.class, () -> service.unzip(event(), context));
+        assertThrows(S3Exception.class, () -> service.unzip(unzipEvent, context));
         verify(s3, never()).getObject(argThat((GetObjectRequest request) -> ZIP_KEY.equals(request.key())));
         verifyNoInteractions(commands);
     }
@@ -192,8 +193,9 @@ final class ExtractionServiceTest {
     void failsWhenDeadlineApproachesWhileSkippingAncillaryEntries() throws Exception {
         cleanZip(zip(Map.of(DATASET + "_extra.csv", "a,b\n")));
         when(context.getRemainingTimeInMillis()).thenReturn(1_000);
+        var request = event();
 
-        var failure = assertThrows(IllegalArgumentException.class, () -> service.unzip(event(), context));
+        var failure = assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));
 
         assertEquals("Unzip deadline", failure.getMessage());
     }
@@ -233,8 +235,9 @@ final class ExtractionServiceTest {
         cleanZip(validZip());
         when(s3.headObject(any(HeadObjectRequest.class)))
                 .thenReturn(HeadObjectResponse.builder().versionId("replacement-version").build());
+        var request = event();
 
-        assertThrows(IllegalArgumentException.class, () -> service.unzip(event(), context));
+        assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));
         verify(s3, never()).createMultipartUpload(any(Consumer.class));
         verifyNoInteractions(commands);
     }
@@ -242,8 +245,9 @@ final class ExtractionServiceTest {
     @Test
     void rejectsUnsupportedExtractRequestVersion() throws Exception {
         cleanZip(validZip());
+        var request = event(2);
 
-        assertThrows(IllegalArgumentException.class, () -> service.unzip(event(2), context));
+        assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));
         verify(s3, never()).createMultipartUpload(any(Consumer.class));
         verifyNoInteractions(commands);
     }
@@ -293,7 +297,8 @@ final class ExtractionServiceTest {
         stubUpload();
         doThrow(new IllegalStateException("EventBridge unavailable"))
                 .when(commands).send("CSV_SCAN", DATASET);
-        assertThrows(IllegalStateException.class, () -> service.unzip(event(), context));
+        var request = event();
+        assertThrows(IllegalStateException.class, () -> service.unzip(request, context));
         JsonNode receipt = capturedReceipt();
         assertEquals("EXTRACTED", receipt.path("status").asText());
         verify(commands).send("CSV_SCAN", DATASET);
@@ -318,10 +323,11 @@ final class ExtractionServiceTest {
         stubUpload();
         doThrow(new IllegalStateException("EventBridge unavailable"))
                 .when(commands).send("CSV_SCAN", DATASET);
+        var request = event();
 
-        assertThrows(IllegalStateException.class, () -> service.unzip(event(), context));
+        assertThrows(IllegalStateException.class, () -> service.unzip(request, context));
         doNothing().when(commands).send("CSV_SCAN", DATASET);
-        assertEquals("CSV_SCAN", service.unzip(event(), context));
+        assertEquals("CSV_SCAN", service.unzip(request, context));
 
         verify(s3, times(1)).createMultipartUpload(any(Consumer.class));
         verify(commands, times(2)).send("CSV_SCAN", DATASET);
@@ -332,10 +338,11 @@ final class ExtractionServiceTest {
         cleanZip(validZip());
         stubUpload();
         failReceiptOnce = true;
+        var request = event();
 
-        assertThrows(S3Exception.class, () -> service.unzip(event(), context));
+        assertThrows(S3Exception.class, () -> service.unzip(request, context));
         assertTrue(objects.containsKey(stored(CHECKED, csvKey())));
-        assertEquals("CSV_SCAN", service.unzip(event(), context));
+        assertEquals("CSV_SCAN", service.unzip(request, context));
 
         verify(s3, times(2)).createMultipartUpload(any(Consumer.class));
         verify(commands).send("CSV_SCAN", DATASET);
@@ -347,10 +354,11 @@ final class ExtractionServiceTest {
         cleanZip(validZip());
         stubUpload();
         failEvidenceOnce = true;
+        var request = event();
 
-        assertThrows(S3Exception.class, () -> service.unzip(event(), context));
+        assertThrows(S3Exception.class, () -> service.unzip(request, context));
         assertTrue(objects.containsKey(stored(CHECKED, csvKey())));
-        assertEquals("CSV_SCAN", service.unzip(event(), context));
+        assertEquals("CSV_SCAN", service.unzip(request, context));
 
         assertTrue(objects.containsKey(stored(CHECKED,
                 uk.gov.companieshouse.addresslookup.lambda.shared.storage
@@ -375,8 +383,9 @@ final class ExtractionServiceTest {
         cleanZip(validZip());
         stubUpload();
         conflictingReceiptOnce = true;
+        var request = event();
 
-        assertThrows(IllegalArgumentException.class, () -> service.unzip(event(), context));
+        assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));
 
         verifyNoInteractions(commands);
     }
@@ -386,8 +395,9 @@ final class ExtractionServiceTest {
         cleanZip(validZip());
         stubUpload();
         objects.put(stored(CHECKED, csvKey()), "different CSV".getBytes(StandardCharsets.UTF_8));
+        var request = event();
 
-        assertThrows(IllegalArgumentException.class, () -> service.unzip(event(), context));
+        assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));
         verifyNoInteractions(commands);
     }
 
@@ -401,8 +411,9 @@ final class ExtractionServiceTest {
                         + "\"key\":\"" + csvKey()
                         + "\",\"status\":\"EXTRACTED\",\"version\":\"csv-version\",\"sha256\":\"abc\"}")
                         .getBytes(StandardCharsets.UTF_8));
+        var request = event();
 
-        assertThrows(IllegalArgumentException.class, () -> service.unzip(event(), context));
+        assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));
         verify(s3, never()).createMultipartUpload(any(Consumer.class));
         verifyNoInteractions(commands);
     }

@@ -22,6 +22,7 @@ public final class ReleaseStore {
   public static final String CLEAN = "NO_THREATS_FOUND";
   private static final String FIELD_S3_KEY = "s3Key";
   private static final String FIELD_VERSION = "version";
+  private static final String SCANNED_PREFIX = "Scanned/";
   private final S3Client s3;
 
   public ReleaseStore(S3Client s3) {
@@ -128,17 +129,17 @@ public final class ReleaseStore {
   public static String receiptKey(String id, String dataset, String step) {
     UUID release = UUID.fromString(id);
     if ("download".equals(step)) {
-      return "Scanned/" + release + "/" + dataset + ".receipt.json";
+      return SCANNED_PREFIX + release + "/" + dataset + ".receipt.json";
     }
     return "control/" + release + "/" + dataset + "/" + step + ".json";
   }
 
   public static String extractedCsvKey(String id, String dataset) {
-    return "Scanned/" + UUID.fromString(id) + "/" + dataset + ".csv";
+    return SCANNED_PREFIX + UUID.fromString(id) + "/" + dataset + ".csv";
   }
 
   public static String downloadZipKey(String id, String dataset) {
-    return "Scanned/" + UUID.fromString(id) + "/" + dataset + ".zip";
+    return SCANNED_PREFIX + UUID.fromString(id) + "/" + dataset + ".zip";
   }
 
   public JsonNode receipt(String bucket, String id, String dataset, String step) throws Exception {

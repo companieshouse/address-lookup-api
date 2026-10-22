@@ -173,9 +173,7 @@ public final class ExtractionService {
 
                 var receiptData = buildUnzipReceiptData(expected, result, names.size());
                 var headers = receiptData.putArray("csvHeaders");
-                for (String headerName : extractionHeaders) {
-                    headers.add(headerName);
-                }
+                extractionHeaders.forEach(headers::add);
                 LOGGER.info("UNZIP - receiptData={}\n", receiptData);
 
                 saveExtractReceipt(store, scanBucket, checked, receiptData, result, expected);

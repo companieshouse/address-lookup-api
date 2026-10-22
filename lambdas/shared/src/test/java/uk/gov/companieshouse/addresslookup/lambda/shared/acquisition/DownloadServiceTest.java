@@ -394,6 +394,7 @@ final class DownloadServiceTest {
         return new AcquisitionProperties(
                 BUCKET,
                 "scanned-bucket",
+                BUCKET,
                 "event-bus",
                 "redacted",
                 "{}",

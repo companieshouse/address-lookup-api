@@ -28,7 +28,6 @@ final class AcquisitionConfigurationTest {
         assertNotNull(commands);
         assertNotNull(configuration.discoveryService(s3, os, commands, properties));
         assertNotNull(configuration.downloadService(s3, os, commands, properties));
-        assertNotNull(configuration.scanResultsService(s3, commands, properties));
         assertNotNull(configuration.extractionService(s3, properties));
     }
 
@@ -55,6 +54,7 @@ final class AcquisitionConfigurationTest {
         return new AcquisitionProperties(
                 "source-bucket",
                 "scanned-bucket",
+                "ingest-bucket",
                 eventBus,
                 osApiKey,
                 "{}",
@@ -65,4 +65,3 @@ final class AcquisitionConfigurationTest {
                 Duration.ofSeconds(840));
     }
 }
-

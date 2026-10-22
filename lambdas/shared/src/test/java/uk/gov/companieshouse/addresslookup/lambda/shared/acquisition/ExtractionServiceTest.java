@@ -174,7 +174,7 @@ final class ExtractionServiceTest {
     @Test
     void constructorRequiresScannedBucket() {
         var properties = new AcquisitionProperties(
-                BUCKET, " ", "bus", "key", "{}", 1024, 1024, 20, Duration.ofSeconds(1), Duration.ofSeconds(1));
+                BUCKET, " ", BUCKET, "bus", "key", "{}", 1024, 1024, 20, Duration.ofSeconds(1), Duration.ofSeconds(1));
 
         var client = s3.client();
 
@@ -222,6 +222,7 @@ final class ExtractionServiceTest {
                 new AcquisitionProperties(
                         BUCKET,
                         SCANNED_BUCKET,
+                        BUCKET,
                         "event-bus",
                         "redacted",
                         "{}",
@@ -281,4 +282,3 @@ final class ExtractionServiceTest {
         }
     }
 }
-

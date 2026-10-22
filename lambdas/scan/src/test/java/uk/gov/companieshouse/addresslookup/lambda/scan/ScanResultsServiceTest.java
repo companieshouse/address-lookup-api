@@ -21,6 +21,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 
 class ScanResultsServiceTest {
+  private static final String MANIFEST_RELEASE = "f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4";
+  private static final String MANIFEST_KEY =
+      "acquisitions/2026-10-15/" + MANIFEST_RELEASE + ".json";
   private static final String RECEIPT_RELEASE = "f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4";
   private static final String RECEIPT_KEY =
       "Scanned/" + RECEIPT_RELEASE + "/add_gb_royalmailaddress.receipt.json";
@@ -54,6 +57,76 @@ class ScanResultsServiceTest {
                 });
     service =
         new ScanResultsService(new Commands(client, "bus", JSON), BUCKET, CLEAN_BUCKET);
+  }
+
+  @Test
+  void cleanManifestPublishesOnlyManifestReadyWithExactObjectAndNoDataset() throws Exception {
+    assertEquals("ManifestReady",
+        service.scan(event(BUCKET, MANIFEST_KEY, VERSION, "NO_THREATS_FOUND")));
+    assertEquals(List.of("ManifestReady"), types());
+    assertEquals(INGEST_SOURCE, sent.get(0).entries().get(0).source());
+    assertEquals(JSON.valueToTree(Map.of(
+        "schemaVersion", 1,
+        "releaseId", MANIFEST_RELEASE,
+        "object", Map.of("bucket", BUCKET, "key", MANIFEST_KEY, "versionId", VERSION))),
+        detail(0));
+    assertTrue(detail(0).path("schemaVersion").isInt());
+    assertFalse(detail(0).has("dataset"));
+  }
+
+  @Test
+  void infectedManifestPublishesOnlyRejectionWithThreatNames() throws Exception {
+    service.scan(eventWithThreats(BUCKET, MANIFEST_KEY, VERSION));
+    assertEquals(List.of("StepRejected"), types());
+    assertEquals("MALWARE_FOUND", detail(0).path("code").asText());
+    assertEquals("manifest-scan", detail(0).path("step").asText());
+    assertEquals("Example.Malware", detail(0).path("message").asText());
+    assertEquals(MANIFEST_RELEASE, detail(0).path("releaseId").asText());
+    assertEquals(VERSION, detail(0).path("object").path("versionId").asText());
+    assertFalse(detail(0).has("dataset"));
+  }
+
+  @Test
+  void inconclusiveManifestsPublishOnlyRejections() throws Exception {
+    for (String result : List.of("FAILED", "UNSUPPORTED", "ACCESS_DENIED", "UNKNOWN", "")) {
+      sent.clear();
+      service.scan(event(BUCKET, MANIFEST_KEY, VERSION, result));
+      assertEquals(List.of("StepRejected"), types());
+      assertEquals("SCAN_INCONCLUSIVE", detail(0).path("code").asText());
+      assertEquals("manifest-scan", detail(0).path("step").asText());
+      assertEquals(result.isEmpty() ? "Missing scan result" : result,
+          detail(0).path("message").asText());
+      assertFalse(detail(0).has("dataset"));
+    }
+  }
+
+  @Test
+  void manifestsRequireIngestBucketVersionAndValidKey() throws Exception {
+    for (var input : List.of(
+        event(CLEAN_BUCKET, MANIFEST_KEY, VERSION, "NO_THREATS_FOUND"),
+        event(BUCKET, MANIFEST_KEY, null, "NO_THREATS_FOUND"),
+        event(BUCKET, MANIFEST_KEY, " ", "NO_THREATS_FOUND"),
+        event(BUCKET, "acquisitions/2026-02-30/" + MANIFEST_RELEASE + ".json",
+            VERSION, "NO_THREATS_FOUND"))) {
+      sent.clear();
+      service.scan(input);
+      assertEquals(List.of("StepRejected"), types());
+      assertEquals("INVALID_INPUT", detail(0).path("code").asText());
+    }
+  }
+
+  @Test
+  void manifestDuplicatesAreRepublishedAndPublishFailuresPropagate() throws Exception {
+    var input = event(BUCKET, MANIFEST_KEY, VERSION, "NO_THREATS_FOUND");
+    service.scan(input);
+    service.scan(input);
+    assertEquals(List.of("ManifestReady", "ManifestReady"), types());
+    assertEquals(detail(0), detail(1));
+    rejectEntries = true;
+    assertThrows(IllegalArgumentException.class, () -> service.scan(input));
+    rejectEntries = false;
+    failPublish = true;
+    assertThrows(IllegalStateException.class, () -> service.scan(input));
   }
 
   @Test

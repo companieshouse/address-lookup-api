@@ -78,6 +78,7 @@ public final class ScanResultsService {
         case ZIP -> "ExtractRequested";
         case CSV -> "DatasetReady";
         case RECEIPT -> "ReceiptReady";
+        case MANIFEST -> "ManifestReady";
       };
       commands.sendIngestion(decision, payload);
     } else {
@@ -115,7 +116,7 @@ public final class ScanResultsService {
     payload.put("schemaVersion", 1);
     if (parsed != null) {
       payload.put("releaseId", parsed.releaseId());
-      payload.put("dataset", parsed.dataset().datasetName());
+      if (parsed.dataset() != null) payload.put("dataset", parsed.dataset().datasetName());
     }
     return payload;
   }
@@ -133,6 +134,7 @@ public final class ScanResultsService {
       case ZIP -> "zip-scan";
       case CSV -> "csv-scan";
       case RECEIPT -> "receipt-scan";
+      case MANIFEST -> "manifest-scan";
     };
   }
 
@@ -170,7 +172,8 @@ public final class ScanResultsService {
       String decision,
       Object message) {
     String releaseId = parsed == null ? null : parsed.releaseId();
-    String dataset = parsed == null ? null : parsed.dataset().datasetName();
+    String dataset =
+        parsed == null || parsed.dataset() == null ? null : parsed.dataset().datasetName();
     String fileType = parsed == null ? null : parsed.fileType().name();
     if ("MALWARE_FOUND".equals(rejectionCode) || "SCAN_INCONCLUSIVE".equals(rejectionCode)) {
       LOG.error(

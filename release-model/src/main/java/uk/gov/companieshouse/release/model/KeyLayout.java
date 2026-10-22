@@ -2,14 +2,20 @@ package uk.gov.companieshouse.release.model;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 
-/** Shared S3 key layout for scanned ZIPs, receipts and extracted CSVs. */
+/** Shared S3 key layout for scanned ZIPs, receipts, manifests and extracted CSVs. */
 public final class KeyLayout {
+  private static final String UUID =
+      "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
   private static final Pattern OBJECT =
       Pattern.compile("^(zips|csv)/([A-Za-z0-9_]+-[A-Za-z0-9_]+)/([a-z0-9_]+)\\.(zip|csv)$");
   private static final Pattern SCANNED_OBJECT =
       Pattern.compile(
-          "^Scanned/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/([a-z0-9_]+)\\.(zip|receipt\\.json)$");
+          "^Scanned/(" + UUID + ")/([a-z0-9_]+)\\.(zip|receipt\\.json)$");
+  private static final Pattern MANIFEST =
+      Pattern.compile("^acquisitions/([0-9]{4}-[0-9]{2}-[0-9]{2})/(" + UUID + ")\\.json$");
 
   private KeyLayout() {}
 
@@ -18,9 +24,11 @@ public final class KeyLayout {
   public enum FileType {
     ZIP,
     CSV,
-    RECEIPT
+    RECEIPT,
+    MANIFEST
   }
 
+  /** Dataset is absent for release-level manifests. */
   public record ObjectKey(String releaseId, Dataset dataset, FileType fileType) {}
 
   public static String zipKey(String releaseId, Dataset dataset) {
@@ -34,10 +42,19 @@ public final class KeyLayout {
   }
 
   /**
-   * @throws IllegalArgumentException if the key is not an exact supported ZIP, CSV or receipt key
+   * @throws IllegalArgumentException if the key is not an exact supported object key
    */
   public static ObjectKey parseObjectKey(String key) {
     if (key == null) throw new IllegalArgumentException("Missing S3 key");
+    Matcher manifest = MANIFEST.matcher(key);
+    if (manifest.matches()) {
+      try {
+        LocalDate.parse(manifest.group(1));
+      } catch (DateTimeParseException e) {
+        throw new IllegalArgumentException("Invalid manifest date", e);
+      }
+      return new ObjectKey(manifest.group(2), null, FileType.MANIFEST);
+    }
     Matcher scanned = SCANNED_OBJECT.matcher(key);
     if (scanned.matches()) {
       return new ObjectKey(

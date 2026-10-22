@@ -9,6 +9,30 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class KeyLayoutTest {
   @Test
+  void parsesManifestWithoutDataset() {
+    String releaseId = "f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4";
+    String key = "acquisitions/2026-10-15/" + releaseId + ".json";
+    var parsed = KeyLayout.parseObjectKey(key);
+    assertEquals(releaseId, parsed.releaseId());
+    assertNull(parsed.dataset());
+    assertEquals(KeyLayout.FileType.MANIFEST, parsed.fileType());
+    assertThrows(IllegalArgumentException.class, () -> KeyLayout.parseZipKey(key));
+    assertThrows(IllegalArgumentException.class, () -> KeyLayout.parseCsvKey(key));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {
+      "acquisitions/../f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4.json",
+      "acquisitions/2026-02-30/f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4.json",
+      "acquisitions/2026-10-15/not-a-uuid.json",
+      "acquisitions/2026-10-15/extra/f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4.json",
+      "acquisitions/2026-10-15/f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4.csv"
+  })
+  void rejectsInvalidManifestKeys(String key) {
+    assertThrows(IllegalArgumentException.class, () -> KeyLayout.parseObjectKey(key));
+  }
+
+  @Test
   void parsesReceiptsForAllDatasets() {
     String releaseId = "f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4";
     for (Dataset dataset : Dataset.values()) {

@@ -7,10 +7,12 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CompletedPart;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
@@ -38,6 +40,12 @@ public final class StreamingS3 {
     public static final class ChecksumMismatchException extends Exception {
         public ChecksumMismatchException(String expected, String actual) {
             super("OS MD5 checksum mismatch: expected=" + expected + " actual=" + actual);
+        }
+    }
+
+    public static final class ExistingObjectVerificationException extends Exception {
+        public ExistingObjectVerificationException(Throwable cause) {
+            super("Could not verify existing extracted CSV", cause);
         }
     }
 
@@ -161,7 +169,8 @@ public final class StreamingS3 {
     }
 
     private String completeUpload(String bucket, String key, String upload,
-                                  List<CompletedPart> parts, boolean reuseExisting, String actualSha) throws Exception {
+                                  List<CompletedPart> parts, boolean reuseExisting, String actualSha)
+            throws ExistingObjectVerificationException {
         try {
             var result =
                     s3.completeMultipartUpload(
@@ -181,15 +190,21 @@ public final class StreamingS3 {
             String version = s3.headObject(
                     HeadObjectRequest.builder().bucket(bucket).key(key).build()).versionId();
             check(version != null && !"null".equals(version), S3_VERSIONING_MESSAGE);
-            var existingSha = MessageDigest.getInstance("SHA-256");
-            try (var existing =
-                         new DigestInputStream(
-                                 s3.getObject(
-                                         GetObjectRequest.builder().bucket(bucket).key(key).versionId(version).build()),
-                                 existingSha)) {
-                existing.transferTo(OutputStream.nullOutputStream());
+            String existingChecksum;
+            try {
+                var existingSha = MessageDigest.getInstance("SHA-256");
+                try (var existing =
+                             new DigestInputStream(
+                                     s3.getObject(
+                                             GetObjectRequest.builder().bucket(bucket).key(key).versionId(version).build()),
+                                     existingSha)) {
+                    existing.transferTo(OutputStream.nullOutputStream());
+                }
+                existingChecksum = HexFormat.of().formatHex(existingSha.digest());
+            } catch (IOException | NoSuchAlgorithmException verificationFailure) {
+                throw new ExistingObjectVerificationException(verificationFailure);
             }
-            check(actualSha.equals(HexFormat.of().formatHex(existingSha.digest())),
+            check(actualSha.equals(existingChecksum),
                     "Existing extracted CSV differs from the source ZIP");
             return version;
         }

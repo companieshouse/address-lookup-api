@@ -18,7 +18,7 @@ public final class Commands {
   private final String bus;
   private final ObjectMapper json;
 
-  static final class CommandDispatchException extends EventPublicationException {
+  public static final class CommandDispatchException extends EventPublicationException {
     CommandDispatchException(String message) {
       super(message);
     }

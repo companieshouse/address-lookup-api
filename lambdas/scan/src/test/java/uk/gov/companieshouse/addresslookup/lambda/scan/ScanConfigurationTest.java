@@ -27,7 +27,7 @@ class ScanConfigurationTest {
   void createsScanServiceWithoutSourceBucket() {
     var properties = new AcquisitionProperties(
         null, "clean-bucket", "ingest-bucket", "event-bus", null, null,
-        1024, 1024, 20, Duration.ofSeconds(20), Duration.ofSeconds(840));
+        1024, null, null, 1024, 20, Duration.ofSeconds(20), Duration.ofSeconds(840));
 
     assertNotNull(new ScanConfiguration().scanResultsService(null, properties));
   }

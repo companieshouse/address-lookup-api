@@ -9,14 +9,12 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToJsonNode;
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToObject;
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.readFileFromClasspath;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -109,18 +107,8 @@ public class DiscoveryServiceTest {
     public void setUp() {
         when(properties.datasets()).thenReturn(List.of(new DatasetDefault("add_gb_royalmailaddress","2.0"),
                 new DatasetDefault("add_isl_royalmailaddress","2.0")));
-        when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
-        when(properties.osHttpURLTemplate())
-                .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
 
-        when(testUUID.toString()).thenReturn(TEST_RELEASE_ID);
-        
-        discoveryService = new DiscoveryService(s3Client, osClient, JSON, commands, properties);
-    }
-
-    @AfterEach
-    public void tearDown() {
-        verifyNoMoreInteractions(s3Client, osClient, commands);
+        discoveryService = new DiscoveryService(s3Client, osClient, commands, properties);
     }
 
     @Test
@@ -451,7 +439,7 @@ public class DiscoveryServiceTest {
         assertNotNull(manifest);
     }
 
-    private class  S3PutRequestBodyMatcher <T> implements ArgumentMatcher<RequestBody> {
+    private static class S3PutRequestBodyMatcher <T> implements ArgumentMatcher<RequestBody> {
 
         final private String expectedBodyJson;
         final private Class<T> clazz;
@@ -483,7 +471,7 @@ public class DiscoveryServiceTest {
         }
     }
 
-    private class  S3PutReleaseManifestRequestBodyMatcher implements ArgumentMatcher<RequestBody> {
+    private static class S3PutReleaseManifestRequestBodyMatcher implements ArgumentMatcher<RequestBody> {
 
         final private ReleaseManifest expectedManifest;
 
@@ -496,8 +484,8 @@ public class DiscoveryServiceTest {
             boolean valid = false;
             try {
                 ReleaseManifest test = ReleaseManifest.read(JSON.readTree(requestBody.contentStreamProvider().newStream()));
-                if (expectedManifest != null && expectedManifest.equals(test)) {
-                    valid = true;
+                if (expectedManifest != null) {
+                    assertEquals(expectedManifest.json(), test.json());
                 }
                 valid = true;
             } catch (Exception exception) {

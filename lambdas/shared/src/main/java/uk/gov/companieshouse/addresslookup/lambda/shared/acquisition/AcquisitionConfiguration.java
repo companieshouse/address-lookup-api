@@ -1,8 +1,6 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.springframework.beans.factory.annotation.Qualifier;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,6 +11,7 @@ import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AwsClientsConfiguration;
+import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport;
 
 /**
  * Each red-zone handler creates only its own entry service and dependencies. No database wiring.
@@ -25,27 +24,17 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AwsClientsConfi
 public class AcquisitionConfiguration {
 
   @Bean
-  ObjectMapper addressLookupObjectMapper() {
-    ObjectMapper objectMapper = new ObjectMapper();
-    objectMapper.registerModule(new JavaTimeModule());
-    return objectMapper;
-  }
-
-  @Bean
-  OsClient osClient(AcquisitionProperties properties,
-                    @Qualifier("addressLookupObjectMapper") ObjectMapper objectMapper) {
+  OsClient osClient(AcquisitionProperties properties) {
     return new OsClient(
         AcquisitionProperties.required(properties.osApiKey(), "OS_API_KEY"),
         properties.connectTimeout(),
-        properties.requestTimeout(),
-            objectMapper);
+        properties.requestTimeout());
   }
 
   @Bean
-  Commands commands(EventBridgeClient events, AcquisitionProperties properties,
-                    @Qualifier("addressLookupObjectMapper") ObjectMapper objectMapper) {
+  Commands commands(EventBridgeClient events, AcquisitionProperties properties) {
     return new Commands(
-        events, AcquisitionProperties.required(properties.eventBus(), "EVENT_BUS"), objectMapper);
+        events, AcquisitionProperties.required(properties.eventBus(), "EVENT_BUS"), JSON);
   }
 
   @Bean

@@ -5,6 +5,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
@@ -28,18 +31,20 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 
+@ExtendWith(MockitoExtension.class)
 final class DownloadServiceTest {
     private static final String BUCKET = "source-bucket";
     private static final String PLAN_KEY =
             "acquisitions/2026-05-16/4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json";
     private static final String RELEASE_ID = "4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56";
     private static final String DATASET = "add_gb_royalmailaddress";
+    @Mock
+    private OsClient os;
 
     @Test
     void downloadsOnlyTheDatasetNamedByTheEventBridgeCommand() throws Exception {
@@ -48,7 +53,6 @@ final class DownloadServiceTest {
         var s3 = new FakeS3();
         s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifest));
         String expectedUrl = manifest.path(DATASET).path("zip").path("url").asText();
-        var os = mock(OsClient.class);
         when(os.download(expectedUrl)).thenReturn(new ByteArrayInputStream(zip));
         var service = new DownloadService(s3.client(), os, properties());
 
@@ -193,7 +197,6 @@ final class DownloadServiceTest {
         var event = event();
         event.put("detail", Map.of("planKey", PLAN_KEY, "dataset", "not_a_real_dataset"));
         var s3 = new FakeS3();
-        var os = mock(OsClient.class);
         var service = new DownloadService(s3.client(), os, properties());
         var context = context();
 
@@ -208,7 +211,6 @@ final class DownloadServiceTest {
         byte[] zip = "trimmed command zip".getBytes(StandardCharsets.UTF_8);
         var s3 = new FakeS3();
         s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifestWithSelectedMd5(md5(zip))));
-        var os = mock(OsClient.class);
         when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
         var event = event();
         event.put("detail", Map.of("planKey", "  " + PLAN_KEY + "  ", "dataset", "  " + DATASET + "  "));
@@ -223,7 +225,6 @@ final class DownloadServiceTest {
         byte[] zip = "event zip bytes".getBytes(StandardCharsets.UTF_8);
         var s3 = new FakeS3();
         s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifestWithSelectedMd5(md5(zip))));
-        var os = mock(OsClient.class);
         when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
         var service = new DownloadService(s3.client(), os, properties());
 
@@ -236,7 +237,6 @@ final class DownloadServiceTest {
     void doesNotPublishEventOnChecksumMismatch() throws Exception {
         var s3 = new FakeS3();
         s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
-        var os = mock(OsClient.class);
         when(os.download(anyString())).thenReturn(new ByteArrayInputStream("wrong content".getBytes(StandardCharsets.UTF_8)));
         var service = new DownloadService(s3.client(), os, properties());
 
@@ -249,7 +249,6 @@ final class DownloadServiceTest {
         var s3 = new FakeS3();
         s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
         s3.objects.put(ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download"), "{}".getBytes(StandardCharsets.UTF_8));
-        var os = mock(OsClient.class);
         var service = new DownloadService(s3.client(), os, properties());
 
         assertEquals("SKIPPED", service.download(event(), context()));
@@ -260,7 +259,6 @@ final class DownloadServiceTest {
     @Test
     void failsWithoutDownloadingWhenPlanFileDoesNotExist() throws Exception {
         var s3 = new FakeS3();
-        var os = mock(OsClient.class);
         var service = new DownloadService(s3.client(), os, properties());
         var event = event();
         var context = context();
@@ -297,9 +295,8 @@ final class DownloadServiceTest {
         assertArrayEquals(original, s3.objects.get(receiptKey));
     }
 
-    private static void assertRejected(Map<String, Object> event, String expectedMessage) {
+    private void assertRejected(Map<String, Object> event, String expectedMessage) {
         var s3 = new FakeS3();
-        var os = mock(OsClient.class);
         var service = new DownloadService(s3.client(), os, properties());
         var context = context();
 
@@ -314,9 +311,7 @@ final class DownloadServiceTest {
     @Test
     void eachDatasetCommandDownloadsOnlyItsNamedZip() throws Exception {
         for (String dataset : List.of(
-                "add_gb_builtaddress",
                 "add_gb_royalmailaddress",
-                "add_isl_builtaddress",
                 "add_isl_royalmailaddress")) {
             byte[] zip = ("zip for " + dataset).getBytes(StandardCharsets.UTF_8);
             var manifest = manifestWithMd5(dataset, md5(zip));
@@ -324,7 +319,6 @@ final class DownloadServiceTest {
             s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifest));
             var event = event();
             event.put("detail", Map.of("planKey", PLAN_KEY, "dataset", dataset));
-            var os = mock(OsClient.class);
             when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
             var service = new DownloadService(s3.client(), os, properties());
 
@@ -339,7 +333,6 @@ final class DownloadServiceTest {
     void checksumMismatchAbortsUploadAndDoesNotPublishReceipt() throws Exception {
         var s3 = new FakeS3();
         s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
-        var os = mock(OsClient.class);
         when(os.download(anyString())).thenReturn(new ByteArrayInputStream("wrong content".getBytes(StandardCharsets.UTF_8)));
         var service = new DownloadService(s3.client(), os, properties());
         var out = new java.io.ByteArrayOutputStream();
@@ -383,7 +376,6 @@ final class DownloadServiceTest {
                                 "status", "DOWNLOADED",
                                 "downloadedAt", "2026-05-16T09:15:23Z",
                                 "sourceUrl", "https://api.os.uk/example")));
-        var os = mock(OsClient.class);
         var service = new DownloadService(s3.client(), os, properties());
 
         assertEquals("SKIPPED", service.download(event(), context()));

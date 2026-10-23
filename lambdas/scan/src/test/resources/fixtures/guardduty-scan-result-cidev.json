@@ -6,7 +6,7 @@
   "detail": {
     "s3ObjectDetails": {
       "bucketName": "ingest-bucket",
-      "objectKey": "zips/20780-131061/add_gb_builtaddress.zip",
+      "objectKey": "zips/20780-131061/add_gb_royalmailaddress.zip",
       "versionId": "3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY"
     },
     "scanStatus": "COMPLETED",

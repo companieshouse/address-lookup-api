@@ -87,10 +87,10 @@ class KeyLayoutTest {
 
   @Test
   void parsesReleaseAndDataset() {
-    var key = KeyLayout.parseZipKey("zips/20780-131061/add_gb_builtaddress.zip");
+    var key = KeyLayout.parseZipKey("zips/20780-131061/add_gb_royalmailaddress.zip");
 
     assertEquals("20780-131061", key.releaseId());
-    assertEquals(Dataset.ADD_GB_BUILTADDRESS, key.dataset());
+    assertEquals(Dataset.ADD_GB_ROYALMAILADDRESS, key.dataset());
   }
 
   @Test
@@ -111,10 +111,10 @@ class KeyLayoutTest {
   void parsesObjectFileType() {
     assertEquals(
         KeyLayout.FileType.ZIP,
-        KeyLayout.parseObjectKey("zips/rel-1/add_gb_builtaddress.zip").fileType());
+        KeyLayout.parseObjectKey("zips/rel-1/add_gb_royalmailaddress.zip").fileType());
     assertEquals(
         KeyLayout.FileType.CSV,
-        KeyLayout.parseObjectKey("csv/rel-1/add_gb_builtaddress.csv").fileType());
+        KeyLayout.parseObjectKey("csv/rel-1/add_gb_royalmailaddress.csv").fileType());
   }
 
   @ParameterizedTest

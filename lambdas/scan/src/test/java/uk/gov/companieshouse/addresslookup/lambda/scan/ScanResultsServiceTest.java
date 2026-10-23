@@ -39,8 +39,8 @@ class ScanResultsServiceTest {
       "Scanned/" + RECEIPT_RELEASE + "/add_gb_royalmailaddress.receipt.json";
   private static final String BUCKET = "ingest-bucket";
   private static final String CLEAN_BUCKET = "clean-bucket";
-  private static final String KEY = "zips/20780-131061/add_gb_builtaddress.zip";
-  private static final String CSV_KEY = "csv/20780-131061/add_gb_builtaddress.csv";
+  private static final String KEY = "zips/20780-131061/add_gb_royalmailaddress.zip";
+  private static final String CSV_KEY = "csv/20780-131061/add_gb_royalmailaddress.csv";
   private static final String VERSION = "3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY";
   private static final String INGEST_SOURCE = "uk.gov.companieshouse.address-lookup.ingest";
 
@@ -220,7 +220,7 @@ class ScanResultsServiceTest {
     assertTrue(d.get("schemaVersion").isInt());
     assertEquals(1, d.get("schemaVersion").intValue());
     assertEquals("20780-131061", d.get("releaseId").asText());
-    assertEquals("add_gb_builtaddress", d.get("dataset").asText());
+    assertEquals("add_gb_royalmailaddress", d.get("dataset").asText());
     assertEquals(BUCKET, d.path("object").get("bucket").asText());
     assertEquals(KEY, d.path("object").get("key").asText());
     assertEquals(VERSION, d.path("object").get("versionId").asText());
@@ -237,7 +237,7 @@ class ScanResultsServiceTest {
     assertTrue(d.get("schemaVersion").isInt());
     assertEquals(1, d.get("schemaVersion").intValue());
     assertEquals("20780-131061", d.get("releaseId").asText());
-    assertEquals("add_gb_builtaddress", d.get("dataset").asText());
+    assertEquals("add_gb_royalmailaddress", d.get("dataset").asText());
     assertEquals(CLEAN_BUCKET, d.path("object").get("bucket").asText());
     assertEquals(CSV_KEY, d.path("object").get("key").asText());
     assertEquals(VERSION, d.path("object").get("versionId").asText());
@@ -347,8 +347,7 @@ class ScanResultsServiceTest {
 
   @ParameterizedTest(name = "dataset: {0}")
   @ValueSource(strings = {
-      "add_gb_builtaddress", "add_gb_royalmailaddress",
-      "add_isl_builtaddress", "add_isl_royalmailaddress"
+      "add_gb_royalmailaddress", "add_isl_royalmailaddress"
   })
   void eachDatasetIsRoutedIndependently(String dataset) throws Exception {
     service.scan(event(BUCKET, "zips/r-1/" + dataset + ".zip", VERSION, "NO_THREATS_FOUND"));
@@ -407,7 +406,7 @@ class ScanResultsServiceTest {
         Arguments.of("unsafe path",
             event(BUCKET, "zips/../add_gb_builtaddress.zip", VERSION, "NO_THREATS_FOUND")),
         Arguments.of("incorrect extension for prefix",
-            event(BUCKET, "zips/20780-131061/add_gb_builtaddress.csv", VERSION, "NO_THREATS_FOUND")),
+            event(BUCKET, "zips/20780-131061/add_gb_royalmailaddress.csv", VERSION, "NO_THREATS_FOUND")),
         Arguments.of("missing version",
             event(BUCKET, KEY, null, "NO_THREATS_FOUND")),
         Arguments.of("unexpected source",

@@ -1,6 +1,9 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.s3.S3Client;
 
@@ -9,13 +12,15 @@ import java.time.Duration;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.mock;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 
+@ExtendWith(MockitoExtension.class)
 final class AcquisitionConfigurationTest {
     private final AcquisitionConfiguration configuration = new AcquisitionConfiguration();
-    private final S3Client s3 = mock(S3Client.class);
-    private final EventBridgeClient events = mock(EventBridgeClient.class);
+    @Mock
+    private S3Client s3;
+    @Mock
+    private EventBridgeClient events;
 
     @Test
     void createsEveryServiceFromValidProperties() {
@@ -28,7 +33,7 @@ final class AcquisitionConfigurationTest {
         assertNotNull(commands);
         assertNotNull(configuration.discoveryService(s3, os, commands, properties));
         assertNotNull(configuration.downloadService(s3, os, commands, properties));
-        assertNotNull(configuration.extractionService(s3, properties));
+        assertNotNull(configuration.extractionService(s3, commands, properties));
     }
 
     @Test

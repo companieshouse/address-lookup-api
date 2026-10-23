@@ -47,7 +47,7 @@ public final class ScanResultsService {
 
     Validation validation = validate(input, bucket, key, versionId);
     KeyLayout.ObjectKey parsed = validation.parsed();
-    String invalidReason = validation.reason();
+    InvalidReason invalidReason = validation.reason();
 
     Map<String, Object> payload = basePayload(parsed);
     if (parsed != null) {
@@ -58,7 +58,7 @@ public final class ScanResultsService {
     String rejectionCode = null;
     if (invalidReason != null) {
       rejectionCode = "INVALID_INPUT";
-      decision = reject(payload, parsed, rejectionCode, invalidReason);
+      decision = reject(payload, parsed, rejectionCode, invalidReason.message());
     } else if ("NO_THREATS_FOUND".equals(result)) {
       decision = switch (parsed.fileType()) {
         case ZIP -> "ExtractRequested";
@@ -87,7 +87,7 @@ public final class ScanResultsService {
     return decision;
   }
 
-  private record Validation(KeyLayout.ObjectKey parsed, String reason) {}
+  private record Validation(KeyLayout.ObjectKey parsed, InvalidReason reason) {}
 
   private Validation validate(JsonNode input, String bucket, String key, String versionId) {
     KeyLayout.ObjectKey parsed;
@@ -98,13 +98,14 @@ public final class ScanResultsService {
     }
     if (!SOURCE.equals(text(input, "source"))
         || !DETAIL_TYPE.equals(text(input, "detail-type"))) {
-      return new Validation(parsed, "unexpected source or detail type");
+      return new Validation(parsed, InvalidReason.UNEXPECTED_SOURCE_OR_DETAIL_TYPE);
     }
-    if (parsed == null) return new Validation(null, "invalid object key");
-    if (versionId == null) return new Validation(parsed, "missing versionId");
+    if (parsed == null) return new Validation(null, InvalidReason.INVALID_OBJECT_KEY);
+    if (versionId == null) return new Validation(parsed, InvalidReason.MISSING_VERSION_ID);
     String expectedBucket = parsed.fileType() == FileType.CSV ? cleanBucket : ingestBucket;
     return new Validation(
-        parsed, expectedBucket.equals(bucket) ? null : "unknown bucket for object key");
+        parsed,
+        expectedBucket.equals(bucket) ? null : InvalidReason.UNKNOWN_BUCKET_FOR_OBJECT_KEY);
   }
 
   private String reject(

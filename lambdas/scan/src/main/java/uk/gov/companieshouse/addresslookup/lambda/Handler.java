@@ -3,6 +3,7 @@ package uk.gov.companieshouse.addresslookup.lambda;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import uk.gov.companieshouse.addresslookup.lambda.scan.ScanApplication;
+import uk.gov.companieshouse.addresslookup.lambda.scan.ScanProcessingException;
 import uk.gov.companieshouse.addresslookup.lambda.scan.ScanResultsService;
 
 import java.util.Map;
@@ -15,7 +16,7 @@ public final class Handler implements RequestHandler<Map<String, Object>, String
     try {
       return service.scan(event);
     } catch (Exception e) {
-      throw new RuntimeException("scan failed; PutEvents failures are retried", e);
+      throw new ScanProcessingException(e);
     }
   }
 }

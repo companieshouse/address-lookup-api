@@ -23,6 +23,7 @@ public final class ScanResultsService {
   private static final Logger LOG = LoggerFactory.getLogger(ScanResultsService.class);
   private static final String SOURCE = "aws.guardduty";
   private static final String DETAIL_TYPE = "GuardDuty Malware Protection Object Scan Result";
+  private static final String MALWARE_FOUND = "MALWARE_FOUND";
 
   private final Commands commands;
   private final String ingestBucket;
@@ -44,24 +45,9 @@ public final class ScanResultsService {
     String versionId = text(s3Object, "versionId");
     String result = text(detail.path("scanResultDetails"), "scanResultStatus");
 
-    KeyLayout.ObjectKey parsed = null;
-    String invalidReason = null;
-    try {
-      parsed = KeyLayout.parseObjectKey(key);
-    } catch (IllegalArgumentException e) {
-      invalidReason = "invalid object key";
-    }
-    if (!SOURCE.equals(text(input, "source"))
-        || !DETAIL_TYPE.equals(text(input, "detail-type"))) {
-      invalidReason = "unexpected source or detail type";
-    } else if (parsed == null) {
-      invalidReason = "invalid object key";
-    } else if (versionId == null) {
-      invalidReason = "missing versionId";
-    } else {
-      String expectedBucket = parsed.fileType() == FileType.CSV ? cleanBucket : ingestBucket;
-      if (!expectedBucket.equals(bucket)) invalidReason = "unknown bucket for object key";
-    }
+    Validation validation = validate(input, bucket, key, versionId);
+    KeyLayout.ObjectKey parsed = validation.parsed();
+    String invalidReason = validation.reason();
 
     Map<String, Object> payload = basePayload(parsed);
     if (parsed != null) {
@@ -82,9 +68,9 @@ public final class ScanResultsService {
       };
       commands.sendIngestion(decision, payload);
     } else {
-      rejectionCode = "THREATS_FOUND".equals(result) ? "MALWARE_FOUND" : "SCAN_INCONCLUSIVE";
+      rejectionCode = "THREATS_FOUND".equals(result) ? MALWARE_FOUND : "SCAN_INCONCLUSIVE";
       String message =
-          "MALWARE_FOUND".equals(rejectionCode)
+          MALWARE_FOUND.equals(rejectionCode)
               ? threatNames(detail, result)
               : resultOrUnknown(result);
       decision = reject(payload, parsed, rejectionCode, message);
@@ -99,6 +85,26 @@ public final class ScanResultsService {
         rejectionCode == null ? decision : "StepRejected:" + rejectionCode,
         rejectionCode == null ? null : payload.get("message"));
     return decision;
+  }
+
+  private record Validation(KeyLayout.ObjectKey parsed, String reason) {}
+
+  private Validation validate(JsonNode input, String bucket, String key, String versionId) {
+    KeyLayout.ObjectKey parsed;
+    try {
+      parsed = KeyLayout.parseObjectKey(key);
+    } catch (IllegalArgumentException e) {
+      parsed = null;
+    }
+    if (!SOURCE.equals(text(input, "source"))
+        || !DETAIL_TYPE.equals(text(input, "detail-type"))) {
+      return new Validation(parsed, "unexpected source or detail type");
+    }
+    if (parsed == null) return new Validation(null, "invalid object key");
+    if (versionId == null) return new Validation(parsed, "missing versionId");
+    String expectedBucket = parsed.fileType() == FileType.CSV ? cleanBucket : ingestBucket;
+    return new Validation(
+        parsed, expectedBucket.equals(bucket) ? null : "unknown bucket for object key");
   }
 
   private String reject(
@@ -175,7 +181,7 @@ public final class ScanResultsService {
     String dataset =
         parsed == null || parsed.dataset() == null ? null : parsed.dataset().datasetName();
     String fileType = parsed == null ? null : parsed.fileType().name();
-    if ("MALWARE_FOUND".equals(rejectionCode) || "SCAN_INCONCLUSIVE".equals(rejectionCode)) {
+    if (MALWARE_FOUND.equals(rejectionCode) || "SCAN_INCONCLUSIVE".equals(rejectionCode)) {
       LOG.error(
           "Scan routed eventId={} releaseId={} dataset={} fileType={} scanResult={} versionId={} decision={} details={}",
           eventId,

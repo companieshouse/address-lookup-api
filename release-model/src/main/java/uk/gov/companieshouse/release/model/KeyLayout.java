@@ -10,12 +10,12 @@ public final class KeyLayout {
   private static final String UUID =
       "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
   private static final Pattern OBJECT =
-      Pattern.compile("^(zips|csv)/([A-Za-z0-9_]+-[A-Za-z0-9_]+)/([a-z0-9_]+)\\.(zip|csv)$");
+      Pattern.compile("^(zips|csv)/(\\w+-\\w+)/([a-z0-9_]+)\\.(zip|csv)$");
   private static final Pattern SCANNED_OBJECT =
       Pattern.compile(
           "^Scanned/(" + UUID + ")/([a-z0-9_]+)\\.(zip|receipt\\.json)$");
   private static final Pattern MANIFEST =
-      Pattern.compile("^acquisitions/([0-9]{4}-[0-9]{2}-[0-9]{2})/(" + UUID + ")\\.json$");
+      Pattern.compile("^acquisitions/(\\d{4}-\\d{2}-\\d{2})/(" + UUID + ")\\.json$");
 
   private KeyLayout() {}
 

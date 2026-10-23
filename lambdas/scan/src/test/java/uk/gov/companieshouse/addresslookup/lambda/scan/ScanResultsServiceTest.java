@@ -5,6 +5,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
@@ -19,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
@@ -87,45 +92,46 @@ class ScanResultsServiceTest {
     assertFalse(detail(0).has("dataset"));
   }
 
-  @Test
-  void inconclusiveManifestsPublishOnlyRejections() throws Exception {
-    for (String result : List.of("FAILED", "UNSUPPORTED", "ACCESS_DENIED", "UNKNOWN", "")) {
-      sent.clear();
-      service.scan(event(BUCKET, MANIFEST_KEY, VERSION, result));
-      assertEquals(List.of("StepRejected"), types());
-      assertEquals("SCAN_INCONCLUSIVE", detail(0).path("code").asText());
-      assertEquals("manifest-scan", detail(0).path("step").asText());
-      assertEquals(result.isEmpty() ? "Missing scan result" : result,
-          detail(0).path("message").asText());
-      assertFalse(detail(0).has("dataset"));
-    }
+  @ParameterizedTest(name = "manifest result: [{0}]")
+  @ValueSource(strings = {"FAILED", "UNSUPPORTED", "ACCESS_DENIED", "UNKNOWN", ""})
+  void inconclusiveManifestsPublishOnlyRejections(String result) throws Exception {
+    service.scan(event(BUCKET, MANIFEST_KEY, VERSION, result));
+    assertEquals(List.of("StepRejected"), types());
+    assertEquals("SCAN_INCONCLUSIVE", detail(0).path("code").asText());
+    assertEquals("manifest-scan", detail(0).path("step").asText());
+    assertEquals(result.isEmpty() ? "Missing scan result" : result,
+        detail(0).path("message").asText());
+    assertFalse(detail(0).has("dataset"));
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("invalidManifestEvents")
+  void manifestsRequireIngestBucketVersionAndValidKey(
+      String scenario, Map<String, Object> input) throws Exception {
+    service.scan(input);
+    assertEquals(List.of("StepRejected"), types());
+    assertEquals("INVALID_INPUT", detail(0).path("code").asText());
   }
 
   @Test
-  void manifestsRequireIngestBucketVersionAndValidKey() throws Exception {
-    for (var input : List.of(
-        event(CLEAN_BUCKET, MANIFEST_KEY, VERSION, "NO_THREATS_FOUND"),
-        event(BUCKET, MANIFEST_KEY, null, "NO_THREATS_FOUND"),
-        event(BUCKET, MANIFEST_KEY, " ", "NO_THREATS_FOUND"),
-        event(BUCKET, "acquisitions/2026-02-30/" + MANIFEST_RELEASE + ".json",
-            VERSION, "NO_THREATS_FOUND"))) {
-      sent.clear();
-      service.scan(input);
-      assertEquals(List.of("StepRejected"), types());
-      assertEquals("INVALID_INPUT", detail(0).path("code").asText());
-    }
-  }
-
-  @Test
-  void manifestDuplicatesAreRepublishedAndPublishFailuresPropagate() throws Exception {
+  void manifestDuplicatesAreRepublished() throws Exception {
     var input = event(BUCKET, MANIFEST_KEY, VERSION, "NO_THREATS_FOUND");
     service.scan(input);
     service.scan(input);
     assertEquals(List.of("ManifestReady", "ManifestReady"), types());
     assertEquals(detail(0), detail(1));
+  }
+
+  @Test
+  void manifestRejectedPublicationPropagates() {
+    var input = event(BUCKET, MANIFEST_KEY, VERSION, "NO_THREATS_FOUND");
     rejectEntries = true;
     assertThrows(EventPublicationException.class, () -> service.scan(input));
-    rejectEntries = false;
+  }
+
+  @Test
+  void manifestPublishFailurePropagates() {
+    var input = event(BUCKET, MANIFEST_KEY, VERSION, "NO_THREATS_FOUND");
     failPublish = true;
     assertThrows(IllegalStateException.class, () -> service.scan(input));
   }
@@ -155,36 +161,36 @@ class ScanResultsServiceTest {
     assertEquals(VERSION, detail(0).path("object").path("versionId").asText());
   }
 
-  @Test
-  void inconclusiveReceiptsPublishOnlyRejections() throws Exception {
-    for (String result : List.of("FAILED", "UNSUPPORTED", "ACCESS_DENIED", "UNKNOWN")) {
-      sent.clear();
-      service.scan(event(BUCKET, RECEIPT_KEY, VERSION, result));
-      assertEquals(List.of("StepRejected"), types());
-      assertEquals("SCAN_INCONCLUSIVE", detail(0).path("code").asText());
-      assertEquals("receipt-scan", detail(0).path("step").asText());
-      assertEquals(result, detail(0).path("message").asText());
-    }
+  @ParameterizedTest(name = "receipt result: {0}")
+  @ValueSource(strings = {"FAILED", "UNSUPPORTED", "ACCESS_DENIED", "UNKNOWN"})
+  void inconclusiveReceiptsPublishOnlyRejections(String result) throws Exception {
+    service.scan(event(BUCKET, RECEIPT_KEY, VERSION, result));
+    assertEquals(List.of("StepRejected"), types());
+    assertEquals("SCAN_INCONCLUSIVE", detail(0).path("code").asText());
+    assertEquals("receipt-scan", detail(0).path("step").asText());
+    assertEquals(result, detail(0).path("message").asText());
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("invalidReceiptEvents")
+  void receiptRequiresIngestBucketAndVersion(
+      String scenario, Map<String, Object> input) throws Exception {
+    service.scan(input);
+    assertEquals(List.of("StepRejected"), types());
+    assertEquals("INVALID_INPUT", detail(0).path("code").asText());
   }
 
   @Test
-  void receiptRequiresIngestBucketAndVersion() throws Exception {
-    for (var input : List.of(
-        event(CLEAN_BUCKET, RECEIPT_KEY, VERSION, "NO_THREATS_FOUND"),
-        event(BUCKET, RECEIPT_KEY, null, "NO_THREATS_FOUND"))) {
-      sent.clear();
-      service.scan(input);
-      assertEquals(List.of("StepRejected"), types());
-      assertEquals("INVALID_INPUT", detail(0).path("code").asText());
-    }
-  }
-
-  @Test
-  void duplicateReceiptsAreRepublishedAndPublicationFailuresPropagate() throws Exception {
+  void duplicateReceiptsAreRepublished() throws Exception {
     var input = event(BUCKET, RECEIPT_KEY, VERSION, "NO_THREATS_FOUND");
     service.scan(input);
     service.scan(input);
     assertEquals(List.of("ReceiptReady", "ReceiptReady"), types());
+  }
+
+  @Test
+  void receiptRejectedPublicationPropagates() {
+    var input = event(BUCKET, RECEIPT_KEY, VERSION, "NO_THREATS_FOUND");
     rejectEntries = true;
     assertThrows(EventPublicationException.class, () -> service.scan(input));
   }
@@ -259,16 +265,14 @@ class ScanResultsServiceTest {
     assertFalse(types().contains("DatasetReady"));
   }
 
-  @Test
-  void csvInconclusiveResultsAreRejectedWithoutProgressing() throws Exception {
-    for (String result : List.of("UNSUPPORTED", "ACCESS_DENIED", "FAILED", "UNKNOWN")) {
-      sent.clear();
-      service.scan(event(CLEAN_BUCKET, CSV_KEY, VERSION, result));
-      assertEquals(List.of("StepRejected"), types());
-      assertEquals("SCAN_INCONCLUSIVE", detail(0).get("code").asText());
-      assertEquals("csv-scan", detail(0).get("step").asText());
-      assertEquals(result, detail(0).get("message").asText());
-    }
+  @ParameterizedTest(name = "CSV result: {0}")
+  @ValueSource(strings = {"UNSUPPORTED", "ACCESS_DENIED", "FAILED", "UNKNOWN"})
+  void csvInconclusiveResultsAreRejectedWithoutProgressing(String result) throws Exception {
+    service.scan(event(CLEAN_BUCKET, CSV_KEY, VERSION, result));
+    assertEquals(List.of("StepRejected"), types());
+    assertEquals("SCAN_INCONCLUSIVE", detail(0).get("code").asText());
+    assertEquals("csv-scan", detail(0).get("step").asText());
+    assertEquals(result, detail(0).get("message").asText());
   }
 
   @Test
@@ -298,34 +302,23 @@ class ScanResultsServiceTest {
     assertEquals("zip-scan", detail(0).get("step").asText());
   }
 
-  @Test
-  void inconclusiveResultsPublishScanInconclusive() throws Exception {
-    for (String result : List.of("UNSUPPORTED", "ACCESS_DENIED", "FAILED", "SOMETHING_NEW")) {
-      sent.clear();
-      service.scan(event(BUCKET, KEY, VERSION, result));
-      assertEquals(List.of("StepRejected"), types());
-      assertEquals("SCAN_INCONCLUSIVE", detail(0).get("code").asText());
-      assertEquals("zip-scan", detail(0).get("step").asText());
-      assertEquals(result, detail(0).get("message").asText());
-    }
+  @ParameterizedTest(name = "ZIP result: {0}")
+  @ValueSource(strings = {"UNSUPPORTED", "ACCESS_DENIED", "FAILED", "SOMETHING_NEW"})
+  void inconclusiveResultsPublishScanInconclusive(String result) throws Exception {
+    service.scan(event(BUCKET, KEY, VERSION, result));
+    assertEquals(List.of("StepRejected"), types());
+    assertEquals("SCAN_INCONCLUSIVE", detail(0).get("code").asText());
+    assertEquals("zip-scan", detail(0).get("step").asText());
+    assertEquals(result, detail(0).get("message").asText());
   }
 
-  @Test
-  void invalidInputPublishesInvalidInput() throws Exception {
-    var cases =
-        List.of(
-            event("other-bucket", KEY, VERSION, "NO_THREATS_FOUND"),
-            event(BUCKET, "zips/20780-131061/unknown.zip", VERSION, "NO_THREATS_FOUND"),
-            event(BUCKET, "zips/../add_gb_builtaddress.zip", VERSION, "NO_THREATS_FOUND"),
-            event(BUCKET, "zips/20780-131061/add_gb_builtaddress.csv", VERSION, "NO_THREATS_FOUND"),
-            event(BUCKET, KEY, null, "NO_THREATS_FOUND"),
-            Map.<String, Object>of("source", "aws.s3", "detail", Map.of()));
-    for (var c : cases) {
-      sent.clear();
-      service.scan(c);
-      assertEquals(List.of("StepRejected"), types());
-      assertEquals("INVALID_INPUT", detail(0).get("code").asText());
-    }
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("invalidEvents")
+  void invalidInputPublishesInvalidInput(
+      String scenario, Map<String, Object> input) throws Exception {
+    service.scan(input);
+    assertEquals(List.of("StepRejected"), types());
+    assertEquals("INVALID_INPUT", detail(0).get("code").asText());
   }
 
   @Test
@@ -352,26 +345,23 @@ class ScanResultsServiceTest {
         EventPublicationException.class, () -> service.scan(input));
   }
 
-  @Test
-  void eachDatasetIsRoutedIndependently() throws Exception {
-    for (String dataset :
-        List.of(
-            "add_gb_builtaddress",
-            "add_gb_royalmailaddress",
-            "add_isl_builtaddress",
-            "add_isl_royalmailaddress")) {
-      service.scan(event(BUCKET, "zips/r-1/" + dataset + ".zip", VERSION, "NO_THREATS_FOUND"));
-    }
-    assertEquals(4, sent.size());
-    assertEquals("add_isl_royalmailaddress", detail(3).get("dataset").asText());
+  @ParameterizedTest(name = "dataset: {0}")
+  @ValueSource(strings = {
+      "add_gb_builtaddress", "add_gb_royalmailaddress",
+      "add_isl_builtaddress", "add_isl_royalmailaddress"
+  })
+  void eachDatasetIsRoutedIndependently(String dataset) throws Exception {
+    service.scan(event(BUCKET, "zips/r-1/" + dataset + ".zip", VERSION, "NO_THREATS_FOUND"));
+    assertEquals(List.of("ExtractRequested"), types());
+    assertEquals(dataset, detail(0).get("dataset").asText());
   }
 
-  @Test
-  void rejectedEventsNeverCarryExtractRequested() throws Exception {
-    service.scan(event(BUCKET, KEY, VERSION, "THREATS_FOUND"));
-    service.scan(event(BUCKET, KEY, VERSION, "FAILED"));
-    service.scan(event("other", KEY, VERSION, "NO_THREATS_FOUND"));
-    assertFalse(types().contains("ExtractRequested"));
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("rejectedEvents")
+  void rejectedEventsNeverCarryExtractRequested(
+      String scenario, Map<String, Object> input) throws Exception {
+    service.scan(input);
+    assertEquals(List.of("StepRejected"), types());
   }
 
   @Test
@@ -385,6 +375,50 @@ class ScanResultsServiceTest {
     assertEquals(
         "StepRejected:INVALID_INPUT",
         service.scan(event(BUCKET, KEY, " ", "NO_THREATS_FOUND")));
+  }
+
+  private static Stream<Arguments> invalidManifestEvents() {
+    return Stream.of(
+        Arguments.of("manifest in wrong bucket",
+            event(CLEAN_BUCKET, MANIFEST_KEY, VERSION, "NO_THREATS_FOUND")),
+        Arguments.of("manifest missing version",
+            event(BUCKET, MANIFEST_KEY, null, "NO_THREATS_FOUND")),
+        Arguments.of("manifest blank version",
+            event(BUCKET, MANIFEST_KEY, " ", "NO_THREATS_FOUND")),
+        Arguments.of("manifest invalid date",
+            event(BUCKET, "acquisitions/2026-02-30/" + MANIFEST_RELEASE + ".json",
+                VERSION, "NO_THREATS_FOUND")));
+  }
+
+  private static Stream<Arguments> invalidReceiptEvents() {
+    return Stream.of(
+        Arguments.of("receipt in wrong bucket",
+            event(CLEAN_BUCKET, RECEIPT_KEY, VERSION, "NO_THREATS_FOUND")),
+        Arguments.of("receipt missing version",
+            event(BUCKET, RECEIPT_KEY, null, "NO_THREATS_FOUND")));
+  }
+
+  private static Stream<Arguments> invalidEvents() {
+    return Stream.of(
+        Arguments.of("unknown bucket",
+            event("other-bucket", KEY, VERSION, "NO_THREATS_FOUND")),
+        Arguments.of("unknown dataset",
+            event(BUCKET, "zips/20780-131061/unknown.zip", VERSION, "NO_THREATS_FOUND")),
+        Arguments.of("unsafe path",
+            event(BUCKET, "zips/../add_gb_builtaddress.zip", VERSION, "NO_THREATS_FOUND")),
+        Arguments.of("incorrect extension for prefix",
+            event(BUCKET, "zips/20780-131061/add_gb_builtaddress.csv", VERSION, "NO_THREATS_FOUND")),
+        Arguments.of("missing version",
+            event(BUCKET, KEY, null, "NO_THREATS_FOUND")),
+        Arguments.of("unexpected source",
+            Map.<String, Object>of("source", "aws.s3", "detail", Map.of())));
+  }
+
+  private static Stream<Arguments> rejectedEvents() {
+    return Stream.of(
+        Arguments.of("infected ZIP", event(BUCKET, KEY, VERSION, "THREATS_FOUND")),
+        Arguments.of("failed scan", event(BUCKET, KEY, VERSION, "FAILED")),
+        Arguments.of("unknown bucket", event("other", KEY, VERSION, "NO_THREATS_FOUND")));
   }
 
   private List<String> types() {

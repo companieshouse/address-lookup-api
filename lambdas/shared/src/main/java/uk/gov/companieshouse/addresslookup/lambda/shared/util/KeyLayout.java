@@ -1,4 +1,7 @@
-package uk.gov.companieshouse.release.model;
+package uk.gov.companieshouse.addresslookup.lambda.shared.util;
+
+import lombok.experimental.UtilityClass;
+import uk.gov.companieshouse.release.model.Dataset;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -6,7 +9,8 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 
 /** Shared S3 key layout for scanned ZIPs, receipts, manifests and extracted CSVs. */
-public final class KeyLayout {
+@UtilityClass
+public class KeyLayout {
   private static final String UUID =
       "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
   private static final Pattern OBJECT =
@@ -16,8 +20,6 @@ public final class KeyLayout {
           "^Scanned/(" + UUID + ")/([a-z0-9_]+)\\.(zip|receipt\\.json)$");
   private static final Pattern MANIFEST =
       Pattern.compile("^acquisitions/(\\d{4}-\\d{2}-\\d{2})/(" + UUID + ")\\.json$");
-
-  private KeyLayout() {}
 
   public record ZipKey(String releaseId, Dataset dataset) {}
 

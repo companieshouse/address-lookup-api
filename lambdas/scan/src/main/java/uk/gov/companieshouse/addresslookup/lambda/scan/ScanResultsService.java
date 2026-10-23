@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
-import uk.gov.companieshouse.release.model.KeyLayout;
-import uk.gov.companieshouse.release.model.KeyLayout.FileType;
+import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
+import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.FileType;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

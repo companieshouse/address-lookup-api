@@ -6,8 +6,23 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Acquisition
 import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ScanConfigurationTest {
+  @Test
+  void constructorRequiresIngestBucket() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new ScanResultsService(null, null, "clean-bucket"));
+  }
+
+  @Test
+  void constructorRequiresCleanBucket() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new ScanResultsService(null, "ingest-bucket", null));
+  }
+
   @Test
   void createsScanServiceWithoutSourceBucket() {
     var properties = new AcquisitionProperties(

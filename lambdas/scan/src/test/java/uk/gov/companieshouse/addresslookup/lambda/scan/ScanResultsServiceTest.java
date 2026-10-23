@@ -4,13 +4,15 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsRequest;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsResponse;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 
 import java.io.InputStream;
-import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -18,8 +20,10 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.when;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 
+@ExtendWith(MockitoExtension.class)
 class ScanResultsServiceTest {
   private static final String MANIFEST_RELEASE = "f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4";
   private static final String MANIFEST_KEY =
@@ -38,23 +42,19 @@ class ScanResultsServiceTest {
   private boolean failPublish;
   private boolean rejectEntries;
   private ScanResultsService service;
+  @Mock private EventBridgeClient client;
 
   @BeforeEach
-  @SuppressWarnings("unchecked")
   void setUp() {
-    EventBridgeClient client =
-        (EventBridgeClient)
-            Proxy.newProxyInstance(
-                getClass().getClassLoader(),
-                new Class<?>[] {EventBridgeClient.class},
-                (proxy, method, args) -> {
-                  if (!method.getName().equals("putEvents")) return null;
-                  if (failPublish) throw new IllegalStateException("EventBridge unavailable");
-                  var builder = PutEventsRequest.builder();
-                  ((Consumer<PutEventsRequest.Builder>) args[0]).accept(builder);
-                  sent.add(builder.build());
-                  return PutEventsResponse.builder().failedEntryCount(rejectEntries ? 1 : 0).build();
-                });
+    when(client.putEvents(org.mockito.ArgumentMatchers.<Consumer<PutEventsRequest.Builder>>any()))
+        .thenAnswer(invocation -> {
+          if (failPublish) throw new IllegalStateException("EventBridge unavailable");
+          var builder = PutEventsRequest.builder();
+          Consumer<PutEventsRequest.Builder> request = invocation.getArgument(0);
+          request.accept(builder);
+          sent.add(builder.build());
+          return PutEventsResponse.builder().failedEntryCount(rejectEntries ? 1 : 0).build();
+        });
     service =
         new ScanResultsService(new Commands(client, "bus", JSON), BUCKET, CLEAN_BUCKET);
   }
@@ -383,18 +383,6 @@ class ScanResultsServiceTest {
     assertEquals(
         "StepRejected:INVALID_INPUT",
         service.scan(event(BUCKET, KEY, " ", "NO_THREATS_FOUND")));
-  }
-
-  @Test
-  void constructorRequiresIngestBucket() {
-    assertThrows(
-        IllegalArgumentException.class, () -> new ScanResultsService(null, null, CLEAN_BUCKET));
-  }
-
-  @Test
-  void constructorRequiresCleanBucket() {
-    assertThrows(
-        IllegalArgumentException.class, () -> new ScanResultsService(null, BUCKET, null));
   }
 
   private List<String> types() {

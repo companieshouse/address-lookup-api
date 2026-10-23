@@ -72,6 +72,7 @@ public final class ExtractionService {
         this.s3 = s3;
         this.properties = properties;
         this.commands = commands;
+        AcquisitionProperties.required(properties.sourceBucket(), "SOURCE_BUCKET");
         AcquisitionProperties.required(properties.scannedBucket(), "SCANNED_BUCKET");
     }
 

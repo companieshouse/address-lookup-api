@@ -1,21 +1,21 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
 
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsRequestEntry;
 
 import java.util.Map;
-
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 public final class Commands {
   private final EventBridgeClient events;
   private final String bus;
   private final com.fasterxml.jackson.databind.ObjectMapper json;
 
-  Commands(EventBridgeClient events, String bus, com.fasterxml.jackson.databind.ObjectMapper json) {
+  Commands(EventBridgeClient events, String bus) {
     this.events = events;
     this.bus = bus;
-    this.json = json;
+    this.json = JSON;
   }
 
   public void send(String action, String planKey, String dataset) throws Exception {

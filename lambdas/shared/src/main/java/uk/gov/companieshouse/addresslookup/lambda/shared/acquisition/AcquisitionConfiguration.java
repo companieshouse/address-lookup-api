@@ -1,8 +1,5 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,27 +22,17 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AwsClientsConfi
 public class AcquisitionConfiguration {
 
   @Bean
-  ObjectMapper addressLookupObjectMapper() {
-    ObjectMapper objectMapper = new ObjectMapper();
-    objectMapper.registerModule(new JavaTimeModule());
-    return objectMapper;
-  }
-
-  @Bean
-  OsClient osClient(AcquisitionProperties properties,
-                    @Qualifier("addressLookupObjectMapper") ObjectMapper objectMapper) {
+  OsClient osClient(AcquisitionProperties properties) {
     return new OsClient(
         AcquisitionProperties.required(properties.osApiKey(), "OS_API_KEY"),
         properties.connectTimeout(),
-        properties.requestTimeout(),
-            objectMapper);
+        properties.requestTimeout());
   }
 
   @Bean
-  Commands commands(EventBridgeClient events, AcquisitionProperties properties,
-                    @Qualifier("addressLookupObjectMapper") ObjectMapper objectMapper) {
+  Commands commands(EventBridgeClient events, AcquisitionProperties properties) {
     return new Commands(
-        events, AcquisitionProperties.required(properties.eventBus(), "EVENT_BUS"), objectMapper);
+        events, AcquisitionProperties.required(properties.eventBus(), "EVENT_BUS"));
   }
 
   @Bean

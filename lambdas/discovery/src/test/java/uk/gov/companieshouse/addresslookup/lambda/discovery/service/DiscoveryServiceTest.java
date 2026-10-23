@@ -10,10 +10,10 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToJsonNode;
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToObject;
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.readFileFromClasspath;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +30,7 @@ import uk.gov.companieshouse.addresslookup.lambda.discovery.model.VersionCursor;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
+import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport;
 import uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils;
 import uk.gov.companieshouse.release.model.DatasetDefault;
 import uk.gov.companieshouse.release.model.OrderSummary;
@@ -102,9 +103,7 @@ public class DiscoveryServiceTest {
 
     @Mock
     private UUID testUUID;
-
-    private ObjectMapper objectMapper;
-
+    
     @BeforeEach
     public void setUp() {
         when(properties.datasets()).thenReturn(List.of(
@@ -112,10 +111,8 @@ public class DiscoveryServiceTest {
                 new DatasetDefault("add_isl_royalmailaddress","2.0")
         ));
 
-        objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new JavaTimeModule());
+        discoveryService = new DiscoveryService(s3Client, osClient, commands, properties);
 
-        discoveryService = new DiscoveryService(s3Client, osClient, objectMapper, commands, properties);
     }
 
     @Test
@@ -141,7 +138,7 @@ public class DiscoveryServiceTest {
         S3PutRequestBodyMatcher<VersionCursor> cursorUpdateMatcher = new S3PutRequestBodyMatcher<>(TEST_COU_UPDATE_CURSOR_JSON, VersionCursor.class);
 
         S3PutReleaseManifestRequestBodyMatcher manifestMatcher = new S3PutReleaseManifestRequestBodyMatcher(ReleaseManifest.read(
-                objectMapper.readTree(
+                RuntimeSupport.JSON.readTree(
                 readFileFromClasspath("output/output-manifest-COU.json"))));
 
         when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
@@ -154,16 +151,16 @@ public class DiscoveryServiceTest {
                 .thenReturn(TestUtils.createResponseInputStream(TEST_CURSOR_JSON));
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150035"))
-                .thenReturn(jsonFileToJsonNode("OsData/COU/previous-data-package-20780-version-150035-data.json", objectMapper));
+                .thenReturn(jsonFileToJsonNode("OsData/COU/previous-data-package-20780-version-150035-data.json", JSON));
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150104"))
-                .thenReturn(jsonFileToJsonNode("OsData/COU/latest-data-package-20780-version-150104-data.json", objectMapper));
+                .thenReturn(jsonFileToJsonNode("OsData/COU/latest-data-package-20780-version-150104-data.json", JSON));
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150104/downloads?fileName=add_gb_royalmailaddress_orderSummary.json"))
-                .thenReturn(jsonFileToJsonNode("OsData/COU/add_gb_royalmailaddress_orderSummary.json", objectMapper));
+                .thenReturn(jsonFileToJsonNode("OsData/COU/add_gb_royalmailaddress_orderSummary.json", JSON));
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150104/downloads?fileName=add_isl_royalmailaddress_orderSummary.json"))
-                .thenReturn(jsonFileToJsonNode("OsData/COU/add_isl_royalmailaddress_orderSummary.json", objectMapper));
+                .thenReturn(jsonFileToJsonNode("OsData/COU/add_isl_royalmailaddress_orderSummary.json", JSON));
 
         String releaseId;
         try (MockedStatic<UUID> mockedUUID = mockStatic(UUID.class)) {
@@ -205,7 +202,7 @@ public class DiscoveryServiceTest {
         S3PutRequestBodyMatcher<VersionCursor> cursorUpdateMatcher = new S3PutRequestBodyMatcher<>(TEST_FULL_UPDATE_CURSOR_JSON, VersionCursor.class);
 
         S3PutReleaseManifestRequestBodyMatcher manifestMatcher = new S3PutReleaseManifestRequestBodyMatcher(ReleaseManifest.read(
-                objectMapper.readTree(
+                JSON.readTree(
                         readFileFromClasspath("output/output-manifest-Full.json"))));
 
         when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
@@ -215,13 +212,13 @@ public class DiscoveryServiceTest {
         when(testUUID.toString()).thenReturn(TEST_RELEASE_ID);
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989"))
-                .thenReturn(jsonFileToJsonNode("OsData/Full/full-data-package-20780-version-130989-data.json", objectMapper));
+                .thenReturn(jsonFileToJsonNode("OsData/Full/full-data-package-20780-version-130989-data.json", JSON));
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_gb_royalmailaddress_orderSummary.json"))
-                .thenReturn(jsonFileToJsonNode("OsData/Full/add_gb_royalmailaddress_orderSummary.json", objectMapper));
+                .thenReturn(jsonFileToJsonNode("OsData/Full/add_gb_royalmailaddress_orderSummary.json", JSON));
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_isl_royalmailaddress_orderSummary.json"))
-                .thenReturn(jsonFileToJsonNode("OsData/Full/add_isl_royalmailaddress_orderSummary.json", objectMapper));
+                .thenReturn(jsonFileToJsonNode("OsData/Full/add_isl_royalmailaddress_orderSummary.json", JSON));
 
         String releaseId;
         try (MockedStatic<UUID> mockedUUID = mockStatic(UUID.class)) {
@@ -258,16 +255,16 @@ public class DiscoveryServiceTest {
                 .thenReturn(TestUtils.createResponseInputStream(TEST_CURSOR_JSON));
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150035"))
-                .thenReturn(jsonFileToJsonNode("OsData/COU/previous-data-package-20780-version-150035-data.json", objectMapper));
+                .thenReturn(jsonFileToJsonNode("OsData/COU/previous-data-package-20780-version-150035-data.json", JSON));
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150104"))
-                .thenReturn(jsonFileToJsonNode("OsData/COU/latest-data-package-20780-version-150104-data.json", objectMapper));
+                .thenReturn(jsonFileToJsonNode("OsData/COU/latest-data-package-20780-version-150104-data.json", JSON));
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150104/downloads?fileName=add_gb_royalmailaddress_orderSummary.json"))
-                .thenReturn(jsonFileToJsonNode("OsData/COU/add_gb_royalmailaddress_orderSummary_incorrect_target_date.json", objectMapper));
+                .thenReturn(jsonFileToJsonNode("OsData/COU/add_gb_royalmailaddress_orderSummary_incorrect_target_date.json", JSON));
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150104/downloads?fileName=add_isl_royalmailaddress_orderSummary.json"))
-                .thenReturn(jsonFileToJsonNode("OsData/COU/add_isl_royalmailaddress_orderSummary.json", objectMapper));
+                .thenReturn(jsonFileToJsonNode("OsData/COU/add_isl_royalmailaddress_orderSummary.json", JSON));
 
         String response = discoveryService.discover(COU_REQUEST_JSON);
 
@@ -285,13 +282,13 @@ public class DiscoveryServiceTest {
     public void shouldReturnNoCommonContiguousReleaseForFULLRequestDifferentToDates() throws Exception {
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989"))
-                .thenReturn(jsonFileToJsonNode("OsData/Full/full-data-package-20780-version-130989-data.json", objectMapper));
+                .thenReturn(jsonFileToJsonNode("OsData/Full/full-data-package-20780-version-130989-data.json", JSON));
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_gb_royalmailaddress_orderSummary.json"))
-                .thenReturn(jsonFileToJsonNode("OsData/Full/add_gb_royalmailaddress_orderSummary_incorrect_target_date.json", objectMapper));
+                .thenReturn(jsonFileToJsonNode("OsData/Full/add_gb_royalmailaddress_orderSummary_incorrect_target_date.json", JSON));
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_isl_royalmailaddress_orderSummary.json"))
-                .thenReturn(jsonFileToJsonNode("OsData/Full/add_isl_royalmailaddress_orderSummary.json", objectMapper));
+                .thenReturn(jsonFileToJsonNode("OsData/Full/add_isl_royalmailaddress_orderSummary.json", JSON));
         when(properties.osHttpURLTemplate())
                 .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
 
@@ -397,7 +394,7 @@ public class DiscoveryServiceTest {
                 .thenReturn(TestUtils.createResponseInputStream(TEST_CURSOR_JSON));
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150035"))
-                .thenReturn(jsonFileToJsonNode("OsData/COU/previous-data-package-20780-version-150035-data.json", objectMapper));
+                .thenReturn(jsonFileToJsonNode("OsData/COU/previous-data-package-20780-version-150035-data.json", JSON));
 
         try {
             discoveryService.discover(COU_REQUEST_JSON);
@@ -413,27 +410,27 @@ public class DiscoveryServiceTest {
     @Test
     public void testModel() throws Exception {
 
-        objectMapper.registerModule(new JavaTimeModule());
+        JSON.registerModule(new JavaTimeModule());
 
         PackageVersionData packageVersionData = jsonFileToObject(
                 "OsData/COU/previous-data-package-20780-version-150035-data.json",
-                PackageVersionData.class, objectMapper);
+                PackageVersionData.class, JSON);
 
         assertNotNull(packageVersionData);
 
         OrderSummary orderSummary = jsonFileToObject("OsData/COU/add_gb_builtaddress_orderSummary.json",
-                OrderSummary.class, objectMapper);
+                OrderSummary.class, JSON);
 
         assertNotNull(orderSummary);
 
-        VersionCursor cursor = objectMapper.readValue(TEST_CURSOR_JSON, VersionCursor.class);
+        VersionCursor cursor = JSON.readValue(TEST_CURSOR_JSON, VersionCursor.class);
         assertNotNull(cursor);
     }
 
     @Test
     public void testCOUManifestCreation() throws Exception {
         ReleaseJson.MAPPER.registerModule(new JavaTimeModule());
-        ReleaseManifest manifest  = ReleaseManifest.read(jsonFileToJsonNode("output/output-manifest-COU.json", objectMapper));
+        ReleaseManifest manifest  = ReleaseManifest.read(jsonFileToJsonNode("output/output-manifest-COU.json", JSON));
 
         assertNotNull(manifest);
     }
@@ -441,12 +438,12 @@ public class DiscoveryServiceTest {
     @Test
     public void testFullManifestCreation() throws Exception {
         ReleaseJson.MAPPER.registerModule(new JavaTimeModule());
-        ReleaseManifest manifest  = ReleaseManifest.read(jsonFileToJsonNode("output/output-manifest-Full.json", objectMapper));
+        ReleaseManifest manifest  = ReleaseManifest.read(jsonFileToJsonNode("output/output-manifest-Full.json", JSON));
 
         assertNotNull(manifest);
     }
 
-    private class  S3PutRequestBodyMatcher <T> implements ArgumentMatcher<RequestBody> {
+    private static class S3PutRequestBodyMatcher <T> implements ArgumentMatcher<RequestBody> {
 
         final private String expectedBodyJson;
         final private Class<T> clazz;
@@ -460,8 +457,8 @@ public class DiscoveryServiceTest {
         public boolean matches(RequestBody requestBody) {
             boolean valid = false;
             try {
-                T expected = objectMapper.readValue(expectedBodyJson, clazz);
-                T test = objectMapper.readValue(requestBody.contentStreamProvider().newStream(), clazz);
+                T expected = JSON.readValue(expectedBodyJson, clazz);
+                T test = JSON.readValue(requestBody.contentStreamProvider().newStream(), clazz);
                 if (expected != null && expected.equals(test)) {
                     valid = true;
                 }
@@ -478,7 +475,7 @@ public class DiscoveryServiceTest {
         }
     }
 
-    private class  S3PutReleaseManifestRequestBodyMatcher implements ArgumentMatcher<RequestBody> {
+    private static class S3PutReleaseManifestRequestBodyMatcher implements ArgumentMatcher<RequestBody> {
 
         final private ReleaseManifest expectedManifest;
 
@@ -490,7 +487,7 @@ public class DiscoveryServiceTest {
         public boolean matches(RequestBody requestBody) {
             boolean valid = false;
             try {
-                ReleaseManifest test = ReleaseManifest.read(objectMapper.readTree(requestBody.contentStreamProvider().newStream()));
+                ReleaseManifest test = ReleaseManifest.read(JSON.readTree(requestBody.contentStreamProvider().newStream()));
                 if (expectedManifest != null) {
                     assertEquals(expectedManifest.json(), test.json());
                 }

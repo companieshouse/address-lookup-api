@@ -1,18 +1,17 @@
 package uk.gov.companieshouse.addresslookup.lambda.discovery.service;
 
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.detail;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.TreeNode;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.annotations.NotNull;
 import software.amazon.awssdk.core.ResponseInputStream;
@@ -54,7 +53,6 @@ public final class DiscoveryService {
 
     private final S3Client s3Client;
     private final OsClient osClient;
-    private final ObjectMapper objectMapper;
     private final Commands commands;
     private final AcquisitionProperties properties;
 
@@ -75,11 +73,9 @@ public final class DiscoveryService {
 
     @Autowired
     public DiscoveryService(S3Client s3Client, OsClient osClient,
-                            @Qualifier("addressLookupObjectMapper") ObjectMapper objectMapper,
                             Commands commands, AcquisitionProperties properties) {
         this.s3Client = s3Client;
         this.osClient = osClient;
-        this.objectMapper = objectMapper;
         this.commands = commands;
         this.properties = properties;
         datasets = properties.datasets();
@@ -184,7 +180,7 @@ public final class DiscoveryService {
                 .key(CURSOR_KEY).build());
 
         check(response != null, MISSING_CURSOR_FILE_MESSAGE);
-        return objectMapper.readValue(response, VersionCursor.class);
+        return JSON.readValue(response, VersionCursor.class);
     }
 
     private void saveOrUpdateToS3Bucket(Object payload, String key) throws JsonProcessingException {
@@ -204,7 +200,7 @@ public final class DiscoveryService {
                             .ifNoneMatch(ifNoneMatch ? "*" : null)
                             .contentType("application/json")
                             .build(),
-                    RequestBody.fromString(objectMapper.writeValueAsString(payload)));
+                    RequestBody.fromString(JSON.writeValueAsString(payload)));
         } catch (S3Exception e) {
             String error  = "Failed to save to S3 Bucket [" + properties.sourceBucket() + "] key [" + key + "], error: ";
             LOG.error(error,e);
@@ -330,7 +326,7 @@ public final class DiscoveryService {
                                                     Map<String, OrderSummary> orderSummaries,
                                                     LocalDate targetDate, String previousDate) throws Exception {
 
-        final ObjectNode rootNode = objectMapper.createObjectNode();
+        final ObjectNode rootNode = JSON.createObjectNode();
         String mode = packageVersionData.supplyType().name();
         rootNode.put("mode", mode);
         rootNode.put("target", targetDate.format(DateTimeFormatter.ISO_DATE));
@@ -341,17 +337,17 @@ public final class DiscoveryService {
         rootNode.put("versionId", packageVersionData.id());
 
         datasets.forEach((key, value) -> {
-            ObjectNode datasetNode = objectMapper.createObjectNode();
+            ObjectNode datasetNode = JSON.createObjectNode();
 
             Download zipDownload = value.zipDownload();
 
-            ObjectNode zipNode = objectMapper.createObjectNode();
+            ObjectNode zipNode = JSON.createObjectNode();
             zipNode.put("fileName", zipDownload.fileName())
                     .put("url", zipDownload.url())
                     .put("md5", zipDownload.md5());
 
             OrderSummary orderSummary = orderSummaries.get(key.name());
-            JsonNode summaryNode = objectMapper.valueToTree(orderSummary);
+            JsonNode summaryNode = JSON.valueToTree(orderSummary);
 
             datasetNode.set("zip", zipNode);
             datasetNode.set("summary", summaryNode);
@@ -360,7 +356,7 @@ public final class DiscoveryService {
 
         UUID releaseId = generateReleaseId(rootNode);
 
-        ObjectNode manifestNode = objectMapper.createObjectNode()
+        ObjectNode manifestNode = JSON.createObjectNode()
                 .put("releaseId", releaseId.toString()).setAll(rootNode);
         return ReleaseManifest.read(manifestNode);
     }
@@ -372,7 +368,7 @@ public final class DiscoveryService {
         copyOfReleaseManifest.findValues("zip").forEach(zip ->
                 ((ObjectNode) zip).remove("url"));
 
-        String json = objectMapper.writeValueAsString(copyOfReleaseManifest);
+        String json = JSON.writeValueAsString(copyOfReleaseManifest);
         return UUID.nameUUIDFromBytes(json.getBytes(StandardCharsets.UTF_8));
     }
 
@@ -409,7 +405,7 @@ public final class DiscoveryService {
         T t;
 
         try {
-            t = objectMapper.treeToValue(treeNode,
+            t = JSON.treeToValue(treeNode,
                     clazz);
         } catch (JsonProcessingException e) {
             LOG.error("Error parsing returned OS data to class [{}], returned Data:\n{}",

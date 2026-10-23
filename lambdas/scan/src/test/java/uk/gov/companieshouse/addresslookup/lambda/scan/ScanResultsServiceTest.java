@@ -11,6 +11,7 @@ import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsRequest;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsResponse;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.EventPublicationException;
 
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -64,7 +65,7 @@ class ScanResultsServiceTest {
     assertEquals("ManifestReady",
         service.scan(event(BUCKET, MANIFEST_KEY, VERSION, "NO_THREATS_FOUND")));
     assertEquals(List.of("ManifestReady"), types());
-    assertEquals(INGEST_SOURCE, sent.get(0).entries().get(0).source());
+    assertEquals(INGEST_SOURCE, sent.getFirst().entries().getFirst().source());
     assertEquals(JSON.valueToTree(Map.of(
         "schemaVersion", 1,
         "releaseId", MANIFEST_RELEASE,
@@ -123,7 +124,7 @@ class ScanResultsServiceTest {
     assertEquals(List.of("ManifestReady", "ManifestReady"), types());
     assertEquals(detail(0), detail(1));
     rejectEntries = true;
-    assertThrows(IllegalArgumentException.class, () -> service.scan(input));
+    assertThrows(EventPublicationException.class, () -> service.scan(input));
     rejectEntries = false;
     failPublish = true;
     assertThrows(IllegalStateException.class, () -> service.scan(input));
@@ -134,7 +135,7 @@ class ScanResultsServiceTest {
     assertEquals("ReceiptReady",
         service.scan(event(BUCKET, RECEIPT_KEY, VERSION, "NO_THREATS_FOUND")));
     assertEquals(List.of("ReceiptReady"), types());
-    assertEquals(INGEST_SOURCE, sent.get(0).entries().get(0).source());
+    assertEquals(INGEST_SOURCE, sent.getFirst().entries().getFirst().source());
     assertEquals(JSON.valueToTree(Map.of(
         "schemaVersion", 1,
         "releaseId", RECEIPT_RELEASE,
@@ -185,7 +186,7 @@ class ScanResultsServiceTest {
     service.scan(input);
     assertEquals(List.of("ReceiptReady", "ReceiptReady"), types());
     rejectEntries = true;
-    assertThrows(IllegalArgumentException.class, () -> service.scan(input));
+    assertThrows(EventPublicationException.class, () -> service.scan(input));
   }
 
   @Test
@@ -208,8 +209,8 @@ class ScanResultsServiceTest {
 
     assertEquals(List.of("ExtractRequested"), types());
     JsonNode d = detail(0);
-    assertEquals(INGEST_SOURCE, sent.get(0).entries().get(0).source());
-    assertEquals("bus", sent.get(0).entries().get(0).eventBusName());
+    assertEquals(INGEST_SOURCE, sent.getFirst().entries().getFirst().source());
+    assertEquals("bus", sent.getFirst().entries().getFirst().eventBusName());
     assertTrue(d.get("schemaVersion").isInt());
     assertEquals(1, d.get("schemaVersion").intValue());
     assertEquals("20780-131061", d.get("releaseId").asText());
@@ -226,7 +227,7 @@ class ScanResultsServiceTest {
 
     assertEquals(List.of("DatasetReady"), types());
     JsonNode d = detail(0);
-    assertEquals(INGEST_SOURCE, sent.get(0).entries().get(0).source());
+    assertEquals(INGEST_SOURCE, sent.getFirst().entries().getFirst().source());
     assertTrue(d.get("schemaVersion").isInt());
     assertEquals(1, d.get("schemaVersion").intValue());
     assertEquals("20780-131061", d.get("releaseId").asText());
@@ -338,16 +339,17 @@ class ScanResultsServiceTest {
   @Test
   void publishFailurePropagates() {
     failPublish = true;
+    var input = event(BUCKET, KEY, VERSION, "NO_THREATS_FOUND");
     assertThrows(
-        Exception.class, () -> service.scan(event(BUCKET, KEY, VERSION, "NO_THREATS_FOUND")));
+        IllegalStateException.class, () -> service.scan(input));
   }
 
   @Test
   void rejectedEntryFromEventBridgeFailsInvocation() {
     rejectEntries = true;
+    var input = event(BUCKET, KEY, VERSION, "NO_THREATS_FOUND");
     assertThrows(
-        IllegalArgumentException.class,
-        () -> service.scan(event(BUCKET, KEY, VERSION, "NO_THREATS_FOUND")));
+        EventPublicationException.class, () -> service.scan(input));
   }
 
   @Test
@@ -386,11 +388,11 @@ class ScanResultsServiceTest {
   }
 
   private List<String> types() {
-    return sent.stream().map(r -> r.entries().get(0).detailType()).toList();
+    return sent.stream().map(r -> r.entries().getFirst().detailType()).toList();
   }
 
   private JsonNode detail(int i) throws Exception {
-    return JSON.readTree(sent.get(i).entries().get(0).detail());
+    return JSON.readTree(sent.get(i).entries().getFirst().detail());
   }
 
   private static Map<String, Object> eventWithThreats(String bucket, String key, String version) {

@@ -1,13 +1,12 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsRequestEntry;
 
 import java.util.Map;
-
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 public final class Commands {
   private static final Logger LOG = LoggerFactory.getLogger(Commands.class);
@@ -23,15 +22,15 @@ public final class Commands {
     this.json = json;
   }
 
-  void send(String action, String planKey, String dataset) throws Exception {
+  void send(String action, String planKey, String dataset) throws JsonProcessingException {
     send(action, Map.of("planKey", planKey, "dataset", dataset));
   }
 
-  void send(String action, Map<String, ?> payload) throws Exception {
+  void send(String action, Map<String, ?> payload) throws JsonProcessingException {
     send(action, payload, "os.acquisition");
   }
 
-  public void sendIngestion(String action, Map<String, ?> payload) throws Exception {
+  public void sendIngestion(String action, Map<String, ?> payload) throws JsonProcessingException {
     String receipt = null;
     if (LOG.isInfoEnabled()) {
       receipt =
@@ -48,7 +47,8 @@ public final class Commands {
     }
   }
 
-  private void send(String action, Map<String, ?> payload, String source) throws Exception {
+  private void send(String action, Map<String, ?> payload, String source)
+      throws JsonProcessingException {
     String detail = json.writeValueAsString(payload);
     var response =
         events.putEvents(
@@ -60,8 +60,8 @@ public final class Commands {
                         .detailType(action)
                         .detail(detail)
                         .build()));
-    check(
-        response.failedEntryCount() == 0,
-        "EventBridge rejected event; S3 reconciliation will retry");
+    if (response.failedEntryCount() != 0) {
+      throw new EventPublicationException("EventBridge rejected event; invocation must be retried");
+    }
   }
 }

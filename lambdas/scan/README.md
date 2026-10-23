@@ -1,6 +1,6 @@
 # Scan Lambda
 
-Build target and Lambda runtime: Java 21.
+Build target and Lambda runtime: Java 25.
 
 Stateless router for GuardDuty Malware Protection scan results (EventBridge, `aws.guardduty`).
 Download ZIPs at `Scanned/<UUID releaseId>/<dataset>.zip` are accepted; the release ID is

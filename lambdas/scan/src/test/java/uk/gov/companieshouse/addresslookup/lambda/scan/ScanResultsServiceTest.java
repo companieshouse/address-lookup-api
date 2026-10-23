@@ -178,6 +178,8 @@ class ScanResultsServiceTest {
     service.scan(input);
     assertEquals(List.of("StepRejected"), types());
     assertEquals("INVALID_INPUT", detail(0).path("code").asText());
+    assertEquals("receipt-scan", detail(0).path("step").asText());
+    assertEquals(RECEIPT_KEY, detail(0).path("object").path("key").asText());
   }
 
   @Test

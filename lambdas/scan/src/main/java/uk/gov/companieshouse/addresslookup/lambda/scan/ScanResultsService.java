@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
 import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.FileType;
+import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.ObjectKey;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -46,7 +47,7 @@ public final class ScanResultsService {
     String result = text(detail.path("scanResultDetails"), "scanResultStatus");
 
     Validation validation = validate(input, bucket, key, versionId);
-    KeyLayout.ObjectKey parsed = validation.parsed();
+    ObjectKey parsed = validation.parsed();
     InvalidReason invalidReason = validation.reason();
 
     Map<String, Object> payload = basePayload(parsed);
@@ -87,10 +88,10 @@ public final class ScanResultsService {
     return decision;
   }
 
-  private record Validation(KeyLayout.ObjectKey parsed, InvalidReason reason) {}
+  private record Validation(ObjectKey parsed, InvalidReason reason) {}
 
   private Validation validate(JsonNode input, String bucket, String key, String versionId) {
-    KeyLayout.ObjectKey parsed;
+    ObjectKey parsed;
     try {
       parsed = KeyLayout.parseObjectKey(key);
     } catch (IllegalArgumentException e) {
@@ -109,8 +110,7 @@ public final class ScanResultsService {
   }
 
   private String reject(
-      Map<String, Object> payload, KeyLayout.ObjectKey parsed, String code, String message)
-      throws Exception {
+      Map<String, Object> payload, ObjectKey parsed, String code, String message) {
     payload.put("step", parsed == null ? "scan" : step(parsed.fileType()));
     payload.put("code", code);
     payload.put("message", message);
@@ -118,7 +118,7 @@ public final class ScanResultsService {
     return "StepRejected:" + code;
   }
 
-  private static Map<String, Object> basePayload(KeyLayout.ObjectKey parsed) {
+  private static Map<String, Object> basePayload(ObjectKey parsed) {
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("schemaVersion", 1);
     if (parsed != null) {
@@ -173,7 +173,7 @@ public final class ScanResultsService {
   private void logRoute(
       String rejectionCode,
       String eventId,
-      KeyLayout.ObjectKey parsed,
+      ObjectKey parsed,
       String result,
       String versionId,
       String decision,

@@ -11,9 +11,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
-import software.amazon.awssdk.services.eventbridge.model.PutEventsRequest;
-import software.amazon.awssdk.services.eventbridge.model.PutEventsResponse;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.EventPublicationException;
 
@@ -22,11 +19,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 
 @ExtendWith(MockitoExtension.class)
@@ -42,27 +40,28 @@ class ScanResultsServiceTest {
   private static final String KEY = "zips/20780-131061/add_gb_royalmailaddress.zip";
   private static final String CSV_KEY = "csv/20780-131061/add_gb_royalmailaddress.csv";
   private static final String VERSION = "3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY";
-  private static final String INGEST_SOURCE = "uk.gov.companieshouse.address-lookup.ingest";
 
-  private final List<PutEventsRequest> sent = new ArrayList<>();
+  private record PublishedEvent(String type, JsonNode detail) {}
+
+  private final List<PublishedEvent> sent = new ArrayList<>();
   private boolean failPublish;
   private boolean rejectEntries;
   private ScanResultsService service;
-  @Mock private EventBridgeClient client;
+  @Mock private Commands commands;
 
   @BeforeEach
   void setUp() {
-    when(client.putEvents(org.mockito.ArgumentMatchers.<Consumer<PutEventsRequest.Builder>>any()))
-        .thenAnswer(invocation -> {
-          if (failPublish) throw new IllegalStateException("EventBridge unavailable");
-          var builder = PutEventsRequest.builder();
-          Consumer<PutEventsRequest.Builder> request = invocation.getArgument(0);
-          request.accept(builder);
-          sent.add(builder.build());
-          return PutEventsResponse.builder().failedEntryCount(rejectEntries ? 1 : 0).build();
-        });
-    service =
-        new ScanResultsService(new Commands(client, "bus", JSON), BUCKET, CLEAN_BUCKET);
+    doAnswer(invocation -> {
+      if (failPublish) throw new IllegalStateException("EventBridge unavailable");
+      if (rejectEntries) {
+        throw new EventPublicationException("EventBridge rejected event");
+      }
+      sent.add(new PublishedEvent(
+          invocation.getArgument(0),
+          JSON.valueToTree(invocation.getArgument(1))));
+      return null;
+    }).when(commands).sendIngestion(anyString(), anyMap());
+    service = new ScanResultsService(commands, BUCKET, CLEAN_BUCKET);
   }
 
   @Test
@@ -70,7 +69,6 @@ class ScanResultsServiceTest {
     assertEquals("ManifestReady",
         service.scan(event(BUCKET, MANIFEST_KEY, VERSION, "NO_THREATS_FOUND")));
     assertEquals(List.of("ManifestReady"), types());
-    assertEquals(INGEST_SOURCE, sent.getFirst().entries().getFirst().source());
     assertEquals(JSON.valueToTree(Map.of(
         "schemaVersion", 1,
         "releaseId", MANIFEST_RELEASE,
@@ -141,7 +139,6 @@ class ScanResultsServiceTest {
     assertEquals("ReceiptReady",
         service.scan(event(BUCKET, RECEIPT_KEY, VERSION, "NO_THREATS_FOUND")));
     assertEquals(List.of("ReceiptReady"), types());
-    assertEquals(INGEST_SOURCE, sent.getFirst().entries().getFirst().source());
     assertEquals(JSON.valueToTree(Map.of(
         "schemaVersion", 1,
         "releaseId", RECEIPT_RELEASE,
@@ -217,8 +214,6 @@ class ScanResultsServiceTest {
 
     assertEquals(List.of("ExtractRequested"), types());
     JsonNode d = detail(0);
-    assertEquals(INGEST_SOURCE, sent.getFirst().entries().getFirst().source());
-    assertEquals("bus", sent.getFirst().entries().getFirst().eventBusName());
     assertTrue(d.get("schemaVersion").isInt());
     assertEquals(1, d.get("schemaVersion").intValue());
     assertEquals("20780-131061", d.get("releaseId").asText());
@@ -235,7 +230,6 @@ class ScanResultsServiceTest {
 
     assertEquals(List.of("DatasetReady"), types());
     JsonNode d = detail(0);
-    assertEquals(INGEST_SOURCE, sent.getFirst().entries().getFirst().source());
     assertTrue(d.get("schemaVersion").isInt());
     assertEquals(1, d.get("schemaVersion").intValue());
     assertEquals("20780-131061", d.get("releaseId").asText());
@@ -423,11 +417,11 @@ class ScanResultsServiceTest {
   }
 
   private List<String> types() {
-    return sent.stream().map(r -> r.entries().getFirst().detailType()).toList();
+    return sent.stream().map(PublishedEvent::type).toList();
   }
 
-  private JsonNode detail(int i) throws Exception {
-    return JSON.readTree(sent.get(i).entries().getFirst().detail());
+  private JsonNode detail(int i) {
+    return sent.get(i).detail();
   }
 
   private static Map<String, Object> eventWithThreats(String bucket, String key, String version) {

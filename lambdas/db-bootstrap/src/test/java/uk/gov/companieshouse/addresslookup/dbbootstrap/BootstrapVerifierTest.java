@@ -54,6 +54,16 @@ class BootstrapVerifierTest {
     }
 
     @Test
+    void acceptsTheBooleanRepresentationOfForceSsl() throws Exception {
+        FakeDatabase db = FakeDatabase.ready().returns("rds.force_ssl", row("on"));
+
+        BootstrapVerifier.Report report = new BootstrapVerifier(probe).verify(db.connection, MASTER, OWNER);
+
+        assertEquals("on", report.forceSsl());
+        assertTrue(report.failures().isEmpty());
+    }
+
+    @Test
     void failsWhenApplicationObjectsExistWithoutFlywayHistory() throws Exception {
         FakeDatabase db = FakeDatabase.ready().returns("UNION ALL", row("public.address"), row("schema os_data"));
 

@@ -23,6 +23,7 @@
         <module>lambdas/scan</module>
         <module>lambdas/unzip</module>
         <module>lambdas/import</module>
+        <module>lambdas/db-bootstrap</module>
     </modules>
 
     <properties>
@@ -45,7 +46,7 @@
         <junit-jupiter.version>5.11.4</junit-jupiter.version>
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
         <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
-        <jackson-databind.version>2.22.1</jackson-databind.version>
+        <jackson-databind.version>2.22.3</jackson-databind.version>
         <skip.unit.tests>false</skip.unit.tests>
         <skip.integration.tests>false</skip.integration.tests>
         <org.testcontainers.version>2.0.5</org.testcontainers.version>
@@ -98,6 +99,11 @@
             <dependency>
                 <groupId>software.amazon.awssdk</groupId>
                 <artifactId>eventbridge</artifactId>
+                <version>${aws-sdk.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>ssm</artifactId>
                 <version>${aws-sdk.version}</version>
             </dependency>
             <dependency>

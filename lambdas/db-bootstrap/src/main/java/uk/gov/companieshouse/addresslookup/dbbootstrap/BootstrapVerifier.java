@@ -31,7 +31,7 @@ public final class BootstrapVerifier {
 
     private static final String HISTORY_SQL = """
             SELECT n.nspname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-            WHERE c.relname = 'flyway_schema_history' AND c.relkind IN ('r', 'p')
+            WHERE n.nspname = 'public' AND c.relname = 'flyway_schema_history' AND c.relkind IN ('r', 'p')
             """;
 
     /** Relations and schemas that are neither system nor owned by an extension (PostGIS's spatial_ref_sys is). */
@@ -102,8 +102,8 @@ public final class BootstrapVerifier {
             forceSsl = string(master, "SELECT current_setting('rds.force_ssl', true)", null);
             minProtocol = string(master, "SELECT current_setting('ssl_min_protocol_version', true)", null);
             connectionTls = string(master, "SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()", null);
-            if (!"1".equals(forceSsl)) {
-                failures.add("rds.force_ssl is " + forceSsl + ", expected 1");
+            if (!"1".equals(forceSsl) && !"on".equals(forceSsl)) {
+                failures.add("rds.force_ssl is " + forceSsl + ", expected 1 (on)");
             }
             if (!"TLSv1.3".equals(minProtocol)) {
                 failures.add("ssl_min_protocol_version is " + minProtocol + ", expected TLSv1.3");

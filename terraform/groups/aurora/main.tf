@@ -18,7 +18,7 @@ terraform {
 }
 
 module "aurora_postgres" {
-  source = "git@github.com:companieshouse/terraform-modules//aws/aurora?ref=1.0.442"
+  source = "git@github.com:companieshouse/terraform-modules//aws/aurora?ref=1.0.397"
 
   service        = local.service_name
   db_name        = local.database_name
@@ -43,14 +43,14 @@ module "aurora_postgres" {
 }
 
 module "iac_tags" {
-  source = "git@github.com:companieshouse/terraform-modules//aws/tagging/iac?ref=1.0.442"
+  source = "git@github.com:companieshouse/terraform-modules//aws/tagging/iac?ref=1.0.397"
 
   group           = "aurora"
   source_code_url = "https://github.com/companieshouse/address-lookup-api.git"
 }
 
 module "owner_tags" {
-  source = "git@github.com:companieshouse/terraform-modules//aws/tagging/owner?ref=1.0.442"
+  source = "git@github.com:companieshouse/terraform-modules//aws/tagging/owner?ref=1.0.397"
 
   platform_owner = "development"
 }

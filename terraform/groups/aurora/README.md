@@ -123,11 +123,11 @@ After the first `<env>-db-schema-migrate`, Flyway's `info` shows V2026.001 to V2
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_aurora_postgres"></a> [aurora\_postgres](#module\_aurora\_postgres) | git@github.com:companieshouse/terraform-modules//aws/aurora | 1.0.442 |
+| <a name="module_aurora_postgres"></a> [aurora\_postgres](#module\_aurora\_postgres) | git@github.com:companieshouse/terraform-modules//aws/aurora | 1.0.397 |
 | <a name="module_credentials"></a> [credentials](#module\_credentials) | git@github.com:companieshouse/terraform-modules//aws/parameter-store | 1.0.442 |
 | <a name="module_db_bootstrap"></a> [db\_bootstrap](#module\_db\_bootstrap) | git@github.com:companieshouse/terraform-modules//aws/lambda | 1.0.442 |
-| <a name="module_iac_tags"></a> [iac\_tags](#module\_iac\_tags) | git@github.com:companieshouse/terraform-modules//aws/tagging/iac | 1.0.442 |
-| <a name="module_owner_tags"></a> [owner\_tags](#module\_owner\_tags) | git@github.com:companieshouse/terraform-modules//aws/tagging/owner | 1.0.442 |
+| <a name="module_iac_tags"></a> [iac\_tags](#module\_iac\_tags) | git@github.com:companieshouse/terraform-modules//aws/tagging/iac | 1.0.397 |
+| <a name="module_owner_tags"></a> [owner\_tags](#module\_owner\_tags) | git@github.com:companieshouse/terraform-modules//aws/tagging/owner | 1.0.397 |
 
 ## Resources
 

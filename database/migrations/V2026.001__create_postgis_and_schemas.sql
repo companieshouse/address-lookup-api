@@ -1,5 +1,5 @@
 -- Jira: ALS-83
--- Purpose: Enable PostGIS and create the database-feed schemas.
+-- Purpose: Enable PostGIS and create  the database-feed schemas.
 -- Author/team: Address Lookup Service
 -- Date: 2026-10-13
 CREATE EXTENSION IF NOT EXISTS postgis;

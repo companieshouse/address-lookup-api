@@ -13,6 +13,12 @@ synchronously:
 
 Nothing else triggers it.
 
+A snapshot is created when a change to `database/migrations/` is merged to
+main. `db-snapshot-release` then creates the next `address-lookup-db-X.Y.Z`
+tag, using the major and minor versions in `database/version`, and
+`gather-snapshot` uploads `snapshots/<tag>.zip`. To change the major or minor
+version, edit `database/version`.
+
 ```
 Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-lookup-db-migrate-<env>
                                                           │  data subnets, own SG, no CIDR egress

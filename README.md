@@ -22,6 +22,10 @@ Flyway remains enabled even if the variable is unset or false. Keep it set to
 `true` wherever it is still supplied. The API package includes the SQL feed
 from `database/` without copying or modifying those files.
 
+The local GB Royal Mail seed includes 17 synthetic postcode fixtures for
+regional lookup integration tests. Their postcode and country values are
+owner-approved; all other address attributes are synthetic local test data.
+
 From `CODE/`, start PostGIS and then the API with:
 
 ```bash

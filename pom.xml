@@ -26,9 +26,9 @@
     </modules>
 
     <properties>
-        <maven.compiler.release>21</maven.compiler.release>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.release>25</maven.compiler.release>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <commons-lang-plugin.version>3.20.0</commons-lang-plugin.version>
         <spring.boot.version>4.1.1</spring.boot.version>
@@ -50,8 +50,8 @@
         <skip.integration.tests>false</skip.integration.tests>
         <org.testcontainers.version>2.0.5</org.testcontainers.version>
         <io.netty.version>4.2.18.Final</io.netty.version>
-        <!-- 0.8.10 (inherited) predates Java 21 support; the report is consumed by Sonar -->
-        <jacoco-maven-plugin.version>0.8.13</jacoco-maven-plugin.version>
+        <!-- Java 25 support; the report is consumed by Sonar -->
+        <jacoco-maven-plugin.version>0.8.14</jacoco-maven-plugin.version>
 
         <!--companies house-->
         <structured-logging.version>3.0.51</structured-logging.version>

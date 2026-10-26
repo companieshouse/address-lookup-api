@@ -2,6 +2,14 @@
 
 Build target and Lambda runtime: Java 25.
 
+Build with JDK 25 selected in `JAVA_HOME` (also required on the CI build runner):
+
+```sh
+mvn clean package -pl lambdas/scan -am
+```
+
+All modules inherit the Java 25 compiler target from the parent POM.
+
 Stateless router for GuardDuty Malware Protection scan results (EventBridge, `aws.guardduty`).
 Download ZIPs at `Scanned/<UUID releaseId>/<dataset>.zip` are accepted; the release ID is
 copied unchanged into the published event. EventBridge rules must include the `Scanned/` prefix.

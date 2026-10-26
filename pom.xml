@@ -5,7 +5,7 @@
     <parent>
         <groupId>uk.gov.companieshouse</groupId>
         <artifactId>companies-house-parent</artifactId>
-        <version>2.1.20</version>
+        <version>3.0.0</version>
     </parent>
 
     <artifactId>address-lookup-parent</artifactId>
@@ -23,7 +23,6 @@
         <module>lambdas/scan</module>
         <module>lambdas/unzip</module>
         <module>lambdas/import</module>
-        <module>lambdas/db-bootstrap</module>
     </modules>
 
     <properties>
@@ -51,6 +50,8 @@
         <skip.integration.tests>false</skip.integration.tests>
         <org.testcontainers.version>2.0.5</org.testcontainers.version>
         <io.netty.version>4.2.18.Final</io.netty.version>
+        <!-- 0.8.10 (inherited) predates Java 21 support; the report is consumed by Sonar -->
+        <jacoco-maven-plugin.version>0.8.13</jacoco-maven-plugin.version>
 
         <!--companies house-->
         <structured-logging.version>3.0.51</structured-logging.version>
@@ -100,11 +101,6 @@
                 <version>${aws-sdk.version}</version>
             </dependency>
             <dependency>
-                <groupId>software.amazon.awssdk</groupId>
-                <artifactId>ssm</artifactId>
-                <version>${aws-sdk.version}</version>
-            </dependency>
-            <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
                 <version>${jackson-databind.version}</version>
@@ -114,6 +110,11 @@
                 <artifactId>junit-jupiter</artifactId>
                 <version>${junit-jupiter.version}</version>
                 <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-csv</artifactId>
+                <version>1.14.1</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -132,6 +133,14 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+        <plugins>
+            <!-- Activates the JaCoCo executions managed by companies-house-parent so that
+                 target/site/jacoco/jacoco.xml is produced for Sonar coverage. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
     </build>
 
     <repositories>

@@ -1,7 +1,7 @@
 package uk.gov.companieshouse.addresslookup;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -24,11 +24,7 @@ import org.testcontainers.utility.DockerImageName;
 @SpringBootTest(
         classes = Application.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {
-                "spring.docker.compose.enabled=false",
-                "FLYWAY_ENABLED=false",
-                "spring.flyway.locations=classpath:db/migrations,classpath:db/local"
-        })
+        properties = "spring.docker.compose.enabled=false")
 @Testcontainers
 class AddressLookupApplicationIT {
 
@@ -63,14 +59,18 @@ class AddressLookupApplicationIT {
         assertNotNull(context);
     }
 
+    /**
+     * Confirms that the unset Flyway flag does not create schema history.
+     */
     @Test
-    void shouldApplyFlywayMigrationsWhenLegacyFlagIsFalse() {
-        Integer successfulMigrations = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE",
+    void shouldNotCreateFlywayHistoryWhenLegacyFlagIsUnset() {
+        Integer historyTables = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                        + "WHERE table_schema = 'public' AND table_name = 'flyway_schema_history'",
                 Integer.class);
 
-        assertNotNull(successfulMigrations);
-        assertTrue(successfulMigrations > 0);
+        assertNotNull(historyTables);
+        assertEquals(0, historyTables);
     }
 
     @Test

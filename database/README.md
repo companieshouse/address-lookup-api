@@ -33,12 +33,14 @@ The `database/` directory contains only these two subdirectories.
   columns defined by the corresponding source dataset.
 
 The API module Liquibase changelog was removed for ALS-83, and ALS-84 wires the
-API to this Flyway feed. API startup always enables Flyway and reads
-`classpath:db/migrations`; the local profile and disposable API integration
-tests also include `classpath:db/local`. The legacy `FLYWAY_ENABLED` variable
-does not control API startup and cannot disable Flyway. The separate production
-migration runner is managed outside this feed and checkout. Do not treat the
-presence of SQL here as proof that an external database release was deployed.
+API to this Flyway feed. Base API startup reads `classpath:db/migrations` only
+when `FLYWAY_ENABLED=true`; when the variable is unset, Flyway is disabled.
+The local profile explicitly enables Flyway and also reads
+`classpath:db/local`. Migration-backed integration tests explicitly enable
+Flyway, while `AddressLookupApplicationIT` verifies that the unset default
+does not create `flyway_schema_history`. The separate production migration
+runner is managed outside this feed and checkout. Do not treat the presence of
+SQL here as proof that an external database release was deployed.
 
 The two local repeatable seeds cover all ten current happy-path API postcode
 fixtures. They deliberately retain `country = NULL` for GB UDPRN 19 and ISL

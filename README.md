@@ -14,13 +14,13 @@ mvn -pl address-lookup-api -am package -Dskip.unit.tests=true -Dskip.integration
 
 ## Running locally
 
-The API always uses Flyway for schema setup and searches
-`classpath:db/migrations`. The `local` profile adds local seed files under
-`classpath:db/local`. The legacy `FLYWAY_ENABLED` environment variable is
-retained for compatibility but does not control API migration execution;
-Flyway remains enabled even if the variable is unset or false. Keep it set to
-`true` wherever it is still supplied. The API package includes the SQL feed
-from `database/` without copying or modifying those files.
+The API uses Flyway migrations from `classpath:db/migrations` when
+`FLYWAY_ENABLED=true`; the base configuration defaults to disabled when the
+variable is unset. The `local` profile explicitly enables Flyway and adds local
+seed files under `classpath:db/local`. Non-local startup with the variable
+unset does not create `flyway_schema_history`; environments that use a separate
+migration runner should leave the API flag unset. The API package includes the
+SQL feed from `database/` without copying or modifying those files.
 
 The local GB Royal Mail seed includes 17 synthetic postcode fixtures for
 regional lookup integration tests. Their postcode and country values are
@@ -85,8 +85,9 @@ curl "http://localhost:8080/address-lookup-api/multiple-addresses?postcode=WF27Q
 
 The local PostGIS database is exposed on port `5433` to avoid clashing with any
 existing Postgres running on the default `5432` port. Every environment must
-provide a PostgreSQL datasource and credentials that allow Flyway to apply
-pending migrations. Local seed files are not part of the production package.
+provide a PostgreSQL datasource. Credentials must allow Flyway to apply
+pending migrations wherever API startup is configured to run them. Local seed
+files are not part of the production package.
 
 ## Environment variables
 
@@ -100,7 +101,7 @@ pending migrations. Local seed files are not part of the production package.
 | SPRING_DATASOURCE_URL | JDBC URL for the address lookup Postgres database.                          | jdbc:postgresql://localhost:5433/address_lookup |
 | SPRING_DATASOURCE_USERNAME | Username for the address lookup Postgres database.                    | postgres                              |
 | SPRING_DATASOURCE_PASSWORD | Password for the address lookup Postgres database.                    | postgres                              |
-| FLYWAY_ENABLED | Legacy compatibility flag; API startup always enables Flyway. Keep true if supplied. | true |
+| FLYWAY_ENABLED | Enables Flyway in the base profile; unset defaults to false. The local profile enables it explicitly. | false |
 
 ## Building the docker image
 

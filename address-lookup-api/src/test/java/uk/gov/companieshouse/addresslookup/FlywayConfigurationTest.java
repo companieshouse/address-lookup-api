@@ -21,24 +21,37 @@ class FlywayConfigurationTest {
     private static final String MIGRATION_LOCATIONS = "classpath:db/migrations";
     private static final String LOCAL_LOCATIONS = "classpath:db/migrations,classpath:db/local";
 
+    /**
+     * Verifies that an unset legacy flag resolves to the safe disabled default.
+     */
     @Test
-    void enablesFlywayByDefaultAndUsesProductionMigrationsOnly() throws IOException {
+    void disablesFlywayWhenLegacyFlagIsUnsetAndUsesProductionMigrationsOnly() throws IOException {
         Properties properties = loadProperties("application.properties");
+        MockEnvironment environment = new MockEnvironment();
 
-        assertEquals("true", properties.getProperty("spring.flyway.enabled"));
+        assertEquals(
+                "false",
+                environment.resolveRequiredPlaceholders(
+                        properties.getProperty("spring.flyway.enabled")));
         assertEquals(MIGRATION_LOCATIONS, properties.getProperty("spring.flyway.locations"));
     }
 
     @Test
-    void keepsFlywayEnabledWhenLegacyFlagIsFalse() throws IOException {
+    void honorsTheLegacyFlagWhenExplicitlySet() throws IOException {
         Properties properties = loadProperties("application.properties");
-        MockEnvironment environment = new MockEnvironment()
-                .withProperty("FLYWAY_ENABLED", "false");
 
         assertEquals(
                 "true",
-                environment.resolveRequiredPlaceholders(
-                        properties.getProperty("spring.flyway.enabled")));
+                new MockEnvironment()
+                        .withProperty("FLYWAY_ENABLED", "true")
+                        .resolveRequiredPlaceholders(
+                                properties.getProperty("spring.flyway.enabled")));
+        assertEquals(
+                "false",
+                new MockEnvironment()
+                        .withProperty("FLYWAY_ENABLED", "false")
+                        .resolveRequiredPlaceholders(
+                                properties.getProperty("spring.flyway.enabled")));
     }
 
     @Test
@@ -50,9 +63,9 @@ class FlywayConfigurationTest {
     }
 
     @Test
-    void enablesFlywayWithBothLocationsInOwnerConfirmedIntegrationTests() {
+    void configuresFlywaySeparatelyForFixtureAndDefaultStartupIntegrationTests() {
         assertFlywayTestProperties(AddressTestBaseIT.class);
-        assertFlywayTestProperties(AddressLookupApplicationIT.class);
+        assertFlywayDisabledByDefault(AddressLookupApplicationIT.class);
     }
 
     @Test
@@ -91,9 +104,24 @@ class FlywayConfigurationTest {
 
         List<String> properties = Arrays.asList(springBootTest.properties());
         assertTrue(properties.contains("FLYWAY_ENABLED=false"), properties.toString());
+        assertTrue(properties.contains("spring.flyway.enabled=true"), properties.toString());
+        assertTrue(properties.contains("spring.flyway.locations=" + LOCAL_LOCATIONS), properties.toString());
+    }
+
+    /**
+     * Ensures the startup test exercises the application default without overrides.
+     */
+    private static void assertFlywayDisabledByDefault(Class<?> testClass) {
+        SpringBootTest springBootTest = testClass.getDeclaredAnnotation(SpringBootTest.class);
+        assertTrue(springBootTest != null, testClass.getSimpleName() + " needs @SpringBootTest");
+
+        List<String> properties = Arrays.asList(springBootTest.properties());
+        assertFalse(properties.contains("FLYWAY_ENABLED=false"), properties.toString());
         assertFalse(
                 properties.stream().anyMatch(property -> property.startsWith("spring.flyway.enabled=")),
                 properties.toString());
-        assertTrue(properties.contains("spring.flyway.locations=" + LOCAL_LOCATIONS), properties.toString());
+        assertFalse(
+                properties.stream().anyMatch(property -> property.startsWith("spring.flyway.locations=")),
+                properties.toString());
     }
 }

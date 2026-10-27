@@ -21,6 +21,7 @@ import org.testcontainers.utility.DockerImageName;
         properties = {
                 "spring.docker.compose.enabled=false",
                 "FLYWAY_ENABLED=false",
+                "spring.flyway.enabled=true",
                 "spring.flyway.locations=classpath:db/migrations,classpath:db/local"
         })
 public abstract class AddressTestBaseIT {

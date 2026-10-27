@@ -23,6 +23,7 @@
         <module>lambdas/scan</module>
         <module>lambdas/unzip</module>
         <module>lambdas/import</module>
+        <module>lambdas/db-migrate</module>
     </modules>
 
     <properties>
@@ -93,6 +94,11 @@
             <dependency>
                 <groupId>software.amazon.awssdk</groupId>
                 <artifactId>s3</artifactId>
+                <version>${aws-sdk.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>ssm</artifactId>
                 <version>${aws-sdk.version}</version>
             </dependency>
             <dependency>

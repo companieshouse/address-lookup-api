@@ -8,6 +8,11 @@ data "vault_generic_secret" "database_secrets" {
   path = local.database_secrets_path
 }
 
+# Written by aws-shared-services-infrastructure-terraform (groups/infrastructure).
+data "vault_generic_secret" "shared_services_kms" {
+  path = "aws-accounts/shared-services/kms"
+}
+
 data "aws_vpc" "vpc" {
   filter {
     name   = "tag:Name"

@@ -24,7 +24,7 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
                                                           │  data subnets, own SG, no CIDR egress
                        ┌──────────────────────────────────┼──────────────────────────────┐
                  443 ▼ S3 gateway endpoint          443 ▼ SSM interface endpoint    5432 ▼ Aurora SG
-          shared-services releases bucket      /address-lookup/<env>/db/       <env>-address-rds
+          shared-services snapshot bucket      /address-lookup/<env>/db/       <env>-address-rds
                   snapshots/*                       schema-owner                  (addressdb)
 ```
 
@@ -58,8 +58,10 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
 - **No KMS or Logs endpoints.**
   - Parameter Store decrypts the SecureString server-side (`WithDecryption`),
     using the role's `kms:Decrypt` grant, so the function never calls KMS.
-  - The snapshot bucket uses SSE-S3, so S3 needs no KMS call either. If it
-    moves to SSE-KMS, set `snapshot_kms_key_arn`.
+  - The snapshot bucket uses SSE-KMS with a shared-services key. S3 calls KMS
+    on the function's behalf, so no KMS endpoint is needed. The role has
+    `kms:Decrypt` on the key, whose ARN is read from Vault
+    `aws-accounts/shared-services/kms` (`address-lookup-db-snapshots`).
   - Lambda ships the function's logs itself, outside the VPC.
 - **SSM endpoint private DNS is off.** The VPC is shared. With private DNS on,
   every SSM call in the VPC (ECS agents, other services) would resolve to an
@@ -98,6 +100,11 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
    (`make package-db-migrate-lambda`).
 5. The environment's Concourse AWS credentials are the `concourse-platform` IAM
    user. If not, set `concourse_iam_user_name`.
+6. aws-shared-services-infrastructure-terraform `groups/infrastructure` is
+   applied. It creates the snapshot bucket
+   `shared-services.eu-west-2.address-lookup-db-snapshots.ch.gov.uk` and its
+   KMS key, and writes the key ARN to Vault `aws-accounts/shared-services/kms`
+   (`address-lookup-db-snapshots`). The plan fails without it.
 
 ## Deployment
 
@@ -204,6 +211,7 @@ aws lambda get-function-concurrency --function-name "$F"   # ReservedConcurrentE
 | [aws_vpc.vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/vpc) | data source |
 | [aws_vpc_endpoint.s3](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/vpc_endpoint) | data source |
 | [vault_generic_secret.database_secrets](https://registry.terraform.io/providers/hashicorp/vault/latest/docs/data-sources/generic_secret) | data source |
+| [vault_generic_secret.shared_services_kms](https://registry.terraform.io/providers/hashicorp/vault/latest/docs/data-sources/generic_secret) | data source |
 | [vault_generic_secret.stack_secrets](https://registry.terraform.io/providers/hashicorp/vault/latest/docs/data-sources/generic_secret) | data source |
 
 ## Inputs
@@ -226,7 +234,6 @@ aws lambda get-function-concurrency --function-name "$F"   # ReservedConcurrentE
 | <a name="input_release_artifact_key"></a> [release\_artifact\_key](#input\_release\_artifact\_key) | Key of the Lambda code object (address-lookup-db-migrate-<version>.zip) in the release bucket | `string` | n/a | yes |
 | <a name="input_release_bucket_name"></a> [release\_bucket\_name](#input\_release\_bucket\_name) | The name of the S3 bucket containing the Lambda release artefact | `string` | n/a | yes |
 | <a name="input_snapshot_bucket_name"></a> [snapshot\_bucket\_name](#input\_snapshot\_bucket\_name) | The versioned bucket the Concourse gather-snapshot job writes Flyway snapshots to (SNAPSHOT\_BUCKET) | `string` | n/a | yes |
-| <a name="input_snapshot_kms_key_arn"></a> [snapshot\_kms\_key\_arn](#input\_snapshot\_kms\_key\_arn) | The KMS key the snapshot bucket encrypts with, if it uses SSE-KMS. Empty for SSE-S3 | `string` | `""` | no |
 | <a name="input_snapshot_prefix"></a> [snapshot\_prefix](#input\_snapshot\_prefix) | The key prefix of the snapshots in the snapshot bucket; the function can read nothing else | `string` | `"snapshots"` | no |
 
 ## Outputs

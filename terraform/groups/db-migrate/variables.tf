@@ -38,11 +38,6 @@ variable "snapshot_prefix" {
   default     = "snapshots"
 }
 
-variable "snapshot_kms_key_arn" {
-  type        = string
-  description = "The KMS key the snapshot bucket encrypts with, if it uses SSE-KMS. Empty for SSE-S3"
-  default     = ""
-}
 
 variable "lambda_runtime" {
   type        = string

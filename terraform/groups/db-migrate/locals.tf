@@ -17,10 +17,15 @@ locals {
   data_subnet_pattern = local.database_secrets["data_subnet_pattern"]
 
   parameters_kms_alias = "alias/${var.aws_profile}/environment-services-kms"
-  decrypt_key_arns = compact([
+
+  # The snapshot bucket uses SSE-KMS with this shared-services key. S3 calls
+  # KMS on the function's behalf, so the role needs kms:Decrypt on the key ARN.
+  snapshot_kms_key_arn = data.vault_generic_secret.shared_services_kms.data["address-lookup-db-snapshots"]
+
+  decrypt_key_arns = [
     data.aws_kms_key.parameters.arn,
-    var.snapshot_kms_key_arn,
-  ])
+    local.snapshot_kms_key_arn,
+  ]
 
   alarm_topic_name = coalesce(var.alarm_topic_name, "${local.stack_name}-${var.environment}-cloudwatch-alarms-notify-topic")
 

@@ -1,6 +1,6 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
 
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,7 +11,6 @@ import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AwsClientsConfiguration;
-import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport;
 
 /**
  * Each red-zone handler creates only its own entry service and dependencies. No database wiring.

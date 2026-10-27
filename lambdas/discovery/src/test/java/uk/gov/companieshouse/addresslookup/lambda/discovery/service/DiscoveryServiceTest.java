@@ -102,11 +102,13 @@ public class DiscoveryServiceTest {
 
     @Mock
     private UUID testUUID;
-
+    
     @BeforeEach
     public void setUp() {
-        when(properties.datasets()).thenReturn(List.of(new DatasetDefault("add_gb_royalmailaddress","2.0"),
-                new DatasetDefault("add_isl_royalmailaddress","2.0")));
+        when(properties.datasets()).thenReturn(List.of(
+                new DatasetDefault("add_gb_royalmailaddress","2.0"),
+                new DatasetDefault("add_isl_royalmailaddress","2.0")
+        ));
 
         discoveryService = new DiscoveryService(s3Client, osClient, commands, properties);
     }

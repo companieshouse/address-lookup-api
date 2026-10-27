@@ -29,6 +29,7 @@ public final class Commands {
   }
 
   Commands(EventBridgeClient events, String bus, ObjectMapper json) {
+
     this.events = events;
     this.bus = bus;
     this.json = json;

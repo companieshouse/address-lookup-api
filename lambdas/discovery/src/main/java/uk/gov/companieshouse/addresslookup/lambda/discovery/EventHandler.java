@@ -24,7 +24,6 @@ public class EventHandler implements RequestHandler<ScheduledEvent, String> {
             LOG.info("Received Scheduled Event detail: [{}]", scheduledEvent.getDetail());
             return service.discover(scheduledEvent.getDetail());
         } catch (Exception e) {
-            LOG.error("Discovery Lambda failed to run, Exception:", e);
             throw new DiscoveryLambdaException(String.format("discovery failed; durable state allows retry, event [%s]", scheduledEvent), e);
         }
     }

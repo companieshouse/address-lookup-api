@@ -382,7 +382,6 @@ public final class DiscoveryService {
             commands.send(DetailType.DOWNLOAD.name(), planKey, dataset);
             LOG.info("Published command DOWNLOAD for dataset [{}], planKey [{}]", dataset, planKey);
         } catch (Throwable throwable) {
-            LOG.error(throwable.getMessage(), throwable);
             throw new DiscoveryLambdaException("An exception occurred whilst attempting to send a DOWNLOAD command to the EventBridge", throwable);
         }
     }

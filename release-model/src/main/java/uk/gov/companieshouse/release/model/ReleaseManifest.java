@@ -25,7 +25,7 @@ public final class ReleaseManifest {
 
   private final UUID id;
   private final SupplyType type;
-  private final LocalDate previous;
+  private final LocalDate previousDate;
   private final LocalDate target;
   private final String dataPackageId;
   private final String versionId;
@@ -35,7 +35,7 @@ public final class ReleaseManifest {
   private ReleaseManifest(
       UUID id,
       SupplyType type,
-      LocalDate previous,
+      LocalDate previousDate,
       LocalDate target,
       String dataPackageId,
       String versionId,
@@ -43,7 +43,7 @@ public final class ReleaseManifest {
       String document) {
     this.id = id;
     this.type = type;
-    this.previous = previous;
+    this.previousDate = previousDate;
     this.target = target;
     this.dataPackageId = dataPackageId;
     this.versionId = versionId;
@@ -70,7 +70,7 @@ public final class ReleaseManifest {
   }
 
   public LocalDate previous() {
-    return previous;
+    return previousDate;
   }
 
   public LocalDate target() {

@@ -42,6 +42,7 @@ test: test-integration test-unit
 .PHONY: test-unit
 test-unit:
 	@# Help: Run unit tests
+	bash tests/test_local_api_smoke.sh
 	mvn test -Dskip.integration.tests=true
 
 .PHONY: test-integration

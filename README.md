@@ -33,6 +33,26 @@ docker compose -f compose.yaml up -d postgres
 mvn -pl address-lookup-api spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
+For an isolated startup and health check, run:
+
+```bash
+./scripts/local-api-smoke.sh
+```
+
+The helper requires `d2`, Maven, `curl`, and Docker. It starts PostGIS through
+`d2 als.docker.compose`, creates a uniquely named temporary database, starts
+the API with the local profile, and waits up to 90 seconds for HTTP 200 from
+`/address-lookup-api/healthcheck`. It also verifies that Flyway recorded at
+least one migration in the temporary database. It then stops the API process
+it started, drops only that temporary database, and verifies its removal. The
+helper refuses to continue if the health endpoint already responds on port
+8080, avoiding a false success against another running service. The default
+`address_lookup` database and `~/.pgpass` are not used or modified. Set
+`SPRING_DATASOURCE_USERNAME` or `SPRING_DATASOURCE_PASSWORD` only when the
+local Compose credentials have been changed. The health-check timeout and poll
+interval can be set with `LOCAL_API_STARTUP_TIMEOUT_SECONDS` and
+`LOCAL_API_HEALTH_POLL_INTERVAL_SECONDS`.
+
 Production database packages are built from `database/migrations/` with
 `make package-db-schema version=<version>`. The local-only seed files under
 `database/local/` are not included.

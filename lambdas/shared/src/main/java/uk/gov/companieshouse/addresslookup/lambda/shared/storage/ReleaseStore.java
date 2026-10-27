@@ -1,12 +1,17 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
+import uk.gov.companieshouse.release.model.DatasetCatalog;
 
+import java.net.HttpURLConnection;
+import java.time.Instant;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -15,8 +20,10 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 /** S3 progress records and scan evidence; no database dependency. */
 public final class ReleaseStore {
   public static final String CLEAN = "NO_THREATS_FOUND";
+  private static final String JSON_CONTENT_TYPE = "application/json";
   private static final String FIELD_S3_KEY = "s3Key";
   private static final String FIELD_VERSION = "version";
+  private static final String SCANNED_PREFIX = "Scanned/";
   private final S3Client s3;
 
   public ReleaseStore(S3Client s3) {
@@ -48,12 +55,19 @@ public final class ReleaseStore {
               .bucket(bucket)
               .key(key)
               .ifNoneMatch("*")
-              .contentType("application/json")
+              .contentType(JSON_CONTENT_TYPE)
               .build(),
           RequestBody.fromString(value.toString()));
     } catch (S3Exception e) {
-      if (e.statusCode() != 412) throw e;
+      if (!isPreconditionFailed(e)) throw e;
     }
+  }
+
+  /** Stores mutable operational state. Immutable release descriptions must use {@link #immutable}. */
+  public void write(String bucket, String key, JsonNode value) {
+    s3.putObject(
+        PutObjectRequest.builder().bucket(bucket).key(key).contentType(JSON_CONTENT_TYPE).build(),
+        RequestBody.fromString(value.toString()));
   }
 
   public List<String> keys(String bucket, String prefix) {
@@ -123,13 +137,17 @@ public final class ReleaseStore {
   public static String receiptKey(String id, String dataset, String step) {
     UUID release = UUID.fromString(id);
     if ("download".equals(step)) {
-      return "Scanned/" + release + "/" + dataset + ".receipt.json";
+      return SCANNED_PREFIX + release + "/" + dataset + ".receipt.json";
     }
     return "control/" + release + "/" + dataset + "/" + step + ".json";
   }
 
+  public static String extractedCsvKey(String id, String dataset) {
+    return SCANNED_PREFIX + UUID.fromString(id) + "/" + dataset + ".csv";
+  }
+
   public static String downloadZipKey(String id, String dataset) {
-    return "Scanned/" + UUID.fromString(id) + "/" + dataset + ".zip";
+    return SCANNED_PREFIX + UUID.fromString(id) + "/" + dataset + ".zip";
   }
 
   public JsonNode receipt(String bucket, String id, String dataset, String step) throws Exception {
@@ -165,5 +183,26 @@ public final class ReleaseStore {
     receipt.put("downloadedAt", details.downloadedAt().toString());
     receipt.put("sourceUrl", details.sourceUrl());
     immutable(bucket, receiptKey(details.releaseId(), details.dataset(), "download"), receipt);
+  }
+
+  public void receipt(
+      String bucket, String releaseId, String dataset, String step, JsonNode receipt) throws Exception {
+    immutable(bucket, receiptKey(releaseId, dataset, step), receipt);
+  }
+
+  public void receiptOnce(
+      String bucket, String releaseId, String dataset, String step, JsonNode receipt) {
+    s3.putObject(
+        PutObjectRequest.builder()
+            .bucket(bucket)
+            .key(receiptKey(releaseId, dataset, step))
+            .ifNoneMatch("*")
+            .contentType(JSON_CONTENT_TYPE)
+            .build(),
+        RequestBody.fromString(receipt.toString()));
+  }
+
+  public static boolean isPreconditionFailed(S3Exception e) {
+    return e.statusCode() == HttpURLConnection.HTTP_PRECON_FAILED;
   }
 }

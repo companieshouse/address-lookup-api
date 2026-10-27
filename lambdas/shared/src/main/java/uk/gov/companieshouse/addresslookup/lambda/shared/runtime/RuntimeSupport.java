@@ -2,6 +2,8 @@ package uk.gov.companieshouse.addresslookup.lambda.shared.runtime;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.util.function.Supplier;
 import uk.gov.companieshouse.release.model.ReleaseJson;
 
 import java.net.URI;
@@ -16,13 +18,24 @@ public final class RuntimeSupport {
         if (!value) throw new IllegalArgumentException(message);
     }
 
+    public static <E extends Exception> void check(boolean value, Supplier<E> exceptionSupplier) throws E {
+        if (!value) throw exceptionSupplier.get();
+    }
+
     public static String sha(byte[] bytes) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
     }
 
     public static JsonNode detail(Map<String, Object> e) {
         JsonNode n = JSON.valueToTree(e);
-        return n.has("detail") ? n.get("detail") : n;
+        if (!n.has("detail")) return n;
+        JsonNode detail = n.get("detail");
+        if (!detail.isTextual()) return detail;
+        try {
+            return JSON.readTree(detail.asText());
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("Invalid event detail", ex);
+        }
     }
 
     public static String required(JsonNode n, String field) {

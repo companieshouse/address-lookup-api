@@ -8,6 +8,12 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionAppl
 import java.util.Map;
 
 public final class Handler implements RequestHandler<Map<String, Object>, String> {
+  public static final class UnzipFailureException extends RuntimeException {
+    public UnzipFailureException(String message, Throwable cause) {
+      super(message, cause);
+    }
+  }
+
   private final ExtractionService service =
      AcquisitionApplication.start(ExtractionService.class);
 
@@ -15,7 +21,8 @@ public final class Handler implements RequestHandler<Map<String, Object>, String
     try {
       return service.unzip(event, context);
     } catch (Exception e) {
-      throw new RuntimeException("unzip failed; durable state allows retry", e);
+      String reason = e.getMessage();
+      throw new UnzipFailureException("unzip failed {" + reason + "}", e);
     }
   }
 }

@@ -37,7 +37,7 @@ public final class DatasetCatalog {
       var tables = List.of(new ObjectMapper().readValue(in, Table[].class));
       if (tables.size() != Dataset.values().length
           || tables.stream().map(Table::name).distinct().count() != tables.size())
-        throw new IllegalStateException("Expected four distinct OS datasets");
+        throw new IllegalStateException("Expected one distinct catalogue entry per supported OS dataset");
       for (var table : tables) Dataset.named(table.name());
       return tables;
     } catch (Exception e) {

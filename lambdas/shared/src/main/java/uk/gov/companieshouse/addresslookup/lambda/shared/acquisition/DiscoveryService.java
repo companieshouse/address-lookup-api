@@ -32,6 +32,7 @@ public final class DiscoveryService {
     this.os = os;
     this.commands = commands;
     this.properties = properties;
+    AcquisitionProperties.required(properties.sourceBucket(), "SOURCE_BUCKET");
     AcquisitionProperties.required(properties.packages(), "OS_PACKAGES");
   }
 

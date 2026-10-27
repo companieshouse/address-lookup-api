@@ -9,6 +9,9 @@ import java.util.UUID;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 public final class AcquisitionSupport {
+
+  private AcquisitionSupport() {}
+
   static DatasetCatalog.Table table(String name) throws Exception {
     return Dataset.named(name).table();
   }

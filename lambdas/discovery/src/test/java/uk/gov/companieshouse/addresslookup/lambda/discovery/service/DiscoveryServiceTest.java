@@ -41,7 +41,7 @@ import java.util.List;
 import java.util.UUID;
 
 @ExtendWith(MockitoExtension.class)
-public class DiscoveryServiceTest {
+class DiscoveryServiceTest {
 
     private static final String COU_REQUEST_JSON = """    
             {"mode":"COU"}
@@ -86,7 +86,7 @@ public class DiscoveryServiceTest {
 
     private static final String TEST_RELEASE_ID = "12345678-1234-1234-1234-123456789abc";
 
-    public DiscoveryService discoveryService;
+    private DiscoveryService discoveryService;
 
     @Mock
     private S3Client s3Client;
@@ -104,7 +104,7 @@ public class DiscoveryServiceTest {
     private UUID testUUID;
     
     @BeforeEach
-    public void setUp() {
+    void setUp() {
         when(properties.datasets()).thenReturn(List.of(
                 new DatasetDefault("add_gb_royalmailaddress","2.0"),
                 new DatasetDefault("add_isl_royalmailaddress","2.0")
@@ -114,7 +114,7 @@ public class DiscoveryServiceTest {
     }
 
     @Test
-    public void shouldReturnReleaseIdForCOURequestValidDatasetAndSuccessfullySent() throws Exception {
+    void shouldReturnReleaseIdForCOURequestValidDatasetAndSuccessfullySent() throws Exception {
 
         GetObjectRequest request = GetObjectRequest.builder()
                 .bucket(TEST_SOURCE_BUCKET)
@@ -182,7 +182,7 @@ public class DiscoveryServiceTest {
     }
 
     @Test
-    public void shouldReturnReleaseIdForFULLRequestValidDatasetAndSuccessfullySent() throws Exception {
+    void shouldReturnReleaseIdForFULLRequestValidDatasetAndSuccessfullySent() throws Exception {
         PutObjectRequest updateCursorRequest = PutObjectRequest.builder()
                 .bucket(TEST_SOURCE_BUCKET)
                 .key(CURSOR_KEY)
@@ -239,7 +239,7 @@ public class DiscoveryServiceTest {
     }
 
     @Test
-    public void shouldReturnNoCommonContiguousReleaseForCOURequestValidDatasetAndSuccessfullySent() throws Exception {
+    void shouldReturnNoCommonContiguousReleaseForCOURequestValidDatasetAndSuccessfullySent() throws Exception {
 
         GetObjectRequest request = GetObjectRequest.builder()
                 .bucket(TEST_SOURCE_BUCKET)
@@ -277,7 +277,7 @@ public class DiscoveryServiceTest {
     }
 
     @Test
-    public void shouldReturnNoCommonContiguousReleaseForFULLRequestDifferentToDates() throws Exception {
+    void shouldReturnNoCommonContiguousReleaseForFULLRequestDifferentToDates() throws Exception {
 
         when(osClient.json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989"))
                 .thenReturn(jsonFileToJsonNode("OsData/Full/full-data-package-20780-version-130989-data.json", JSON));
@@ -301,7 +301,7 @@ public class DiscoveryServiceTest {
     }
 
     @Test
-    public void shouldThrowExceptionInvalidMode() {
+    void shouldThrowExceptionInvalidMode() {
         try {
             discoveryService.discover("{\"mode\":\"FRED\"}");
             fail("Should have thrown an exception");
@@ -311,7 +311,7 @@ public class DiscoveryServiceTest {
     }
 
     @Test
-    public void shouldThrowExceptionForCOUWithNoCursor() {
+    void shouldThrowExceptionForCOUWithNoCursor() {
 
         when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
 
@@ -327,7 +327,7 @@ public class DiscoveryServiceTest {
     }
 
     @Test
-    public void shouldThrowExceptionForFULLWithMissingDataPackageParameter() {
+    void shouldThrowExceptionForFULLWithMissingDataPackageParameter() {
 
         try {
             discoveryService.discover("""
@@ -345,7 +345,7 @@ public class DiscoveryServiceTest {
     }
 
     @Test
-    public void shouldThrowExceptionForFULLWithMissingVersionIdParameter() {
+    void shouldThrowExceptionForFULLWithMissingVersionIdParameter() {
         try {
             discoveryService.discover("""
      {
@@ -362,7 +362,7 @@ public class DiscoveryServiceTest {
     }
 
     @Test
-    public void shouldThrowExceptionForFULLWithMissingVersionsParameter() {
+    void shouldThrowExceptionForFULLWithMissingVersionsParameter() {
         try {
             discoveryService.discover("""
      {
@@ -377,7 +377,7 @@ public class DiscoveryServiceTest {
     }
 
     @Test
-    public void shouldThrowExceptionNoPackageVersionDataReturnedFromOS() throws Exception {
+    void shouldThrowExceptionNoPackageVersionDataReturnedFromOS() throws Exception {
 
         GetObjectRequest request = GetObjectRequest.builder()
                 .bucket(TEST_SOURCE_BUCKET)
@@ -406,7 +406,7 @@ public class DiscoveryServiceTest {
     }
 
     @Test
-    public void testModel() throws Exception {
+    void testModel() throws Exception {
 
         JSON.registerModule(new JavaTimeModule());
 
@@ -426,7 +426,7 @@ public class DiscoveryServiceTest {
     }
 
     @Test
-    public void testCOUManifestCreation() throws Exception {
+    void testCOUManifestCreation() throws Exception {
         ReleaseJson.MAPPER.registerModule(new JavaTimeModule());
         ReleaseManifest manifest  = ReleaseManifest.read(jsonFileToJsonNode("output/output-manifest-COU.json", JSON));
 
@@ -434,7 +434,7 @@ public class DiscoveryServiceTest {
     }
 
     @Test
-    public void testFullManifestCreation() throws Exception {
+    void testFullManifestCreation() throws Exception {
         ReleaseJson.MAPPER.registerModule(new JavaTimeModule());
         ReleaseManifest manifest  = ReleaseManifest.read(jsonFileToJsonNode("output/output-manifest-Full.json", JSON));
 
@@ -443,8 +443,8 @@ public class DiscoveryServiceTest {
 
     private static class S3PutRequestBodyMatcher <T> implements ArgumentMatcher<RequestBody> {
 
-        final private String expectedBodyJson;
-        final private Class<T> clazz;
+        private final String expectedBodyJson;
+        private final Class<T> clazz;
 
         S3PutRequestBodyMatcher(String expectedBodyJson, Class<T> clazz) {
             this.expectedBodyJson = expectedBodyJson;
@@ -475,7 +475,7 @@ public class DiscoveryServiceTest {
 
     private static class S3PutReleaseManifestRequestBodyMatcher implements ArgumentMatcher<RequestBody> {
 
-        final private ReleaseManifest expectedManifest;
+        private final ReleaseManifest expectedManifest;
 
         S3PutReleaseManifestRequestBodyMatcher(ReleaseManifest expectedManifest) {
             this.expectedManifest = expectedManifest;

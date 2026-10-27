@@ -20,7 +20,7 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionAppl
 import java.util.Map;
 
 @ExtendWith(MockitoExtension.class)
-public class EventHandlerTest {
+class EventHandlerTest {
 
     @Mock
     private DiscoveryService discoveryService;
@@ -35,7 +35,7 @@ public class EventHandlerTest {
 
 
     @BeforeEach
-    public void setup() {
+    void setup() {
         try (MockedStatic<AcquisitionApplication> mockApp = Mockito.mockStatic(AcquisitionApplication.class)) {
             mockApp.when(() -> AcquisitionApplication.start(DiscoveryService.class))
                     .thenReturn(discoveryService);
@@ -44,7 +44,7 @@ public class EventHandlerTest {
     }
 
     @Test
-    public void shouldReturnReleaseIdForSuccessfulDiscovery() throws Exception {
+    void shouldReturnReleaseIdForSuccessfulDiscovery() throws Exception {
 
         Mockito.when(discoveryService.discover(TEST_DETAILS))
                 .thenReturn(TEST_RESPONSE_ID);
@@ -58,7 +58,7 @@ public class EventHandlerTest {
     }
 
     @Test
-    public void shouldReturnNoCommonContiguousReleaseResponse() throws Exception {
+    void shouldReturnNoCommonContiguousReleaseResponse() throws Exception {
         String expectedResponse = "NO_COMMON_CONTIGUOUS_RELEASE";
 
         Mockito.when(discoveryService.discover(TEST_DETAILS))
@@ -73,9 +73,9 @@ public class EventHandlerTest {
     }
 
     @Test
-    public void shouldRuntimeExceptionForException() throws Exception {
+    void shouldRuntimeExceptionForException() throws Exception {
 
-        String EXCEPTION_TEXT = "Something went wrong!!";
+        final String EXCEPTION_TEXT = "Something went wrong!!";
 
         Mockito.when(discoveryService.discover(TEST_DETAILS))
                 .thenThrow(new Exception(EXCEPTION_TEXT));

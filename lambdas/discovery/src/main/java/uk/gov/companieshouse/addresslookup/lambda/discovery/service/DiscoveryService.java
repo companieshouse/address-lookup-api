@@ -4,6 +4,8 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.detail;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
+import static uk.gov.companieshouse.release.model.SupplyType.COU;
+import static uk.gov.companieshouse.release.model.SupplyType.FULL;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.TreeNode;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -21,6 +23,7 @@ import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
+import uk.gov.companieshouse.addresslookup.lambda.discovery.exception.DiscoveryLambdaException;
 import uk.gov.companieshouse.addresslookup.lambda.discovery.model.OrderSummary;
 import uk.gov.companieshouse.addresslookup.lambda.discovery.model.VersionCursor;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
@@ -61,15 +64,15 @@ public final class DiscoveryService {
     private record DownloadDoublet(Download orderSummaryDownload, Download zipDownload) {
     }
 
-    private static final String DATA_PACKAGE_FIELD = "data_package",
-            VERSION_ID_FIELD = "version_id",
-            CURSOR_KEY = "control/address-release/active.json",
-            PATH_KEY_STUB = "acquisitions/%s/%s.json";
+    private static final String DATA_PACKAGE_FIELD = "data_package";
+    private static final String VERSION_ID_FIELD = "version_id";
+    private static final String CURSOR_KEY = "control/address-release/active.json";
+    private static final String PATH_KEY_STUB = "acquisitions/%s/%s.json";
 
     private static final String MISSING_CURSOR_FILE_MESSAGE = "The active.json Cursor file could not be found in the S3 bucket.";
     private static final String NO_COMMON_CONTIGUOUS_RELEASE_RESPONSE = "NO_COMMON_CONTIGUOUS_RELEASE";
 
-    private static final Set<String> SUPPLY_TYPE_SET = Set.of(SupplyType.FULL.name(), SupplyType.COU.name());
+    private static final Set<String> SUPPLY_TYPE_SET = Set.of(FULL.name(), SupplyType.COU.name());
 
     @Autowired
     public DiscoveryService(S3Client s3Client, OsClient osClient,
@@ -80,7 +83,7 @@ public final class DiscoveryService {
         this.properties = properties;
         datasets = properties.datasets();
         if (datasets.isEmpty()) {
-            throw new RuntimeException("No datasets defined");
+            throw new DiscoveryLambdaException("No datasets defined");
         }
     }
 
@@ -101,29 +104,27 @@ public final class DiscoveryService {
         String urlPackageVersionData = "";
         VersionCursor cursor = null;
         String packageId = null;
-        switch (mode) {
-            case FULL:
-                // Get version from input
-                JsonNode versionsNode = input.get("versions");
-                check(versionsNode != null, "versions node missing from request for FULL mode");
-                String versionId = required(versionsNode, VERSION_ID_FIELD);
-                packageId = required(versionsNode, DATA_PACKAGE_FIELD);
+        if (mode == FULL) {
+            // Get version from input
+            JsonNode versionsNode = input.get("versions");
+            check(versionsNode != null, "versions node missing from request for FULL mode");
+            String versionId = required(versionsNode, VERSION_ID_FIELD);
+            packageId = required(versionsNode, DATA_PACKAGE_FIELD);
 
-                urlPackageVersionData = properties.osHttpURLTemplate()
-                        .replace("{version}", versionId)
-                        .replace("{dataPackage}", packageId);
+            urlPackageVersionData = properties.osHttpURLTemplate()
+                    .replace("{version}", versionId)
+                    .replace("{dataPackage}", packageId);
+        }
+        else if (mode == COU) {
+            // Get the previous version from the Cursor in the S3 bucket
+            cursor = getCurrentCursor();
+            packageId = cursor.dataPackageId();
 
-                break;
-            case COU:
-                // Get the previous version from the Cursor in the S3 bucket
-                cursor = getCurrentCursor();
-                packageId = cursor.dataPackageId();
-
-                urlPackageVersionData = getNextVersionUrl(cursor);
-                if (urlPackageVersionData == null) {
-                    LOG.error("For mode [{}], failed to get next Version URL", mode);
-                    return "No Next Version URL";
-                }
+            urlPackageVersionData = getNextVersionUrl(cursor);
+            if (urlPackageVersionData == null) {
+                LOG.error("For mode [{}], failed to get next Version URL", mode);
+                return "No Next Version URL";
+            }
         }
 
         PackageVersionData packageVersionData = getPackageVersionData(urlPackageVersionData);
@@ -159,7 +160,7 @@ public final class DiscoveryService {
                 packageVersionData.id(),
                 targetDate.format(DateTimeFormatter.ISO_LOCAL_DATE));
 
-        saveOrUpdateToS3Bucket(cursor, CURSOR_KEY);
+        saveOrUpdateCursorToS3Bucket(cursor);
 
         String releaseId = releaseManifest.id().toString();
         LOG.info("Discovery completed successfully, Release ID [{}]", releaseId);
@@ -183,8 +184,8 @@ public final class DiscoveryService {
         return JSON.readValue(response, VersionCursor.class);
     }
 
-    private void saveOrUpdateToS3Bucket(Object payload, String key) throws JsonProcessingException {
-        saveToS3Bucket(payload, key, false);
+    private void saveOrUpdateCursorToS3Bucket(Object payload) throws JsonProcessingException {
+        saveToS3Bucket(payload, CURSOR_KEY, false);
     }
 
     private void saveNewOnlyToS3Bucket(Object payload, String key) throws JsonProcessingException {
@@ -248,7 +249,7 @@ public final class DiscoveryService {
                 .filter(download ->
                         matchDownloadToDataset(download, filename))
                 .findFirst().orElseThrow(() ->
-                        new RuntimeException(String.format("Failed to find entry for [%s]", filename))
+                        new DiscoveryLambdaException(String.format("Failed to find entry for [%s]", filename))
                 );
     }
 
@@ -263,19 +264,15 @@ public final class DiscoveryService {
 
     private void retrieveAndValidateOrderSummary(Map.Entry<DatasetDefault, DownloadDoublet> entry,
                                                  Map<String, OrderSummary> orderSummaries) {
-        try {
-            String url = entry.getValue().orderSummaryDownload.url();
-            OrderSummary orderSummary = retrieveOSData(url, OrderSummary.class);
-            if (orderSummary == null) {
-                LOG.error("Failed to retrieve Order Summary data for URL [{}]", url);
-                return;
-            }
-            verifyOrderSummary(orderSummary, entry.getKey());
-            orderSummaries.put(entry.getKey().name(), orderSummary);
-        } catch (Exception e) {
-            LOG.error(e.getMessage(), e);
-            throw new RuntimeException(e);
+
+        String url = entry.getValue().orderSummaryDownload.url();
+        OrderSummary orderSummary = retrieveOSData(url, OrderSummary.class);
+        if (orderSummary == null) {
+            LOG.error("Failed to retrieve Order Summary data for URL [{}]", url);
+            return;
         }
+        verifyOrderSummary(orderSummary, entry.getKey());
+        orderSummaries.put(entry.getKey().name(), orderSummary);
     }
 
     private boolean matchDownloadToDataset(Download download, String dataset) {
@@ -380,13 +377,13 @@ public final class DiscoveryService {
         return pathKey;
     }
 
-    private void publishDownloadCommands(String planKey, String dataset) throws RuntimeException {
+    private void publishDownloadCommands(String planKey, String dataset) throws DiscoveryLambdaException {
         try {
             commands.send(DetailType.DOWNLOAD.name(), planKey, dataset);
             LOG.info("Published command DOWNLOAD for dataset [{}], planKey [{}]", dataset, planKey);
         } catch (Throwable throwable) {
             LOG.error(throwable.getMessage(), throwable);
-            throw new RuntimeException("An exception occurred whilst attempting to send a DOWNLOAD command to the EventBridge", throwable);
+            throw new DiscoveryLambdaException("An exception occurred whilst attempting to send a DOWNLOAD command to the EventBridge", throwable);
         }
     }
 
@@ -396,7 +393,7 @@ public final class DiscoveryService {
             treeNode = osClient.json(url);
         } catch (Exception e) {
             LOG.error("Failed to get data from OS for URL [{}]", url);
-            throw new RuntimeException(e);
+            throw new DiscoveryLambdaException(e);
         }
         if (treeNode == null || treeNode.size() == 0) {
             LOG.error("Failed to get data from OS for URL [{}]", url);
@@ -410,7 +407,7 @@ public final class DiscoveryService {
         } catch (JsonProcessingException e) {
             LOG.error("Error parsing returned OS data to class [{}], returned Data:\n{}",
                     clazz.getName(), treeNode);
-            throw new RuntimeException(e);
+            throw new DiscoveryLambdaException(e);
         }
 
         return t;

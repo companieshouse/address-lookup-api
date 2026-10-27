@@ -11,6 +11,14 @@ import java.util.UUID;
 
 /** Validated immutable metadata; the original JSON text preserves release identity and digest. */
 public final class ReleaseManifest {
+
+  private static final String RELEASE_ID = "releaseId";
+  private static final String MODE = "mode";
+  private static final String PREVIOUS = "previous";
+  private static final String TARGET = "target";
+  private static final String DATA_PACKAGE_ID = "dataPackageId";
+  private static final String VERSION_ID = "versionId";
+
   public record Zip(String md5, String fileName, String url) {}
 
   public record FileMetadata(OrderSummary summary, Zip zip) {}
@@ -92,8 +100,8 @@ public final class ReleaseManifest {
 
   public static ReleaseManifest read(JsonNode node) throws Exception {
     if (!node.isObject()) throw new IllegalArgumentException("Manifest must be an object");
-    var allowed = new HashSet<>(List.of("releaseId", "mode", "previous", "target",
-            "dataPackageId", "versionId"));
+    var allowed = new HashSet<>(List.of(RELEASE_ID, MODE, PREVIOUS, TARGET,
+            DATA_PACKAGE_ID, VERSION_ID));
     for (var dataset : Dataset.values()) allowed.add(dataset.datasetName());
     node.fieldNames()
         .forEachRemaining(
@@ -101,13 +109,13 @@ public final class ReleaseManifest {
               if (!allowed.contains(field))
                 throw new IllegalArgumentException("Unexpected manifest field: " + field);
             });
-    UUID id = UUID.fromString(text(node, "releaseId"));
-    SupplyType type = SupplyType.valueOf(text(node, "mode"));
-    LocalDate target = LocalDate.parse(text(node, "target"));
+    UUID id = UUID.fromString(text(node, RELEASE_ID));
+    SupplyType type = SupplyType.valueOf(text(node, MODE));
+    LocalDate target = LocalDate.parse(text(node, TARGET));
     LocalDate previous =
-        node.hasNonNull("previous") ? LocalDate.parse(text(node, "previous")) : null;
-    String dataPackageId = text(node, "dataPackageId");
-    String versionId = text(node, "versionId");
+        node.hasNonNull(PREVIOUS) ? LocalDate.parse(text(node, PREVIOUS)) : null;
+    String dataPackageId = text(node, DATA_PACKAGE_ID);
+    String versionId = text(node, VERSION_ID);
     if (previous != null && !target.isAfter(previous))
       throw new IllegalArgumentException("Invalid release interval");
     if (type == SupplyType.COU && previous == null)

@@ -14,6 +14,8 @@ import java.util.Map;
 public final class RuntimeSupport {
     public static final ObjectMapper JSON = ReleaseJson.MAPPER;
 
+    private static final String DETAIL_FIELD = "detail";
+
     public static void check(boolean value, String message) {
         if (!value) throw new IllegalArgumentException(message);
     }
@@ -28,8 +30,8 @@ public final class RuntimeSupport {
 
     public static JsonNode detail(Map<String, Object> e) {
         JsonNode n = JSON.valueToTree(e);
-        if (!n.has("detail")) return n;
-        JsonNode detail = n.get("detail");
+        if (!n.has(DETAIL_FIELD)) return n;
+        JsonNode detail = n.get(DETAIL_FIELD);
         if (!detail.isTextual()) return detail;
         try {
             return JSON.readTree(detail.asText());
@@ -43,7 +45,7 @@ public final class RuntimeSupport {
     }
 
     private static JsonNode detailNode(JsonNode node) {
-        return node.has("detail") ? node.get("detail") : node;
+        return node.has(DETAIL_FIELD) ? node.get(DETAIL_FIELD) : node;
     }
 
     public static String required(JsonNode jsonNode, String field) {

@@ -11,9 +11,22 @@ public class PackageVersionDataTest {
 
     @Test
     void testPackageVersionData() throws Exception {
-        PackageVersionData packageVersionData = TestUtils.jsonFileToObject(
+        PackageVersionData packageVersionDataOriginal = TestUtils.jsonFileToObject(
                 "package/data-package-20780-version-150035-data.json",
                 PackageVersionData.class, ReleaseJson.MAPPER);
+
+        PackageVersionData packageVersionData = new PackageVersionData(packageVersionDataOriginal.id(),
+                packageVersionDataOriginal.url(),
+                packageVersionDataOriginal.createdOn(),
+                packageVersionDataOriginal.reason(),
+                packageVersionDataOriginal.supplyType(),
+                packageVersionDataOriginal.productVersion(),
+                packageVersionDataOriginal.format(),
+                packageVersionDataOriginal.dataPackageUrl(),
+                packageVersionDataOriginal.previousVersionUrl(),
+                packageVersionDataOriginal.nextVersionUrl(),
+                packageVersionDataOriginal.downloads());
+
         assertNotNull(packageVersionData);
         assertEquals(LocalDate.parse("2026-10-05"), packageVersionData.createdOn());
         assertEquals("https://api.os.uk/downloads/v1/dataPackages/20780", packageVersionData.dataPackageUrl());

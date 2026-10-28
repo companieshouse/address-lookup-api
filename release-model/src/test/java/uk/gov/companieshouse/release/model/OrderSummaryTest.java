@@ -12,9 +12,18 @@ public class OrderSummaryTest {
 
     @Test
     void testOrderSummary() throws Exception{
-        OrderSummary orderSummary = TestUtils.jsonFileToObject("summary/add_gb_builtaddress_orderSummary.json",
+        OrderSummary orderSummaryOriginal = TestUtils.jsonFileToObject("summary/add_gb_builtaddress_orderSummary.json",
                 OrderSummary.class, ReleaseJson.MAPPER);
 
+        OrderSummary orderSummary = new OrderSummary(
+                orderSummaryOriginal.featureName(),
+                orderSummaryOriginal.crs(),
+                orderSummaryOriginal.schemaVersion(),
+                orderSummaryOriginal.validFromDate(),
+                orderSummaryOriginal.validToDate(),
+                orderSummaryOriginal.recordCount()
+        );
+        
         assertNotNull(orderSummary);
         assertEquals("http://www.opengis.net/def/crs/EPSG/0/27700", orderSummary.crs());
         assertEquals("add-gb-builtaddress", orderSummary.featureName());

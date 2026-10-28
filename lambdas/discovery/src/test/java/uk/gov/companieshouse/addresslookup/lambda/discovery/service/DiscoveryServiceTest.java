@@ -408,8 +408,6 @@ class DiscoveryServiceTest {
     @Test
     void testModel() throws Exception {
 
-        JSON.registerModule(new JavaTimeModule());
-
         PackageVersionData packageVersionData = jsonFileToObject(
                 "OsData/COU/previous-data-package-20780-version-150035-data.json",
                 PackageVersionData.class, JSON);

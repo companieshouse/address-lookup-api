@@ -37,7 +37,7 @@ public enum Dataset {
   public String prepareCall(SupplyType mode) {
     return mode == SupplyType.COU ? resolve : validateFull;
   }
-  
+
   public static Dataset named(String name) {
     return Arrays.stream(values())
         .filter(d -> d.name.equals(name))

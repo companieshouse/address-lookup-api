@@ -41,12 +41,30 @@ class OrderSummaryTest {
         DatasetCatalog.Table testTable = new DatasetCatalog.Table("add-gb-builtaddress", "3.0",
                 null, null, null);
         try {
-        orderSummary.validate(testTable, SupplyType.COU,
-                LocalDate.parse("2026-10-06"),
-                LocalDate.parse("2026-10-07"));
+            orderSummary.validate(testTable,
+                    LocalDate.parse("2026-10-06"),
+                    LocalDate.parse("2026-10-07"));
         } catch (Throwable throwable) {
             throwable.printStackTrace();
             fail(throwable.getMessage());
+        }
+    }
+
+    @Test
+    void testValidateTargetBeforePrevious() throws Exception {
+        OrderSummary orderSummary = TestUtils.jsonFileToObject("summary/add_gb_builtaddress_orderSummary.json",
+                OrderSummary.class, ReleaseJson.MAPPER);
+
+        DatasetCatalog.Table testTable = new DatasetCatalog.Table("add-gb-builtaddress", "3.0",
+                null, null, null);
+        try {
+            orderSummary.validate(testTable,
+                    LocalDate.parse("2026-10-06"),
+                    LocalDate.parse("2026-10-01"));
+            fail("Should have thrown an exception");
+        } catch (Throwable throwable) {
+            throwable.printStackTrace();
+            assertEquals("Invalid validFromDate", throwable.getMessage());
         }
     }
 }

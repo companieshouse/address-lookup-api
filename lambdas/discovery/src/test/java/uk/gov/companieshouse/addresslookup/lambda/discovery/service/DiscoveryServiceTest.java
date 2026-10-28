@@ -14,6 +14,7 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToJsonNode;
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToObject;
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.readFileFromClasspath;
+import static uk.gov.companieshouse.release.model.DetailType.DOWNLOAD;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -175,8 +176,8 @@ class DiscoveryServiceTest {
         verify(osClient).json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150104/downloads?fileName=add_gb_royalmailaddress_orderSummary.json");
         verify(osClient).json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150104/downloads?fileName=add_isl_royalmailaddress_orderSummary.json");
 
-        verify(commands).send("DOWNLOAD", expectedPlanKey, "add_gb_royalmailaddress");
-        verify(commands).send("DOWNLOAD", expectedPlanKey, "add_isl_royalmailaddress");
+        verify(commands).send(DOWNLOAD.name(), expectedPlanKey, "add_gb_royalmailaddress");
+        verify(commands).send(DOWNLOAD.name(), expectedPlanKey, "add_isl_royalmailaddress");
         assertEquals(TEST_RELEASE_ID, releaseId);
 
     }
@@ -232,8 +233,8 @@ class DiscoveryServiceTest {
         verify(s3Client).putObject(eq(updateCursorRequest), argThat(cursorUpdateMatcher));
         verify(s3Client).putObject(eq(saveManifestRequest), argThat(manifestMatcher));
 
-        verify(commands).send("DOWNLOAD", expectedPlanKey, "add_gb_royalmailaddress");
-        verify(commands).send("DOWNLOAD", expectedPlanKey, "add_isl_royalmailaddress");
+        verify(commands).send(DOWNLOAD.name(), expectedPlanKey, "add_gb_royalmailaddress");
+        verify(commands).send(DOWNLOAD.name(), expectedPlanKey, "add_isl_royalmailaddress");
         assertEquals(TEST_RELEASE_ID, releaseId);
 
     }

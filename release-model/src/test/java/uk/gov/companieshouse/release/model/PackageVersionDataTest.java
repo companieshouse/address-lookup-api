@@ -7,7 +7,7 @@ import uk.gov.companieshouse.release.model.utils.TestUtils;
 
 import java.time.LocalDate;
 
-public class PackageVersionDataTest {
+class PackageVersionDataTest {
 
     @Test
     void testPackageVersionData() throws Exception {

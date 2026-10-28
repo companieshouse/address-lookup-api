@@ -8,7 +8,7 @@ import uk.gov.companieshouse.release.model.utils.TestUtils;
 
 import java.time.LocalDate;
 
-public class OrderSummaryTest {
+class OrderSummaryTest {
 
     @Test
     void testOrderSummary() throws Exception{
@@ -23,7 +23,7 @@ public class OrderSummaryTest {
                 orderSummaryOriginal.validToDate(),
                 orderSummaryOriginal.recordCount()
         );
-        
+
         assertNotNull(orderSummary);
         assertEquals("http://www.opengis.net/def/crs/EPSG/0/27700", orderSummary.crs());
         assertEquals("add-gb-builtaddress", orderSummary.featureName());

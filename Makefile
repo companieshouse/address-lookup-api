@@ -140,7 +140,7 @@ deps:
 
 .PHONY: dependency-check
 dependency-check: build package
-	mvn install -DskipTests
+	mvn install -DskipTests -Dskip.integration.tests=true
 	dependency-check-runner --repo-name=address-lookup-api
 
 .PHONY: lint

@@ -79,7 +79,7 @@ class TlsProtocolProbeTest {
     }
 
     @Test
-    void neverCompletesTheHandshake() throws Exception {
+    void acceptsTheProtocolWithAnUntrustedCertificateButNeverCompletesTheHandshake() throws Exception {
         AtomicBoolean completed = new AtomicBoolean();
 
         try (ServerSocket server = server('S', 1, completed)) {

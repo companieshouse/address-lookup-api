@@ -1,15 +1,23 @@
 package uk.gov.companieshouse.addresslookup.dbbootstrap;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.MockedStatic;
 
+import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 
 class HandlerTest {
@@ -83,6 +91,56 @@ class HandlerTest {
         });
 
         assertThrows(IllegalArgumentException.class, () -> handler.handleRequest(Map.of("command", "drop"), null));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "", "?sslmode=disable", "?sslmode=allow", "?sslmode=prefer", "?sslmode=require", "?sslmode=verify-ca",
+            "?sslmode=verify-full&sslmode=require",
+            "?sslmode=verify-full&sslfactory=org.postgresql.ssl.NonValidatingFactory",
+            "?sslmode=verify-full&sslfactoryarg=custom",
+            "?sslmode=verify-full&sslhostnameverifier=example.AcceptAll"
+    })
+    void rejectsUnsafeMasterUrlsBeforeOpeningEitherConnectionEvenWhenVerificationIsDisabled(String query) {
+        DatabaseCredentials master = new DatabaseCredentials(
+                "jdbc:postgresql://writer:5432/addressdb" + query, MASTER.username(), MASTER.password());
+        Handler handler = new Handler(CONFIG,
+                parameter -> parameter.equals(CONFIG.masterParameter()) ? master : OWNER);
+
+        try (MockedStatic<DriverManager> driver = mockStatic(DriverManager.class)) {
+            for (String command : new String[] {"bootstrap", "verify"}) {
+                IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                        () -> handler.handleRequest(Map.of("command", command), null));
+                assertFalse(error.getMessage().contains(MASTER.password()));
+                assertFalse(error.getMessage().contains(master.jdbcUrl()));
+            }
+            driver.verifyNoInteractions();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "&sslrootcert=/opt/certs/approved-rds.pem",
+            "&sslfactory=org.postgresql.ssl.LibPQFactory&sslrootcert=/opt/certs/approved-rds.pem",
+            "&sslfactory=org.postgresql.ssl.DefaultJavaSSLFactory"
+    })
+    void opensVerifiedMasterConnectionUsingStandardTrustConfiguration(String trustConfiguration) throws Exception {
+        FakeDatabase db = FakeDatabase.ready();
+        DatabaseCredentials master = new DatabaseCredentials(
+                MASTER.jdbcUrl() + "?sslmode=verify-full" + trustConfiguration,
+                MASTER.username(), MASTER.password());
+        Handler handler = new Handler(CONFIG,
+                parameter -> parameter.equals(CONFIG.masterParameter()) ? master : OWNER);
+
+        try (MockedStatic<DriverManager> driver = mockStatic(DriverManager.class)) {
+            driver.when(() -> DriverManager.getConnection(eq(master.jdbcUrl()), any(Properties.class)))
+                    .thenReturn(db.connection);
+
+            assertEquals("verify", handler.handleRequest(Map.of("command", "verify"), null).get("command"));
+
+            driver.verify(() -> DriverManager.getConnection(eq(master.jdbcUrl()), any(Properties.class)));
+            verify(db.connection).close();
+        }
     }
 
     private Handler handler(FakeDatabase db) {

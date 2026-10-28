@@ -91,6 +91,19 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
     }
 
     private Connection connect(DatabaseCredentials credentials) throws SQLException {
+        Properties urlProperties = org.postgresql.Driver.parseURL(credentials.jdbcUrl(), new Properties());
+        DatabaseCredentials.require(urlProperties != null, "Invalid PostgreSQL JDBC URL");
+        DatabaseCredentials.require("verify-full".equals(urlProperties.getProperty("sslmode")),
+                "Master JDBC connection requires sslmode=verify-full");
+        // URL options override connection properties, so validate the driver's parsed options before connecting.
+        String sslFactory = urlProperties.getProperty("sslfactory", "org.postgresql.ssl.LibPQFactory");
+        DatabaseCredentials.require("org.postgresql.ssl.LibPQFactory".equals(sslFactory)
+                        || "org.postgresql.ssl.DefaultJavaSSLFactory".equals(sslFactory),
+                "Master JDBC connection requires a standard certificate-validating SSL factory");
+        for (String option : new String[] {"sslfactoryarg", "sslhostnameverifier"}) {
+            DatabaseCredentials.require(!urlProperties.containsKey(option),
+                    "Master JDBC connection must not override " + option);
+        }
         Properties properties = new Properties();
         properties.setProperty("user", credentials.username());
         properties.setProperty("password", credentials.password());

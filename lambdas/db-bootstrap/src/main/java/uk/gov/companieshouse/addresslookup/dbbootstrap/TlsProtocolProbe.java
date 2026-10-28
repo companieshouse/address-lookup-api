@@ -25,12 +25,17 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>It needs no CA bundle. The server has accepted the version once it sends its certificate, so the probe records
  * the negotiated version at that point and then rejects the certificate. The handshake therefore never completes, and
  * nothing (no startup message, no credentials) is ever sent to the server.
+ *
+ * <p>This is a protocol-only check, not endpoint authentication. An {@link Result#ACCEPTED} result does not mean
+ * the certificate is trusted or matches the hostname. Credential-bearing JDBC connections must independently
+ * verify both the certificate chain and hostname before authenticating.
  */
 public final class TlsProtocolProbe {
 
     /** PostgreSQL SSLRequest code (1234 << 16 | 5679). */
     private static final int SSL_REQUEST_CODE = 80877103;
 
+    /** Protocol support only; ACCEPTED does not indicate a trusted certificate or an authenticated endpoint. */
     public enum Result { ACCEPTED, REFUSED, SSL_NOT_SUPPORTED }
 
     /** @param detail why the version was refused, for the verify report; null when accepted */

@@ -39,6 +39,12 @@ Connected as the master user (the only code that uses it):
 
 It never creates application schemas or tables: those all come from Flyway, starting at V2026.001.
 
+## Local tests
+
+Run `make test-db-bootstrap` for the Lambda's unit tests; no Docker or database is required.
+Run `make test-db-bootstrap-integration` separately for the PostgreSQL/PostGIS and Flyway
+integration test, which requires Docker.
+
 ## Prerequisites
 
 * **Vault**, at `applications/<aws_profile>/<env>/common-services-stack/address-rds`, next to

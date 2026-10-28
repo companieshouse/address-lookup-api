@@ -62,6 +62,11 @@ test-flyway:
 
 .PHONY: test-db-bootstrap
 test-db-bootstrap:
+	@# Help: Run DB bootstrap unit tests (no Docker required)
+	mvn -pl $(db_bootstrap_lambda_module) -am test -Dskip.integration.tests=true
+
+.PHONY: test-db-bootstrap-integration
+test-db-bootstrap-integration:
 	@# Help: Test bootstrap and first Flyway run as the non-master owner (requires Docker)
 	mvn -pl $(db_bootstrap_lambda_module) -am -Dit.test=DatabaseBootstrapIT -Dfailsafe.failIfNoSpecifiedTests=false verify
 

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import uk.gov.companieshouse.release.model.Dataset;
+import uk.gov.companieshouse.release.model.DatasetCatalog;
 import uk.gov.companieshouse.release.model.SupplyType;
 
 import java.io.InputStream;
@@ -42,7 +43,8 @@ public class AuroraOperations {
         "SELECT aws_s3.table_import_from_s3(?,?,?,aws_commons.create_s3_uri(?,?,?))",
         String.class,
         dataset.landing(type),
-        dataset.table().columnList(),
+            DatasetCatalog.table(dataset).columnList(),
+//        dataset.table().columnList(),
         "(format csv, header true, encoding 'UTF8')",
         bucket,
         key,
@@ -57,7 +59,7 @@ public class AuroraOperations {
         "COPY "
             + dataset.landing(type)
             + " ("
-            + dataset.table().columnList()
+            + DatasetCatalog.table(dataset).columnList()
             + ") FROM STDIN WITH (FORMAT csv,HEADER true,ENCODING 'UTF8')";
     jdbc.execute(
         (ConnectionCallback<Long>)
@@ -85,7 +87,8 @@ public class AuroraOperations {
 
   public void requireEmptyLiveTables() throws Exception {
     for (var dataset : Dataset.values()) {
-      Long rows = jdbc.queryForObject("SELECT count(*) FROM " + dataset.table().data(), Long.class);
+      Long rows = jdbc.queryForObject("SELECT count(*) FROM " +
+      DatasetCatalog.table(dataset).data(), Long.class);
       if (rows == null || rows != 0)
         throw new IllegalArgumentException("Full local import requires empty live tables");
     }

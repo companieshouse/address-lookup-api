@@ -36,7 +36,7 @@ final class CommandsTest {
     }
 
   @Test
-  void sendsCommandsWithAndWithoutPlanKey() throws Exception {
+  void sendsCommandsWithAndWithoutPlanKey() {
     when(events.putEvents(any(Consumer.class))).thenAnswer(invocation -> {
       Consumer<PutEventsRequest.Builder> configure = invocation.getArgument(0);
       var request = PutEventsRequest.builder();

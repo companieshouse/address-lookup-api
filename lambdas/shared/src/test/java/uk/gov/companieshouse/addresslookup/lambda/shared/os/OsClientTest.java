@@ -51,7 +51,7 @@ final class OsClientTest {
 
     @Test
     void publicConstructorBuildsAClientThatOnlyAcceptsApiOsUkUrls() {
-        var os = new OsClient("test-key", Duration.ofSeconds(1), Duration.ofSeconds(1), JSON);
+        var os = new OsClient("test-key", Duration.ofSeconds(1), Duration.ofSeconds(1));
 
         var failure = assertThrows(IllegalArgumentException.class, () -> os.download("https://example.com/file.zip"));
 

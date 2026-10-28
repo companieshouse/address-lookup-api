@@ -48,4 +48,12 @@ public final class DatasetCatalog {
   public static List<Table> tables() {
     return TABLES;
   }
+
+  public static Table table(Dataset dataset) {
+    return DatasetCatalog.tables().stream()
+            .filter(t -> t.name().equals(dataset.datasetName()))
+            .findFirst()
+            .orElseThrow();
+  }
+
 }

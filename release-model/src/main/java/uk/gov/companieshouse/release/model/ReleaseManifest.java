@@ -34,7 +34,7 @@ public record ReleaseManifest(UUID id, SupplyType type, LocalDate previous, Loca
   private static void addDatasetName (Dataset dataset) {
     ALLOWED_FIELDS.add(dataset.datasetName());
   }
-  
+
   public record Zip(String md5, String fileName, String url) {}
 
   public record FileMetadata(OrderSummary summary, Zip zip) {}
@@ -98,7 +98,7 @@ public record ReleaseManifest(UUID id, SupplyType type, LocalDate previous, Loca
   }
 
   private static void validateDates(LocalDate previous, LocalDate target) {
-    if (previous != null && !target.isAfter(previous))
+    if (target != null && previous != null && !target.isAfter(previous))
       throw new IllegalArgumentException("Invalid release interval");
   }
 
@@ -133,7 +133,7 @@ public record ReleaseManifest(UUID id, SupplyType type, LocalDate previous, Loca
 
     try {
       order = ReleaseJson.MAPPER.treeToValue(summary, OrderSummary.class);
-      order.validate(dataset.table(), type, previous, target);
+      order.validate(DatasetCatalog.table(dataset), type, previous, target);
     } catch (JsonProcessingException jsonProcessingException) {
       throw new IllegalArgumentException("Invalid Order Node", jsonProcessingException);
     }

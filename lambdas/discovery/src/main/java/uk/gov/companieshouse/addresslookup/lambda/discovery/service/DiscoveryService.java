@@ -10,6 +10,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.TreeNode;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -325,13 +326,13 @@ public final class DiscoveryService {
 
         final ObjectNode rootNode = JSON.createObjectNode();
         String mode = packageVersionData.supplyType().name();
-        rootNode.put("mode", mode);
-        rootNode.put("target", targetDate.format(DateTimeFormatter.ISO_DATE));
+        rootNode.set("mode", new TextNode(mode));
+        rootNode.set("target", new TextNode(targetDate.format(DateTimeFormatter.ISO_DATE)));
         if (previousDate != null) {
-            rootNode.put("previous", previousDate);
+            rootNode.set("previous", new TextNode(previousDate));
         }
-        rootNode.put("dataPackageId", dataPackageId);
-        rootNode.put("versionId", packageVersionData.id());
+        rootNode.set("dataPackageId", new TextNode(dataPackageId));
+        rootNode.set("versionId", new TextNode(packageVersionData.id()));
 
         datasets.forEach((key, value) -> {
             ObjectNode datasetNode = JSON.createObjectNode();

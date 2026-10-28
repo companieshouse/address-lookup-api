@@ -13,7 +13,7 @@ public final class AcquisitionSupport {
   private AcquisitionSupport() {}
 
   static DatasetCatalog.Table table(String name) throws Exception {
-    return Dataset.named(name).table();
+    return DatasetCatalog.table(Dataset.named(name));
   }
 
   public static UUID releaseId(JsonNode d) {

@@ -30,22 +30,7 @@ module "aurora_postgres" {
   master_username = local.master_username
   master_password = local.master_password
 
-  cluster_parameter_group_settings = [
-    {
-      name         = "rds.force_ssl"
-      value        = "1"
-      apply_method = "pending-reboot"
-    },
-    {
-      name         = "rds.allowed_extensions"
-      value        = "postgis"
-      apply_method = "immediate"
-    },
-    {
-      name  = "ssl_min_protocol_version",
-      value = "TLSv1.3" 
-    }
-  ]
+  cluster_parameter_group_settings = local.cluster_parameter_group_settings
 
   subnet_ids = data.aws_subnets.data.ids
   instances  = var.instances

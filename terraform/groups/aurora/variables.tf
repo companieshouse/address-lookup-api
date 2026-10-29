@@ -21,3 +21,31 @@ variable "instances" {
     primary = {}
   }
 }
+
+variable "release_bucket_name" {
+  type        = string
+  description = "The S3 bucket holding the db-bootstrap Lambda release artefact"
+}
+
+variable "db_bootstrap_release_artifact_key" {
+  type        = string
+  description = "Key of the db-bootstrap Lambda code (address-lookup-db-bootstrap-<version>.zip) in the release bucket"
+}
+
+variable "db_bootstrap_memory_size" {
+  type        = number
+  description = "Memory, in megabytes, for the db-bootstrap Lambda"
+  default     = 512
+}
+
+variable "db_bootstrap_timeout_seconds" {
+  type        = number
+  description = "Timeout, in seconds, for the db-bootstrap Lambda"
+  default     = 120
+}
+
+variable "db_migrate_function_name" {
+  type        = string
+  description = "function_name of the db-migrate Lambda (terraform/groups/db-migrate); its role may read the schema-owner parameter through the SSM endpoint"
+  default     = "address-lookup-db-migrate"
+}

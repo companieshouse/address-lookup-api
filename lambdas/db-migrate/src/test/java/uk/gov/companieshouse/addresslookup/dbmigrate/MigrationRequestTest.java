@@ -17,7 +17,7 @@ class MigrationRequestTest {
   private static Map<String, Object> payload(Object... pairs) {
     var map = new HashMap<String, Object>();
     map.put("command", "migrate");
-    map.put("key", "snapshots/address-lookup-db-1.4.0.zip");
+    map.put("key", "address-lookup-api/db-schema-snapshots/address-lookup-db-1.4.0.zip");
     map.put("versionId", "v1");
     map.put("sha256", SHA);
     for (int i = 0; i < pairs.length; i += 2) {
@@ -36,7 +36,7 @@ class MigrationRequestTest {
   void parsesMigrate() {
     var request = MigrationRequest.parse(payload());
     assertEquals(Command.MIGRATE, request.command());
-    assertEquals("snapshots/address-lookup-db-1.4.0.zip", request.key());
+    assertEquals("address-lookup-api/db-schema-snapshots/address-lookup-db-1.4.0.zip", request.key());
     assertEquals("v1", request.versionId());
     assertEquals(SHA, request.sha256());
   }
@@ -55,7 +55,12 @@ class MigrationRequestTest {
   @ParameterizedTest
   @ValueSource(
       strings = {
-        "latest.zip", "snapshots/../x.zip", "snapshots/a/b.zip", "snapshots/x.tar", "changelogs/x.zip"
+        "latest.zip",
+        "address-lookup-api/db-schema-snapshots/../x.zip",
+        "address-lookup-api/db-schema-snapshots/a/b.zip",
+        "address-lookup-api/db-schema-snapshots/x.tar",
+        "snapshots/x.zip",
+        "changelogs/x.zip"
       })
   void rejectsKeysOutsideTheSnapshotPrefix(String key) {
     assertInvalid(payload("key", key));

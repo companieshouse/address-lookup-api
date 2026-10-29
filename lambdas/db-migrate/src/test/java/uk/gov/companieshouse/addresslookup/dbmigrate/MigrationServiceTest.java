@@ -35,7 +35,7 @@ class MigrationServiceTest {
   @Test
   void checksumMismatchFailsBeforeCredentialsOrDatabase() throws Exception {
     byte[] snapshot = SnapshotBundleTest.zip(Map.of("migrations/V1__x.sql", "SELECT 1;"));
-    var request = new MigrationRequest(Command.MIGRATE, "snapshots/x.zip", "v1", "0".repeat(64));
+    var request = new MigrationRequest(Command.MIGRATE, "address-lookup-api/db-schema-snapshots/x.zip", "v1", "0".repeat(64));
 
     var e = assertThrows(MigrationException.class, () -> service(false, snapshot).handle(request));
 
@@ -45,7 +45,7 @@ class MigrationServiceTest {
 
   @Test
   void repairIsRefusedUnlessAllowedWithoutReadingAnything() {
-    var request = new MigrationRequest(Command.REPAIR, "snapshots/x.zip", "v1", "0".repeat(64));
+    var request = new MigrationRequest(Command.REPAIR, "address-lookup-api/db-schema-snapshots/x.zip", "v1", "0".repeat(64));
 
     var e = assertThrows(MigrationException.class, () -> service(false, new byte[0]).handle(request));
 

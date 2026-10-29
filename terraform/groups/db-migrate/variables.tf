@@ -34,8 +34,8 @@ variable "aws_region" {
 
 variable "snapshot_prefix" {
   type        = string
-  description = "The key prefix of the snapshots in the snapshot bucket; the function can read nothing else"
-  default     = "snapshots"
+  description = "The key prefix of the db schema snapshots in the snapshot bucket; the function can read nothing else"
+  default     = "address-lookup-api/db-schema-snapshots"
 }
 
 variable "lambda_runtime" {

@@ -1,4 +1,4 @@
-package uk.gov.companieshouse.addresslookup.lambda;
+package uk.gov.companieshouse.addresslookup.lambda.download;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;

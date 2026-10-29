@@ -44,7 +44,7 @@ public final class ExtractionService {
     private static final String VERSION_FIELD = "version";
     private static final String SHA256_FIELD = "sha256";
     private static final String CSV_SCAN_STATUS = "CSV_SCAN";
-    private static final Logger LOGGER = LoggerFactory.getLogger(ExtractionService.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ExtractionService.class);
 
     private record ReceiptIdentity(String releaseId, String dataset, String zipKey,
                                    String zipVersion, String csvKey, String schemaVersion) {
@@ -81,7 +81,7 @@ public final class ExtractionService {
         JsonNode input = detail(event);
         var inputKeys = new HashSet<String>();
         input.fieldNames().forEachRemaining(inputKeys::add);
-        LOGGER.info("UNZIP requestId={} eventKeys={} inputKeys={}",
+        LOG.info("UNZIP requestId={} eventKeys={} inputKeys={}",
                 context.getAwsRequestId(), event.keySet(), inputKeys);
         String dataset = required(input, DATASET_FIELD);
         check(dataset.matches("[a-z][a-z0-9_]*"), "Invalid dataset");
@@ -106,7 +106,7 @@ public final class ExtractionService {
         }
         check(zipVersion.equals(store.version(scanBucket, s3Key)), "ZIP version changed after scan");
 
-        LOGGER.info("UNZIP STARTED - dataset={}\n", dataset);
+        LOG.info("UNZIP STARTED - dataset={}\n", dataset);
 
         // Check schema version
         check(input.path(SCHEMA_VERSION_FIELD).isInt()
@@ -134,16 +134,16 @@ public final class ExtractionService {
         try (var zip = new ZipInputStream(s3.getObject(request))) {
             return extractZip(zip, table, expectedReceipt, store, scanBucket, checked, context);
         } catch (ZipException e) {
-            LOGGER.error("UNZIP FAILURE - status=MALFORMED_ZIP message={}\n", e.getMessage());
+            LOG.error("UNZIP FAILURE - status=MALFORMED_ZIP message={}\n", e.getMessage());
             return "MALFORMED_ZIP";
         } catch (CsvHeaderException e) {
-            LOGGER.error("UNZIP FAILURE - status=HEADER_MISMATCH message={}\n", e.getMessage());
+            LOG.error("UNZIP FAILURE - status=HEADER_MISMATCH message={}\n", e.getMessage());
             return "HEADER_MISMATCH";
         } catch (MissingPrimaryCsvException e) {
-            LOGGER.error("UNZIP FAILURE - status=CSV_NOT_FOUND message={}\n", e.getMessage());
+            LOG.error("UNZIP FAILURE - status=CSV_NOT_FOUND message={}\n", e.getMessage());
             return "CSV_NOT_FOUND";
         } catch (ArchiveValidationException e) {
-            LOGGER.error("UNZIP FAILURE - status=ARCHIVE_INVALID message={}\n", e.getMessage());
+            LOG.error("UNZIP FAILURE - status=ARCHIVE_INVALID message={}\n", e.getMessage());
             return "ARCHIVE_INVALID";
         }
     }
@@ -175,12 +175,12 @@ public final class ExtractionService {
                 var receiptData = buildUnzipReceiptData(expected, result, names.size());
                 var headers = receiptData.putArray("csvHeaders");
                 extractionHeaders.forEach(headers::add);
-                LOGGER.info("UNZIP - receiptData={}\n", receiptData);
+                LOG.info("UNZIP - receiptData={}\n", receiptData);
 
                 saveExtractReceipt(store, scanBucket, checked, receiptData, result, expected);
                 commands.send(CSV_SCAN_STATUS, table.name());
 
-                LOGGER.info("UNZIP - Completed\n");
+                LOG.info("UNZIP - Completed\n");
                 return CSV_SCAN_STATUS;
             } else {
                 check(name.startsWith(table.name() + "_") && name.endsWith(".csv"),

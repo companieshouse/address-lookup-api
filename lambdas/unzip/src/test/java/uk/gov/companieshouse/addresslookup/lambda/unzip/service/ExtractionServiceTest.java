@@ -1,4 +1,4 @@
-package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
+package uk.gov.companieshouse.addresslookup.lambda.unzip.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;

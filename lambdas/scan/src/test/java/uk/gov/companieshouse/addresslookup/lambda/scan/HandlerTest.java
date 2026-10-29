@@ -14,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import uk.gov.companieshouse.addresslookup.lambda.scan.service.ScanResultsService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport;
 

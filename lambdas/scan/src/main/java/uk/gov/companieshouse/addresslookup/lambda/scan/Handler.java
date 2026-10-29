@@ -2,6 +2,7 @@ package uk.gov.companieshouse.addresslookup.lambda.scan;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
+import uk.gov.companieshouse.addresslookup.lambda.scan.service.ScanResultsService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
 
 import java.util.Map;

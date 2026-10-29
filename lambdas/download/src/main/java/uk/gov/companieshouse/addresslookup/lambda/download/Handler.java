@@ -2,7 +2,7 @@ package uk.gov.companieshouse.addresslookup.lambda.download;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.DownloadService;
+import uk.gov.companieshouse.addresslookup.lambda.download.service.DownloadService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
 
 import java.util.Map;

@@ -12,7 +12,7 @@ public final class AcquisitionSupport {
 
   private AcquisitionSupport() {}
 
-  static DatasetCatalog.Table table(String name) throws Exception {
+  public static DatasetCatalog.Table table(String name) throws Exception {
     return DatasetCatalog.table(Dataset.named(name));
   }
 

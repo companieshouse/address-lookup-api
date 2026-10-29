@@ -1,8 +1,10 @@
-package uk.gov.companieshouse.addresslookup.lambda.scan;
+package uk.gov.companieshouse.addresslookup.lambda.scan.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+import uk.gov.companieshouse.addresslookup.lambda.scan.InvalidReason;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
 import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.FileType;
@@ -20,6 +22,7 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
  * events are republished and downstream processing must be repeatable. A failed publish throws so
  * that the invocation is retried.
  */
+@Component
 public final class ScanResultsService {
   private static final Logger LOG = LoggerFactory.getLogger(ScanResultsService.class);
   private static final String SOURCE = "aws.guardduty";

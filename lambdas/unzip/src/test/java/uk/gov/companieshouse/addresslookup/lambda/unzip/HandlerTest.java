@@ -13,7 +13,7 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.ExtractionService;
+import uk.gov.companieshouse.addresslookup.lambda.unzip.service.ExtractionService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
 
 import java.util.Map;

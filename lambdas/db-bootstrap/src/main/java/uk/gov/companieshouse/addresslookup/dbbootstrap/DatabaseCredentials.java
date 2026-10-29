@@ -14,7 +14,7 @@ import java.util.Map;
  * One Parameter Store credentials document, as written by terraform/groups/aurora:
  * {@code {"jdbcUrl": "jdbc:postgresql://<writer>:5432/<db>?sslmode=require", "username": ..., "password": ...}}.
  * The {@code host}/{@code port}/{@code dbname} form from ALS-88 is also accepted and connects with
- * {@code sslmode=require}. Never logged: {@link #toString()} masks the password.
+ * {@code sslmode=require}. Never logged: {@link #toString()} omits the password.
  */
 public record DatabaseCredentials(String jdbcUrl, String username, String password) {
 
@@ -89,6 +89,6 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
 
     @Override
     public String toString() {
-        return "DatabaseCredentials[jdbcUrl=" + jdbcUrl + ", username=" + username + ", password=******]";
+        return "DatabaseCredentials[jdbcUrl=" + jdbcUrl + ", username=" + username + "]";
     }
 }

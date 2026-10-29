@@ -45,7 +45,7 @@ class DatabaseCredentialsTest {
         DatabaseCredentials credentials = new DatabaseCredentials("jdbc:postgresql://h:5432/d", "owner", "s3cret");
 
         assertFalse(credentials.toString().contains("s3cret"));
-        assertTrue(credentials.toString().contains("owner"));
+        assertEquals("DatabaseCredentials[jdbcUrl=jdbc:postgresql://h:5432/d, username=owner]", credentials.toString());
     }
 
     @Test

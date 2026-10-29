@@ -90,7 +90,7 @@ public final class TlsProtocolProbe {
         public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
                 throws CertificateException {
             if (socket instanceof SSLSocket tls) {
-                record(tls.getHandshakeSession());
+                recordProtocol(tls.getHandshakeSession());
             }
             throw stop();
         }
@@ -98,7 +98,7 @@ public final class TlsProtocolProbe {
         @Override
         public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine engine)
                 throws CertificateException {
-            record(engine.getHandshakeSession());
+            recordProtocol(engine.getHandshakeSession());
             throw stop();
         }
 
@@ -129,7 +129,7 @@ public final class TlsProtocolProbe {
             return new X509Certificate[0];
         }
 
-        private void record(SSLSession session) {
+        private void recordProtocol(SSLSession session) {
             if (session != null) {
                 negotiated.set(session.getProtocol());
             }

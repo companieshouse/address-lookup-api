@@ -67,9 +67,11 @@ class HandlerTest {
     @Test
     void failsTheInvocationWhenVerificationFails() throws Exception {
         FakeDatabase db = new FakeDatabase();
+        Handler handler = handler(db);
+        Map<String, Object> event = Map.of("command", "verify");
 
         assertThrows(BootstrapVerifier.VerificationException.class,
-                () -> handler(db).handleRequest(Map.of("command", "verify"), null));
+                () -> handler.handleRequest(event, null));
     }
 
     @Test
@@ -77,8 +79,9 @@ class HandlerTest {
         Handler handler = new Handler(CONFIG, this::credentials, credentials -> {
             throw new SQLException("Connection refused");
         });
+        Map<String, Object> event = Map.of();
 
-        IllegalStateException e = assertThrows(IllegalStateException.class, () -> handler.handleRequest(Map.of(), null));
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> handler.handleRequest(event, null));
 
         assertTrue(e.getMessage().contains("Connection refused"));
         assertFalse(e.getMessage().contains("secret"));
@@ -89,8 +92,9 @@ class HandlerTest {
         Handler handler = new Handler(CONFIG, name -> {
             throw new AssertionError("credentials must not be read");
         });
+        Map<String, Object> event = Map.of("command", "drop");
 
-        assertThrows(IllegalArgumentException.class, () -> handler.handleRequest(Map.of("command", "drop"), null));
+        assertThrows(IllegalArgumentException.class, () -> handler.handleRequest(event, null));
     }
 
     @ParameterizedTest
@@ -109,8 +113,9 @@ class HandlerTest {
 
         try (MockedStatic<DriverManager> driver = mockStatic(DriverManager.class)) {
             for (String command : new String[] {"bootstrap", "verify"}) {
+                Map<String, Object> event = Map.of("command", command);
                 IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
-                        () -> handler.handleRequest(Map.of("command", command), null));
+                        () -> handler.handleRequest(event, null));
                 assertFalse(error.getMessage().contains(MASTER.password()));
                 assertFalse(error.getMessage().contains(master.jdbcUrl()));
             }

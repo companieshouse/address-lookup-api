@@ -42,9 +42,10 @@ class ParameterStoreCredentialsTest {
     @SuppressWarnings("unchecked")
     void namesTheParameterButNotTheValueOnError() {
         when(ssm.getParameter(any(Consumer.class))).thenReturn(response("{\"password\":\"s3cret\"}"));
+        ParameterStoreCredentials credentials = new ParameterStoreCredentials(ssm);
 
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> new ParameterStoreCredentials(ssm).apply("/address-lookup/cidev/db/master"));
+                () -> credentials.apply("/address-lookup/cidev/db/master"));
 
         assertTrue(e.getMessage().startsWith("/address-lookup/cidev/db/master"));
         assertFalse(e.getMessage().contains("s3cret"));

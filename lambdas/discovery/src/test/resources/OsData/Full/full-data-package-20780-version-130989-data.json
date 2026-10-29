@@ -1,0 +1,85 @@
+{
+  "id": "130989",
+  "url": "https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989",
+  "createdOn": "2026-05-01",
+  "reason": "INITIAL",
+  "supplyType": "FULL",
+  "productVersion": "2026-05-01",
+  "format": "CSV",
+  "dataPackageUrl": "https://api.os.uk/downloads/v1/dataPackages/20780",
+  "nextVersionUrl": "https://api.os.uk/downloads/v1/dataPackages/20780/versions/131061",
+  "downloads": [
+    {
+      "fileName": "add_gb_builtaddress.zip",
+      "url": "https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_gb_builtaddress.zip",
+      "size": 11420555459,
+      "md5": "2ec3a3d104e65581d0f1eda7245da73b"
+    },
+    {
+      "fileName": "add_gb_builtaddress_orderSummary.json",
+      "url": "https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_gb_builtaddress_orderSummary.json",
+      "size": 187,
+      "md5": "1475aaa45913360f35d6c21e90f52649"
+    },
+    {
+      "fileName": "add_gb_prebuildaddress.zip",
+      "url": "https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_gb_prebuildaddress.zip",
+      "size": 178307504,
+      "md5": "dbe1e793594432ac5466f63e7a6d33fa"
+    },
+    {
+      "fileName": "add_gb_prebuildaddress_orderSummary.json",
+      "url": "https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_gb_prebuildaddress_orderSummary.json",
+      "size": 188,
+      "md5": "59d143a5f48d3fcb0d1db6150c4ecf31"
+    },
+    {
+      "fileName": "add_gb_royalmailaddress.zip",
+      "url": "https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_gb_royalmailaddress.zip",
+      "size": 1512259626,
+      "md5": "229c68b69090208861bc3fdf05009ef6"
+    },
+    {
+      "fileName": "add_gb_royalmailaddress_orderSummary.json",
+      "url": "https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_gb_royalmailaddress_orderSummary.json",
+      "size": 191,
+      "md5": "88d9612836865c56652e98924a898cb3"
+    },
+    {
+      "fileName": "add_isl_builtaddress.zip",
+      "url": "https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_isl_builtaddress.zip",
+      "size": 103400875,
+      "md5": "9e5fa4fa79021b3106ecc83daef720db"
+    },
+    {
+      "fileName": "add_isl_builtaddress_orderSummary.json",
+      "url": "https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_isl_builtaddress_orderSummary.json",
+      "size": 186,
+      "md5": "3dd02e4e6b78e042d3769a5397ab2a87"
+    },
+    {
+      "fileName": "add_isl_prebuildaddress.zip",
+      "url": "https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_isl_prebuildaddress.zip",
+      "size": 4597370,
+      "md5": "cb789f9675ddad08a44478adb5c3a289"
+    },
+    {
+      "fileName": "add_isl_prebuildaddress_orderSummary.json",
+      "url": "https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_isl_prebuildaddress_orderSummary.json",
+      "size": 187,
+      "md5": "69ee75a55ce9313cb2ae6f64f42617f8"
+    },
+    {
+      "fileName": "add_isl_royalmailaddress.zip",
+      "url": "https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_isl_royalmailaddress.zip",
+      "size": 49131595,
+      "md5": "d291d0b180c2d143fe65db4cb1980469"
+    },
+    {
+      "fileName": "add_isl_royalmailaddress_orderSummary.json",
+      "url": "https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989/downloads?fileName=add_isl_royalmailaddress_orderSummary.json",
+      "size": 190,
+      "md5": "301339de37f88995336dad6f0d9f2c2f"
+    }
+  ]
+}

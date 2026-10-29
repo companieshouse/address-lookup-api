@@ -15,6 +15,8 @@ import java.util.List;
  */
 public final class BootstrapVerifier {
 
+    private static final String TLS_1_3 = "TLSv1.3";
+
     public enum DatabaseState {
         /** No application objects: the first Flyway run will build everything from V2026.001. */
         EMPTY,
@@ -102,17 +104,9 @@ public final class BootstrapVerifier {
             forceSsl = string(master, "SELECT current_setting('rds.force_ssl', true)", null);
             minProtocol = string(master, "SELECT current_setting('ssl_min_protocol_version', true)", null);
             connectionTls = string(master, "SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()", null);
-            if (!"1".equals(forceSsl) && !"on".equals(forceSsl)) {
-                failures.add("rds.force_ssl is " + forceSsl + ", expected 1 (on)");
-            }
-            if (!"TLSv1.3".equals(minProtocol)) {
-                failures.add("ssl_min_protocol_version is " + minProtocol + ", expected TLSv1.3");
-            }
-            if (!"TLSv1.3".equals(connectionTls)) {
-                failures.add("this connection uses " + connectionTls + ", expected TLSv1.3");
-            }
+            checkTlsSettings(forceSsl, minProtocol, connectionTls, failures);
             TlsProtocolProbe.Outcome old = probe.probe(masterCredentials.host(), masterCredentials.port(), "TLSv1.2");
-            TlsProtocolProbe.Outcome current = probe.probe(masterCredentials.host(), masterCredentials.port(), "TLSv1.3");
+            TlsProtocolProbe.Outcome current = probe.probe(masterCredentials.host(), masterCredentials.port(), TLS_1_3);
             tls12 = old.result().name();
             tls13 = current.result().name();
             if (old.result() != TlsProtocolProbe.Result.REFUSED) {
@@ -129,6 +123,19 @@ public final class BootstrapVerifier {
             throw new VerificationException(report);
         }
         return report;
+    }
+
+    private static void checkTlsSettings(String forceSsl, String minProtocol, String connectionTls,
+            List<String> failures) {
+        if (!"1".equals(forceSsl) && !"on".equals(forceSsl)) {
+            failures.add("rds.force_ssl is " + forceSsl + ", expected 1 (on)");
+        }
+        if (!TLS_1_3.equals(minProtocol)) {
+            failures.add("ssl_min_protocol_version is " + minProtocol + ", expected " + TLS_1_3);
+        }
+        if (!TLS_1_3.equals(connectionTls)) {
+            failures.add("this connection uses " + connectionTls + ", expected " + TLS_1_3);
+        }
     }
 
     private static void checkOwner(Connection master, String masterUsername, String owner, List<String> failures)

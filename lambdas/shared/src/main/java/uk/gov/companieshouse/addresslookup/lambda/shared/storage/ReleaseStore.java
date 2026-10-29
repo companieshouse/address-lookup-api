@@ -20,6 +20,7 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 /** S3 progress records and scan evidence; no database dependency. */
 public final class ReleaseStore {
   public static final String CLEAN = "NO_THREATS_FOUND";
+  private static final String JSON_CONTENT_TYPE = "application/json";
   private static final String FIELD_S3_KEY = "s3Key";
   private static final String FIELD_VERSION = "version";
   private static final String SCANNED_PREFIX = "Scanned/";
@@ -54,12 +55,19 @@ public final class ReleaseStore {
               .bucket(bucket)
               .key(key)
               .ifNoneMatch("*")
-              .contentType("application/json")
+              .contentType(JSON_CONTENT_TYPE)
               .build(),
           RequestBody.fromString(value.toString()));
     } catch (S3Exception e) {
       if (!isPreconditionFailed(e)) throw e;
     }
+  }
+
+  /** Stores mutable operational state. Immutable release descriptions must use {@link #immutable}. */
+  public void write(String bucket, String key, JsonNode value) {
+    s3.putObject(
+        PutObjectRequest.builder().bucket(bucket).key(key).contentType(JSON_CONTENT_TYPE).build(),
+        RequestBody.fromString(value.toString()));
   }
 
   public List<String> keys(String bucket, String prefix) {
@@ -189,7 +197,7 @@ public final class ReleaseStore {
             .bucket(bucket)
             .key(receiptKey(releaseId, dataset, step))
             .ifNoneMatch("*")
-            .contentType("application/json")
+            .contentType(JSON_CONTENT_TYPE)
             .build(),
         RequestBody.fromString(receipt.toString()));
   }

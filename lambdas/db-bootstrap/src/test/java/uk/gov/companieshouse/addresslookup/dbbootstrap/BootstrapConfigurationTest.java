@@ -36,7 +36,9 @@ class BootstrapConfigurationTest {
 
     @Test
     void requiresBothParameters() {
+        Map<String, String> environment = Map.of("MASTER_CREDENTIALS_PARAMETER", "m");
+
         assertThrows(IllegalArgumentException.class,
-                () -> BootstrapConfiguration.fromEnvironment(Map.of("MASTER_CREDENTIALS_PARAMETER", "m")));
+                () -> BootstrapConfiguration.fromEnvironment(environment));
     }
 }

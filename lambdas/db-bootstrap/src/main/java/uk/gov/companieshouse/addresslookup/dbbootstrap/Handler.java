@@ -25,6 +25,7 @@ import java.util.function.Function;
  */
 public final class Handler implements RequestHandler<Map<String, Object>, Map<String, Object>> {
 
+    private static final String BOOTSTRAP_COMMAND = "bootstrap";
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Logger LOGGER = LoggerFactory.getLogger("address-lookup-db-bootstrap");
 
@@ -58,14 +59,15 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
 
     @Override
     public Map<String, Object> handleRequest(Map<String, Object> event, Context context) {
-        String command = event == null ? "bootstrap" : String.valueOf(event.getOrDefault("command", "bootstrap"));
-        DatabaseCredentials.require("bootstrap".equals(command) || "verify".equals(command),
+        String command = event == null ? BOOTSTRAP_COMMAND
+                : String.valueOf(event.getOrDefault("command", BOOTSTRAP_COMMAND));
+        DatabaseCredentials.require(BOOTSTRAP_COMMAND.equals(command) || "verify".equals(command),
                 "Unknown command " + command + "; expected bootstrap or verify");
         try {
             DatabaseCredentials master = credentials.apply(config.masterParameter());
             DatabaseCredentials owner = credentials.apply(config.schemaOwnerParameter());
             try (Connection connection = connector.connect(master)) {
-                if ("bootstrap".equals(command)) {
+                if (BOOTSTRAP_COMMAND.equals(command)) {
                     DatabaseBootstrap.bootstrap(connection, master.username(), owner);
                 }
                 BootstrapVerifier.Report report = verifier().verify(connection, master, owner.username());

@@ -386,11 +386,12 @@ final class DownloadServiceTest {
         return new AcquisitionProperties(
                 BUCKET,
                 "scanned-bucket",
+                BUCKET,
                 "event-bus",
                 "redacted",
                 "{}",
                 512L * 1024L * 1024L,
-                1024L * 1024L * 1024L,
+                null,null,1024L * 1024L * 1024L,
                 20,
                 Duration.ofSeconds(20),
                 Duration.ofSeconds(840));

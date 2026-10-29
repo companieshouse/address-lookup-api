@@ -101,7 +101,7 @@ class BootstrapVerifierTest {
     }
 
     @Test
-    void failsWhenTheSchemaOwnerIsTheMaster() throws Exception {
+    void failsWhenTheSchemaOwnerIsTheMaster() {
         BootstrapVerifier.VerificationException e = assertThrows(BootstrapVerifier.VerificationException.class,
                 () -> new BootstrapVerifier(probe).verify(FakeDatabase.ready().connection, MASTER, "master"));
 
@@ -112,15 +112,17 @@ class BootstrapVerifierTest {
     void failsWhenTls12IsAcceptedOrTlsIsNotForced() throws Exception {
         FakeDatabase db = FakeDatabase.ready()
                 .returns("rds.force_ssl", row("0"))
-                .returns("ssl_min_protocol_version", row("TLSv1.2"));
+                .returns("ssl_min_protocol_version", row("TLSv1.2"))
+                .returns("pg_stat_ssl", row("TLSv1.2"));
         when(probe.probe("writer.example", 5432, "TLSv1.2")).thenReturn(new TlsProtocolProbe.Outcome(ACCEPTED, null));
 
         BootstrapVerifier.VerificationException e = assertThrows(BootstrapVerifier.VerificationException.class,
                 () -> new BootstrapVerifier(probe).verify(db.connection, MASTER, OWNER));
 
-        assertEquals(3, e.report().failures().size(), e.report().failures().toString());
+        assertEquals(4, e.report().failures().size(), e.report().failures().toString());
         assertTrue(e.getMessage().contains("rds.force_ssl is 0"));
         assertTrue(e.getMessage().contains("ssl_min_protocol_version is TLSv1.2"));
+        assertTrue(e.getMessage().contains("this connection uses TLSv1.2"));
         assertTrue(e.getMessage().contains("TLS 1.2 client was not refused"));
     }
 

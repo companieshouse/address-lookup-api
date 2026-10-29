@@ -74,6 +74,7 @@ variable "lambda_logs_retention_days" {
   default     = 90
 }
 
+
 variable "lock_timeout" {
   type        = string
   description = "PostgreSQL lock_timeout for each migration (LOCK_TIMEOUT)"

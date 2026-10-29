@@ -89,23 +89,22 @@ data "aws_iam_policy_document" "db_migrate" {
   }
 }
 
-# Only this function's role, and only its one parameter, through the endpoint.
-data "aws_iam_policy_document" "ssm_endpoint" {
-  statement {
-    sid       = "ReadSchemaOwnerCredentials"
-    effect    = "Allow"
-    actions   = ["ssm:GetParameter"]
-    resources = [local.credentials_parameter_arn]
+# Created by terraform/groups/aurora, which must be applied first: the plan
+# fails here until it has been.
+data "aws_vpc_endpoint" "ssm" {
+  vpc_id       = data.aws_vpc.vpc.id
+  service_name = "com.amazonaws.${var.aws_region}.ssm"
+  state        = "available"
 
-    principals {
-      type        = "AWS"
-      identifiers = ["*"]
-    }
+  tags = {
+    Name = local.ssm_endpoint_name
+  }
+}
 
-    condition {
-      test     = "ArnEquals"
-      variable = "aws:PrincipalArn"
-      values   = [module.lambda.lambda_role_arn]
-    }
+data "aws_security_group" "ssm_endpoint" {
+  vpc_id = data.aws_vpc.vpc.id
+
+  tags = {
+    Name = "${local.ssm_endpoint_name}-endpoint"
   }
 }

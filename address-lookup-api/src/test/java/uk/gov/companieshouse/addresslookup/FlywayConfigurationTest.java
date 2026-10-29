@@ -1,9 +1,5 @@
 package uk.gov.companieshouse.addresslookup;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
@@ -15,6 +11,8 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.util.ClassUtils;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class FlywayConfigurationTest {
 
@@ -100,7 +98,7 @@ class FlywayConfigurationTest {
 
     private static void assertFlywayTestProperties(Class<?> testClass) {
         SpringBootTest springBootTest = testClass.getDeclaredAnnotation(SpringBootTest.class);
-        assertTrue(springBootTest != null, testClass.getSimpleName() + " needs @SpringBootTest");
+        assertNotNull(springBootTest, testClass.getSimpleName() + " needs @SpringBootTest");
 
         List<String> properties = Arrays.asList(springBootTest.properties());
         assertTrue(properties.contains("FLYWAY_ENABLED=false"), properties.toString());
@@ -113,7 +111,7 @@ class FlywayConfigurationTest {
      */
     private static void assertFlywayDisabledByDefault(Class<?> testClass) {
         SpringBootTest springBootTest = testClass.getDeclaredAnnotation(SpringBootTest.class);
-        assertTrue(springBootTest != null, testClass.getSimpleName() + " needs @SpringBootTest");
+        assertNotNull(springBootTest, testClass.getSimpleName() + " needs @SpringBootTest");
 
         List<String> properties = Arrays.asList(springBootTest.properties());
         assertFalse(properties.contains("FLYWAY_ENABLED=false"), properties.toString());

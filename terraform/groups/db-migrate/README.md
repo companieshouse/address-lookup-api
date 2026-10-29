@@ -24,7 +24,7 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
                                                           │  data subnets, own SG, no CIDR egress
                        ┌──────────────────────────────────┼──────────────────────────────┐
                  443 ▼ S3 gateway endpoint          443 ▼ SSM interface endpoint    5432 ▼ Aurora SG
-          shared-services releases bucket      /address-lookup/<env>/db/       <env>-address-rds
+          shared-services configs bucket       /address-lookup/<env>/db/       <env>-address-rds
                   snapshots/*                       schema-owner                  (addressdb)
 ```
 
@@ -40,7 +40,7 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
 | Private subnets, own SG, no internet route | Data subnets (`data_subnet_pattern` from Vault). The SG has no CIDR egress. Its only egress rules go to Aurora 5432, the S3 gateway prefix list 443 and the SSM endpoint SG 443. |
 | Aurora allows 5432 from it | `aws_vpc_security_group_ingress_rule.aurora_from_lambda` on `<env>-address-rds-rds-sg` |
 | Endpoints S3 gateway, SSM, KMS, Logs | S3 gateway: the VPC's existing one, looked up. SSM: created here. KMS and Logs: not needed (see Network). |
-| IAM S3 Get on `snapshots/*`, `ssm:GetParameter` on the one parameter, `kms:Decrypt` | `data.aws_iam_policy_document.db_migrate` attached via `additional_policies` |
+| IAM S3 Get on `snapshots/*`, `ssm:GetParameter` on the one parameter, `kms:Decrypt` on the parameters key | `data.aws_iam_policy_document.db_migrate` attached via `additional_policies` |
 | Credentials | SecureString `/address-lookup/<env>/db/schema-owner` = `{"username","password","jdbcUrl"}`, written from Vault by `module.credentials` (terraform-modules `aws/parameter-store`) and encrypted with `alias/<aws_profile>/environment-services-kms` |
 | Log group | Created by the module (`/aws/lambda/address-lookup-db-migrate-<env>`), retention `lambda_logs_retention_days` (90) |
 | Errors > 0 alarm to the team channel | `aws_cloudwatch_metric_alarm.errors` → `common-services-<env>-cloudwatch-alarms-notify-topic` (override with `alarm_topic_name`) |
@@ -58,8 +58,8 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
 - **No KMS or Logs endpoints.**
   - Parameter Store decrypts the SecureString server-side (`WithDecryption`),
     using the role's `kms:Decrypt` grant, so the function never calls KMS.
-  - The snapshot bucket uses SSE-S3, so S3 needs no KMS call either. If it
-    moves to SSE-KMS, set `snapshot_kms_key_arn`.
+  - The snapshot bucket (the shared-services configs bucket) uses SSE-S3, so
+    S3 needs no KMS call either.
   - Lambda ships the function's logs itself, outside the VPC.
 - **SSM endpoint private DNS is off.** The VPC is shared. With private DNS on,
   every SSM call in the VPC (ECS agents, other services) would resolve to an
@@ -96,7 +96,12 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
    exists in the shared-services release bucket. To produce it, push a
    `db-migrate-lambda-X.Y.Z` release for `lambdas/db-migrate`
    (`make package-db-migrate-lambda`).
-5. The environment's Concourse AWS credentials are the `concourse-platform` IAM
+5. The shared-services configs bucket policy grants this function's role
+   (`address-lookup-db-migrate-<env>-lambda-role`) `s3:GetObject` and
+   `s3:GetObjectVersion` on `snapshots/*` (statement
+   `GetAddressLookupDbSnapshots` in aws-shared-services-infrastructure-terraform).
+   The role's own IAM grant is not enough for a cross-account read.
+6. The environment's Concourse AWS credentials are the `concourse-platform` IAM
    user. If not, set `concourse_iam_user_name`.
 
 ## Deployment
@@ -225,8 +230,7 @@ aws lambda get-function-concurrency --function-name "$F"   # ReservedConcurrentE
 | <a name="input_lock_timeout"></a> [lock\_timeout](#input\_lock\_timeout) | PostgreSQL lock\_timeout for each migration (LOCK\_TIMEOUT) | `string` | `"10s"` | no |
 | <a name="input_release_artifact_key"></a> [release\_artifact\_key](#input\_release\_artifact\_key) | Key of the Lambda code object (address-lookup-db-migrate-<version>.zip) in the release bucket | `string` | n/a | yes |
 | <a name="input_release_bucket_name"></a> [release\_bucket\_name](#input\_release\_bucket\_name) | The name of the S3 bucket containing the Lambda release artefact | `string` | n/a | yes |
-| <a name="input_snapshot_bucket_name"></a> [snapshot\_bucket\_name](#input\_snapshot\_bucket\_name) | The versioned bucket the Concourse gather-snapshot job writes Flyway snapshots to (SNAPSHOT\_BUCKET) | `string` | n/a | yes |
-| <a name="input_snapshot_kms_key_arn"></a> [snapshot\_kms\_key\_arn](#input\_snapshot\_kms\_key\_arn) | The KMS key the snapshot bucket encrypts with, if it uses SSE-KMS. Empty for SSE-S3 | `string` | `""` | no |
+| <a name="input_snapshot_bucket_name"></a> [snapshot\_bucket\_name](#input\_snapshot\_bucket\_name) | The versioned shared-services configs bucket the Concourse gather-snapshot job writes Flyway snapshots to (SNAPSHOT\_BUCKET) | `string` | n/a | yes |
 | <a name="input_snapshot_prefix"></a> [snapshot\_prefix](#input\_snapshot\_prefix) | The key prefix of the snapshots in the snapshot bucket; the function can read nothing else | `string` | `"snapshots"` | no |
 
 ## Outputs

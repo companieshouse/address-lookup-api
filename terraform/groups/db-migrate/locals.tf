@@ -17,10 +17,6 @@ locals {
   data_subnet_pattern = local.database_secrets["data_subnet_pattern"]
 
   parameters_kms_alias = "alias/${var.aws_profile}/environment-services-kms"
-  decrypt_key_arns = compact([
-    data.aws_kms_key.parameters.arn,
-    var.snapshot_kms_key_arn,
-  ])
 
   alarm_topic_name = coalesce(var.alarm_topic_name, "${local.stack_name}-${var.environment}-cloudwatch-alarms-notify-topic")
 

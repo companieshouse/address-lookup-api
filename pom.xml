@@ -23,7 +23,6 @@
         <module>lambdas/scan</module>
         <module>lambdas/unzip</module>
         <module>lambdas/import</module>
-        <module>lambdas/db-bootstrap</module>
     </modules>
 
     <properties>
@@ -101,11 +100,6 @@
             <dependency>
                 <groupId>software.amazon.awssdk</groupId>
                 <artifactId>eventbridge</artifactId>
-                <version>${aws-sdk.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>software.amazon.awssdk</groupId>
-                <artifactId>ssm</artifactId>
                 <version>${aws-sdk.version}</version>
             </dependency>
             <dependency>

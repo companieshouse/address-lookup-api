@@ -43,6 +43,23 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
                 .andExpect(jsonPath("$[1].country").value("GB-SCT"));
     }
 
+    /** Verifies each approved regional fixture through the legacy list endpoint. */
+    @ParameterizedTest
+    @MethodSource("uk.gov.companieshouse.addresslookup.BorderPostcodeFixtures#cases")
+    void shouldReturnMultipleAddressesForBorderPostcodes(
+            String postcode,
+            String expectedPostcode,
+            String expectedCountry) throws Exception {
+        this.mockMvc.perform(get("/address-lookup-api/multiple-addresses")
+                        .queryParam("postcode", postcode)
+                        .header(REQUEST_ID.value(), "request_id"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(greaterThan(0)))
+                .andExpect(jsonPath("$[0].postcode").value(expectedPostcode))
+                .andExpect(jsonPath("$[0].country").value(expectedCountry));
+    }
+
     @ParameterizedTest
     @MethodSource("addresses")
     void shouldReturnMultipleAddressesIslPostcode(

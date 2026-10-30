@@ -20,7 +20,7 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionAppl
 import java.util.Map;
 
 @ExtendWith(MockitoExtension.class)
-class EventHandlerTest {
+class HandlerTest {
 
     @Mock
     private DiscoveryService discoveryService;
@@ -28,7 +28,7 @@ class EventHandlerTest {
     @Mock
     private Context context;
 
-    private EventHandler eventHandler;
+    private Handler handler;
 
     private static final Map<String, Object> TEST_DETAILS = Map.of("mode", "COU");
     private static final String TEST_RESPONSE_ID = "12345678-1234-1234-1234-123456789abc";
@@ -39,7 +39,7 @@ class EventHandlerTest {
         try (MockedStatic<AcquisitionApplication> mockApp = Mockito.mockStatic(AcquisitionApplication.class)) {
             mockApp.when(() -> AcquisitionApplication.start(DiscoveryService.class))
                     .thenReturn(discoveryService);
-            eventHandler = new EventHandler();
+            handler = new Handler();
         }
     }
 
@@ -52,7 +52,7 @@ class EventHandlerTest {
         ScheduledEvent testEvent = new ScheduledEvent();
         testEvent.setDetail(TEST_DETAILS);
 
-        String response = eventHandler.handleRequest(testEvent, context);
+        String response = handler.handleRequest(testEvent, context);
 
         assertEquals(TEST_RESPONSE_ID, response);
     }
@@ -67,7 +67,7 @@ class EventHandlerTest {
         ScheduledEvent testEvent = new ScheduledEvent();
         testEvent.setDetail(TEST_DETAILS);
 
-        String response = eventHandler.handleRequest(testEvent, context);
+        String response = handler.handleRequest(testEvent, context);
 
         assertEquals(expectedResponse, response);
     }
@@ -86,7 +86,7 @@ class EventHandlerTest {
         String response = null;
 
         try {
-            response = eventHandler.handleRequest(testEvent, context);
+            response = handler.handleRequest(testEvent, context);
         } catch (Exception e) {
             assertInstanceOf(RuntimeException.class, e);
             assertTrue(e.getMessage().startsWith("discovery failed; durable state allows retry, event"));

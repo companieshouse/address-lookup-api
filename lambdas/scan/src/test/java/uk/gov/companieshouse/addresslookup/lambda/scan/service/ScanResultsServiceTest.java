@@ -1,4 +1,4 @@
-package uk.gov.companieshouse.addresslookup.lambda.scan;
+package uk.gov.companieshouse.addresslookup.lambda.scan.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -20,11 +20,12 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.stubbing.Stubber;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.EventPublicationException;
 
 import java.io.InputStream;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -60,7 +61,11 @@ class ScanResultsServiceTest {
     void setUp() {
         doAnswer(this::invocationOfCommand)
             .when(commands).sendIngestion(anyString(), anyMap());
-        service = new ScanResultsService(commands, BUCKET, CLEAN_BUCKET);
+        var properties = new AcquisitionProperties(
+                null, CLEAN_BUCKET, BUCKET, "event-bus", null, null,
+                1024L, null, null, 1024L, 20,
+                Duration.ofSeconds(20), Duration.ofSeconds(840));
+        service = new ScanResultsService(commands, properties);
     }
 
     private Void invocationOfCommand(InvocationOnMock invocation) {
@@ -326,6 +331,53 @@ class ScanResultsServiceTest {
         service.scan(input);
         assertEquals(List.of("StepRejected"), types());
         assertEquals("INVALID_INPUT", detail(0).get("code").asText());
+    }
+
+    @Test
+    void invalidKeyPreservesExactObjectAndUri() throws Exception {
+        String key = "Scanned/not-a-uuid/unknown file.zip";
+        service.scan(event(BUCKET, key, VERSION, "NO_THREATS_FOUND"));
+
+        assertEquals(JSON.valueToTree(Map.of(
+                "schemaVersion", 1,
+                "step", "scan",
+                "code", "INVALID_INPUT",
+                "message", "invalid object key",
+                "object", Map.of("bucket", BUCKET, "key", key, "versionId", VERSION),
+                "objectUri", "s3://" + BUCKET + "/" + key)), detail(0));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"NO_THREATS_FOUND", "THREATS_FOUND", "FAILED"})
+    void rejectedScansIncludeObjectUri(String result) throws Exception {
+        service.scan(event("wrong-bucket", KEY, VERSION, result));
+        assertEquals("s3://wrong-bucket/" + KEY, detail(0).path("objectUri").asText());
+
+        if (!"NO_THREATS_FOUND".equals(result)) {
+            service.scan(event(BUCKET, KEY, VERSION, result));
+            assertEquals("s3://" + BUCKET + "/" + KEY, detail(1).path("objectUri").asText());
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("incompleteObjectReferences")
+    void incompleteReferencesPreserveAvailableFieldsWithoutUri(String bucket, String key) throws Exception {
+        service.scan(event(bucket, key, null, "NO_THREATS_FOUND"));
+
+        assertEquals("INVALID_INPUT", detail(0).path("code").asText());
+        assertFalse(detail(0).has("objectUri"));
+        assertEquals(bucket != null, detail(0).path("object").has("bucket"));
+        assertEquals(key != null, detail(0).path("object").has("key"));
+        if (bucket != null) assertEquals(bucket, detail(0).path("object").path("bucket").asText());
+        if (key != null) assertEquals(key, detail(0).path("object").path("key").asText());
+        assertEquals(bucket != null || key != null, detail(0).has("object"));
+    }
+
+    private static Stream<Arguments> incompleteObjectReferences() {
+        return Stream.of(
+                Arguments.of(BUCKET, null),
+                Arguments.of(null, KEY),
+                Arguments.of(null, null));
     }
 
     @Test

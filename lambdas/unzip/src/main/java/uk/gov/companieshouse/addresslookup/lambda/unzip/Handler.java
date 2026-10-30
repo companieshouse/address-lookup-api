@@ -1,9 +1,9 @@
-package uk.gov.companieshouse.addresslookup.lambda;
+package uk.gov.companieshouse.addresslookup.lambda.unzip;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.ExtractionService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
+import uk.gov.companieshouse.addresslookup.lambda.unzip.service.ExtractionService;
 
 import java.util.Map;
 

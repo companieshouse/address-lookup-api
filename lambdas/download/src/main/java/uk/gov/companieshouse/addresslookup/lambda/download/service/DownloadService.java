@@ -1,13 +1,17 @@
-package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
+package uk.gov.companieshouse.addresslookup.lambda.download.service;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
+import uk.gov.companieshouse.release.model.Dataset;
+import uk.gov.companieshouse.release.model.DatasetCatalog;
 
 import java.time.Instant;
 import java.util.Map;
@@ -15,6 +19,7 @@ import java.util.Map;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.*;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
+@Component
 public final class DownloadService {
     private static final Logger LOG = LoggerFactory.getLogger(DownloadService.class);
     private static final String DOWNLOAD_COMMAND_PLAN_KEY = "planKey";
@@ -35,7 +40,7 @@ public final class DownloadService {
         var input = validateCommand(event);
 
         String downloadCommandPlanKey = input.get(DOWNLOAD_COMMAND_PLAN_KEY).asText().trim();
-        String downloadCommandDataset = table(input.get(DOWNLOAD_COMMAND_DATASET).asText().trim()).name();
+        String downloadCommandDataset = DatasetCatalog.table(Dataset.named(input.get(DOWNLOAD_COMMAND_DATASET).asText().trim())).name();
 
         var store = new ReleaseStore(s3);
         String sourceBucket = properties.sourceBucket();

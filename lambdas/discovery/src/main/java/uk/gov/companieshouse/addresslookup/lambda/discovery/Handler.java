@@ -9,14 +9,15 @@ import uk.gov.companieshouse.addresslookup.lambda.discovery.exception.DiscoveryL
 import uk.gov.companieshouse.addresslookup.lambda.discovery.service.DiscoveryService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
 
-public class EventHandler implements RequestHandler<ScheduledEvent, String> {
-    private static final Logger LOG = LoggerFactory.getLogger(EventHandler.class);
+public class Handler implements RequestHandler<ScheduledEvent, String> {
+    private static final Logger LOG = LoggerFactory.getLogger(Handler.class);
 
     private final DiscoveryService service;
 
-    public EventHandler() {
+    public Handler() {
         service = AcquisitionApplication.start(DiscoveryService.class);
     }
+
     @Override
     public String handleRequest(ScheduledEvent scheduledEvent, Context context) {
 

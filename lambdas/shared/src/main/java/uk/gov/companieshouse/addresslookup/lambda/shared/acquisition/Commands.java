@@ -39,7 +39,7 @@ public final class Commands {
     send(action, Map.of("planKey", planKey, "dataset", dataset), "os.acquisition");
   }
 
-  void send(String action, String dataset) throws CommandDispatchException {
+  public void send(String action, String dataset) throws CommandDispatchException {
     send(action, Map.of("dataset", dataset), "os.acquisition");
   }
 

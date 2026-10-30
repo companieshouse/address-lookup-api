@@ -142,7 +142,8 @@ no `dataset` field. As with other files, invalid manifest inputs publish `INVALI
     },
     "step": "zip-scan",
     "code": "MALWARE_FOUND",
-    "message": "Example.Malware"
+    "message": "Example.Malware",
+    "objectUri": "s3://<ingest bucket>/Scanned/12345678-1234-1234-1234-123456789abc/add_gb_builtaddress.zip"
   }
 }
 ```
@@ -152,10 +153,13 @@ no `dataset` field. As with other files, invalid manifest inputs publish `INVALI
 | `step` | `zip-scan`, `csv-scan`, `receipt-scan` or `manifest-scan`; `scan` when the key cannot be parsed |
 | `code` | `MALWARE_FOUND`, `SCAN_INCONCLUSIVE` or `INVALID_INPUT` |
 | `message` | Threat names (or `THREATS_FOUND` if names are unavailable), the inconclusive result (or `Missing scan result`), or the input-validation reason |
+| `objectUri` | `s3://<bucket>/<key>` using the original bucket and key, included when both are available, even if the key is invalid |
 
-For invalid input, `releaseId`, `dataset` and `object` are omitted if the key cannot be parsed.
-If the key parses, the object contains the available bucket, key and version ID fields; missing
-fields are omitted. No `ExtractRequested`, `DatasetReady`, `ReceiptReady` or `ManifestReady`
+For invalid input, `releaseId` and `dataset` are omitted if the key cannot be parsed.
+The object contains the available bucket, key and version ID fields even if parsing fails;
+missing fields are omitted, and `object` is omitted when none are available.
+Scan routing logs also include `objectUri` for correlation in CloudWatch.
+No `ExtractRequested`, `DatasetReady`, `ReceiptReady` or `ManifestReady`
 is published for a rejected input.
 Duplicate deliveries can publish the same event again. A failed publication throws so the
 invocation can be retried.

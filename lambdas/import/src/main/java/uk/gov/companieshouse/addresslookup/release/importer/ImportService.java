@@ -1,6 +1,7 @@
 package uk.gov.companieshouse.addresslookup.release.importer;
 
 import com.amazonaws.services.lambda.runtime.Context;
+import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReconciliationCursor;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
@@ -21,6 +22,7 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 /**
  * Events are wake-ups only; persisted immutable descriptions and clean evidence authorize import.
  */
+@Component
 public final class ImportService {
   private final S3Client s3;
   private final ImportProperties properties;

@@ -38,13 +38,6 @@ public enum Dataset {
     return mode == SupplyType.COU ? resolve : validateFull;
   }
 
-  public DatasetCatalog.Table table() throws Exception {
-    return DatasetCatalog.tables().stream()
-        .filter(t -> t.name().equals(name))
-        .findFirst()
-        .orElseThrow();
-  }
-
   public static Dataset named(String name) {
     return Arrays.stream(values())
         .filter(d -> d.name.equals(name))

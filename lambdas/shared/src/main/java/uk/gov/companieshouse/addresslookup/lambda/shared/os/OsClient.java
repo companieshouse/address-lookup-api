@@ -1,8 +1,12 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.os;
 
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sanitizeUrl;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -12,7 +16,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 /** API key is sent only to api.os.uk, never forwarded to the signed download host. */
 public final class OsClient {
@@ -21,16 +24,15 @@ public final class OsClient {
   private final HttpClient http;
   private final String key;
   private final Duration requestTimeout;
-  private final com.fasterxml.jackson.databind.ObjectMapper json;
+  private final ObjectMapper json;
 
   public OsClient(
       String key,
       Duration connectTimeout,
-      Duration requestTimeout,
-      com.fasterxml.jackson.databind.ObjectMapper json) {
+      Duration requestTimeout) {
     this.key = key;
     this.requestTimeout = requestTimeout;
-    this.json = json;
+    this.json = JSON;
     this.http =
         HttpClient.newBuilder()
             .connectTimeout(connectTimeout)

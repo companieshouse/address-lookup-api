@@ -1,0 +1,8 @@
+{
+  "featureName": "add-isl-builtaddress",
+  "crs": "http://www.opengis.net/def/crs/EPSG/0/4258",
+  "schemaVersion": "3.0",
+  "validFromDate": "2026-10-06",
+  "validToDate": "2026-10-07",
+  "recordCount": 123
+}

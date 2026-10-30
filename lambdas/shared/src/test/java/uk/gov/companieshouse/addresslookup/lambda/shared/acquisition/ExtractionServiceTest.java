@@ -82,7 +82,7 @@ final class ExtractionServiceTest {
                 commands,
                 new AcquisitionProperties(
                         SOURCE, CHECKED, "ingest", "events", "key", "packages",
-                        1024 * 1024, 1024 * 1024, 20,
+                        1024 * 1024, null, null, 1024 * 1024, 20,
                         Duration.ofSeconds(20), Duration.ofSeconds(60)));
 
         lenient().when(context.getRemainingTimeInMillis()).thenReturn(900_000);
@@ -203,7 +203,7 @@ final class ExtractionServiceTest {
     @Test
     void constructorRequiresScannedBucket() {
         var properties = new AcquisitionProperties(
-                SOURCE, " ", "ingest", "events", "key", "packages", 1024, 1024, 20,
+                SOURCE, " ", "ingest", "events", "key", "packages", 1024, null, null,1024, 20,
                 Duration.ofSeconds(20), Duration.ofSeconds(60));
 
         var failure = assertThrows(IllegalArgumentException.class,
@@ -430,7 +430,7 @@ final class ExtractionServiceTest {
                 s3, commands,
                 new AcquisitionProperties(
                         SOURCE, CHECKED, "ingest", "events", "key", "packages", 1024 * 1024,
-                        maxExtractedBytes, 20, Duration.ofSeconds(20), Duration.ofSeconds(60)));
+                        null, null, maxExtractedBytes, 20, Duration.ofSeconds(20), Duration.ofSeconds(60)));
     }
 
     private void cleanZip(byte[] content) throws Exception {

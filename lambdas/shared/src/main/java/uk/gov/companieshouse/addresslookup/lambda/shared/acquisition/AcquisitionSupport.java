@@ -8,16 +8,19 @@ import java.util.UUID;
 
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
-final class AcquisitionSupport {
+public final class AcquisitionSupport {
+
+  private AcquisitionSupport() {}
+
   static DatasetCatalog.Table table(String name) throws Exception {
-    return Dataset.named(name).table();
+    return DatasetCatalog.table(Dataset.named(name));
   }
 
-  static UUID releaseId(JsonNode d) {
+  public static UUID releaseId(JsonNode d) {
     return UUID.fromString(required(d, "releaseId"));
   }
 
-  static String api(String pkg) {
+  public static String api(String pkg) {
     check(pkg.matches("[a-zA-Z0-9_-]+"), "Invalid OS package ID");
     return "https://api.os.uk/downloads/v1/dataPackages/" + pkg + "/versions";
   }

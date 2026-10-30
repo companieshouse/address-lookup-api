@@ -18,7 +18,7 @@ public final class Commands {
   private final String bus;
   private final ObjectMapper json;
 
-  static final class CommandDispatchException extends EventPublicationException {
+  public static final class CommandDispatchException extends EventPublicationException {
     CommandDispatchException(String message) {
       super(message);
     }
@@ -29,12 +29,13 @@ public final class Commands {
   }
 
   Commands(EventBridgeClient events, String bus, ObjectMapper json) {
+
     this.events = events;
     this.bus = bus;
     this.json = json;
   }
 
-  void send(String action, String planKey, String dataset) throws CommandDispatchException {
+  public void send(String action, String planKey, String dataset) throws CommandDispatchException {
     send(action, Map.of("planKey", planKey, "dataset", dataset), "os.acquisition");
   }
 

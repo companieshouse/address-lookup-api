@@ -1,11 +1,12 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
 
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import uk.gov.companieshouse.release.model.DatasetDefault;
 
 import java.time.Duration;
-
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
+import java.util.List;
 
 @ConfigurationProperties("acquisition")
 public record AcquisitionProperties(
@@ -16,6 +17,9 @@ public record AcquisitionProperties(
     String osApiKey,
     String packages,
     @DefaultValue("21474836480") long maxZipBytes,
+    List<DatasetDefault> datasets,
+    @DefaultValue("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}")
+    String osHttpURLTemplate,
     @DefaultValue("1073741824") long maxExtractedBytes,
     @DefaultValue("20") int sweepLimit,
     @DefaultValue("20s") Duration connectTimeout,
@@ -36,7 +40,7 @@ public record AcquisitionProperties(
     return "AcquisitionProperties[credentials redacted]";
   }
 
-  static String required(String value, String name) {
+  public static String required(String value, String name) {
     check(value != null && !value.isBlank(), "Missing " + name);
     return value;
   }

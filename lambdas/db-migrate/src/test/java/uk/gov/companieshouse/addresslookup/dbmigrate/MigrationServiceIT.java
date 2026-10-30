@@ -20,6 +20,7 @@ import java.sql.SQLException;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.ZipEntry;
@@ -46,7 +47,7 @@ class MigrationServiceIT {
           .withCreateContainerCmdModifier(command -> command.withPlatform("linux/amd64"));
 
   private static final AtomicInteger DATABASES = new AtomicInteger();
-  private static final String KEY = "snapshots/address-lookup-db-test.zip";
+  private static final String KEY = "address-lookup/db-schema-snapshots/address-lookup-db-test.zip";
   private static final List<String> BASELINE =
       List.of(
           "V2026.001__create_postgis_and_schemas.sql",
@@ -100,11 +101,15 @@ class MigrationServiceIT {
     byte[] snapshot = realMigrations();
     var result = run(snapshot, Command.INFO);
 
+    assertEquals("info", result.get("command"));
+    assertTrue((Long) result.get("durationMs") >= 0);
     @SuppressWarnings("unchecked")
     var described = (Map<String, Object>) result.get("snapshot");
+    assertEquals("snapshot-bucket", described.get("bucket"));
     assertEquals(KEY, described.get("key"));
     assertEquals("v1", described.get("versionId"));
     assertEquals(sha256(snapshot), described.get("sha256"));
+    assertEquals((long) snapshot.length, described.get("bytes"));
     assertEquals(BASELINE.size(), described.get("files"));
   }
 
@@ -197,6 +202,56 @@ class MigrationServiceIT {
     var repaired = run(snapshot, Command.REPAIR, "10s", true);
     assertEquals("SUCCESS", repaired.get("status"));
     assertEquals("1", repaired.get("schemaVersion"));
+    assertEquals(List.of(), repaired.get("repaired"));
+  }
+
+  @Test
+  void repairReportsTheMigrationsItAlignedByFileName() throws Exception {
+    run(fixture(Map.of("V1__first.sql", "CREATE TABLE first_table (id int);")), Command.MIGRATE);
+    byte[] edited = fixture(Map.of("V1__first.sql", "CREATE TABLE first_table (id int); -- edited"));
+
+    var repaired = run(edited, Command.REPAIR, "10s", true);
+
+    assertEquals(List.of("V1__first.sql"), repaired.get("repaired"));
+    assertFalse(((List<?>) repaired.get("repairActions")).isEmpty(), "Flyway describes what it repaired");
+    assertEquals(true, run(edited, Command.VALIDATE).get("valid"), "the checksum is aligned after repair");
+  }
+
+  @Test
+  void repairOfTwoMigrationsListsBothFileNames() throws Exception {
+    run(
+        fixture(
+            Map.of(
+                "V1__first.sql", "CREATE TABLE first_table (id int);",
+                "V2__second.sql", "CREATE TABLE second_table (id int);")),
+        Command.MIGRATE);
+    byte[] edited =
+        fixture(
+            Map.of(
+                "V1__first.sql", "CREATE TABLE first_table (id int); -- edited",
+                "V2__second.sql", "CREATE TABLE second_table (id int); -- edited"));
+
+    var repaired = run(edited, Command.REPAIR, "10s", true);
+
+    assertEquals(Set.of("V1__first.sql", "V2__second.sql"), Set.copyOf((List<?>) repaired.get("repaired")));
+    assertEquals(1, ((List<?>) repaired.get("repairActions")).size(), "one action summarises both files");
+  }
+
+  @Test
+  void validateReportsPendingMigrationsWithoutFailing() throws Exception {
+    run(fixture(Map.of("V1__first.sql", "CREATE TABLE first_table (id int);")), Command.MIGRATE);
+    byte[] withPending =
+        fixture(
+            Map.of(
+                "V1__first.sql", "CREATE TABLE first_table (id int);",
+                "V2__second.sql", "CREATE TABLE second_table (id int);"));
+
+    var validate = run(withPending, Command.VALIDATE);
+
+    assertEquals(true, validate.get("valid"));
+    assertEquals(List.of("V2__second.sql"), validate.get("pending"));
+    assertEquals("1", validate.get("schemaVersion"));
+    assertFalse(tableExists("public", "second_table"), "validate must not apply anything");
   }
 
   @Test
@@ -262,13 +317,16 @@ class MigrationServiceIT {
         "snapshot-bucket", "/address-lookup/test/db/schema-owner", allowRepair, lockTimeout, 50_000_000, 1000);
   }
 
-  /** Mirrors the gather-snapshot job: database/migrations/** stored as migrations/<file>. */
+  /**
+   * Mirrors the gather-snapshot job: database/migrations/*.sql stored as migrations/<file>.
+   * Placeholders such as {@code .gitkeep} are left out, because a snapshot holds only migrations.
+   */
   private static byte[] realMigrations() throws IOException {
     Path migrations =
         Path.of(System.getProperty("database.dir", "../../database")).resolve("migrations");
     var files = new TreeMap<String, String>();
     try (var paths = Files.list(migrations)) {
-      for (Path file : paths.filter(Files::isRegularFile).toList())
+      for (Path file : paths.filter(path -> path.getFileName().toString().endsWith(".sql")).toList())
         files.put(file.getFileName().toString(), Files.readString(file));
     }
     return fixture(files);

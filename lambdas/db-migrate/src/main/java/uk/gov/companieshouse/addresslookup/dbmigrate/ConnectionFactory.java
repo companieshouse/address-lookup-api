@@ -13,6 +13,10 @@ import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.C
  */
 @FunctionalInterface
 public interface ConnectionFactory {
+  /** Passed to the JDBC driver as a string property. */
+  String CONNECT_TIMEOUT_SECONDS = "10";
+  String APPLICATION_NAME = "address-lookup-db-migrate";
+
   Connection open(DatabaseCredentials credentials);
 
   static ConnectionFactory jdbc() {
@@ -20,14 +24,14 @@ public interface ConnectionFactory {
       var props = new Properties();
       props.setProperty("user", credentials.username());
       props.setProperty("password", credentials.password());
-      props.setProperty("connectTimeout", "10");
-      props.setProperty("ApplicationName", "address-lookup-db-migrate");
+      props.setProperty("connectTimeout", CONNECT_TIMEOUT_SECONDS);
+      props.setProperty("ApplicationName", APPLICATION_NAME);
       try {
         return DriverManager.getConnection(credentials.jdbcUrl(), props);
       } catch (SQLException e) {
         throw new MigrationException(
             DATABASE_UNAVAILABLE,
-            "Cannot connect to " + credentials.jdbcUrl() + ": " + e.getMessage(),
+            "Cannot connect to " + credentials.sanitisedJdbcUrl() + ": " + e.getMessage(),
             e);
       }
     };

@@ -1,6 +1,6 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
-/** A failure with a stable code; the pipeline log shows {@code CODE: message}. */
+/** A failure with a stable code. The pipeline log shows {@code CODE: message}. */
 public final class MigrationException extends RuntimeException {
   public enum Code {
     INVALID_INPUT,

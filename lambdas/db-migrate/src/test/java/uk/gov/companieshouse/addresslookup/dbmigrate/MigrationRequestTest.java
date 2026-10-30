@@ -12,14 +12,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MigrationRequestTest {
 
-  private static final String SHA = "9f2c" + "0".repeat(60);
+  private static final String SHA256_HEX = "9f2c" + "0".repeat(60);
 
-  private static Map<String, Object> payload(Object... pairs) {
+  private static Map<String, Object> buildMigrationRequestPayload(Object... pairs) {
     var map = new HashMap<String, Object>();
     map.put("command", "migrate");
-    map.put("key", "snapshots/address-lookup-db-1.4.0.zip");
+    map.put("key", "address-lookup/db-schema-snapshots/address-lookup-db-1.4.0.zip");
     map.put("versionId", "v1");
-    map.put("sha256", SHA);
+    map.put("sha256", SHA256_HEX);
     for (int i = 0; i < pairs.length; i += 2) {
       if (pairs[i + 1] == null) map.remove((String) pairs[i]);
       else map.put((String) pairs[i], pairs[i + 1]);
@@ -27,54 +27,59 @@ class MigrationRequestTest {
     return map;
   }
 
-  private static void assertInvalid(Map<String, Object> payload) {
-    var e = assertThrows(MigrationException.class, () -> MigrationRequest.parse(payload));
+  private static void assertInvalidInput(Map<String, Object> migrationRequestPayload) {
+    var e = assertThrows(MigrationException.class, () -> MigrationRequest.parse(migrationRequestPayload));
     assertEquals(MigrationException.Code.INVALID_INPUT, e.code());
   }
 
   @Test
   void parsesMigrate() {
-    var request = MigrationRequest.parse(payload());
+    var request = MigrationRequest.parse(buildMigrationRequestPayload());
     assertEquals(Command.MIGRATE, request.command());
-    assertEquals("snapshots/address-lookup-db-1.4.0.zip", request.key());
+    assertEquals("address-lookup/db-schema-snapshots/address-lookup-db-1.4.0.zip", request.key());
     assertEquals("v1", request.versionId());
-    assertEquals(SHA, request.sha256());
+    assertEquals(SHA256_HEX, request.sha256());
   }
 
   @ParameterizedTest
   @ValueSource(strings = {"migrate", "info", "validate", "repair"})
   void acceptsEveryCommand(String command) {
-    assertEquals(command, MigrationRequest.parse(payload("command", command)).command().wireName());
+    assertEquals(command, MigrationRequest.parse(buildMigrationRequestPayload("command", command)).command().wireName());
   }
 
   @Test
   void normalisesTheChecksumToLowerCase() {
-    assertEquals(SHA, MigrationRequest.parse(payload("sha256", SHA.toUpperCase())).sha256());
+    assertEquals(SHA256_HEX, MigrationRequest.parse(buildMigrationRequestPayload("sha256", SHA256_HEX.toUpperCase())).sha256());
   }
 
   @ParameterizedTest
   @ValueSource(
       strings = {
-        "latest.zip", "snapshots/../x.zip", "snapshots/a/b.zip", "snapshots/x.tar", "changelogs/x.zip"
+        "latest.zip",
+        "snapshots/x.zip",
+        "address-lookup/db-schema-snapshots/../../x.zip",
+        "address-lookup/db-schema-snapshots/a/b.zip",
+        "address-lookup/db-schema-snapshots/x.tar",
+        "changelogs/x.zip"
       })
   void rejectsKeysOutsideTheSnapshotPrefix(String key) {
-    assertInvalid(payload("key", key));
+    assertInvalidInput(buildMigrationRequestPayload("key", key));
   }
 
   @ParameterizedTest
   @ValueSource(strings = {"", "abc", "zz2c0000000000000000000000000000000000000000000000000000000000000"})
   void rejectsMalformedChecksums(String sha) {
-    assertInvalid(payload("sha256", sha));
+    assertInvalidInput(buildMigrationRequestPayload("sha256", sha));
   }
 
   @Test
   void rejectsMissingFieldsUnknownCommandsAndUnknownFields() {
-    assertInvalid(payload("sha256", null));
-    assertInvalid(payload("versionId", null));
-    assertInvalid(payload("versionId", " "));
-    assertInvalid(payload("command", "clean"));
-    assertInvalid(payload("command", "undo"));
-    assertInvalid(payload("locations", "filesystem:/seed"));
-    assertInvalid(payload("key", 42));
+    assertInvalidInput(buildMigrationRequestPayload("sha256", null));
+    assertInvalidInput(buildMigrationRequestPayload("versionId", null));
+    assertInvalidInput(buildMigrationRequestPayload("versionId", " "));
+    assertInvalidInput(buildMigrationRequestPayload("command", "clean"));
+    assertInvalidInput(buildMigrationRequestPayload("command", "undo"));
+    assertInvalidInput(buildMigrationRequestPayload("locations", "filesystem:/seed"));
+    assertInvalidInput(buildMigrationRequestPayload("key", 42));
   }
 }

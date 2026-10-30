@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level %logger{30} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- Set the LOG_LEVEL environment variable on the Lambda to DEBUG to see more detail. The default is INFO. -->
+  <root level="${LOG_LEVEL:-INFO}">
+    <appender-ref ref="STDOUT"/>
+  </root>
+
+  <!-- Never lower these. Wire logging would print decrypted Parameter Store values such as the database password. -->
+  <logger name="org.apache.http" level="WARN"/>
+  <logger name="org.apache.hc" level="WARN"/>
+  <logger name="software.amazon.awssdk" level="WARN"/>
+  <logger name="io.netty" level="WARN"/>
+</configuration>
+

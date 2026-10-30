@@ -21,9 +21,11 @@ import org.mockito.Mock;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.EventPublicationException;
 
 import java.io.InputStream;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -59,7 +61,11 @@ class ScanResultsServiceTest {
     void setUp() {
         doAnswer(this::invocationOfCommand)
             .when(commands).sendIngestion(anyString(), anyMap());
-        service = new ScanResultsService(commands, BUCKET, CLEAN_BUCKET);
+        var properties = new AcquisitionProperties(
+                null, CLEAN_BUCKET, BUCKET, "event-bus", null, null,
+                1024L, null, null, 1024L, 20,
+                Duration.ofSeconds(20), Duration.ofSeconds(840));
+        service = new ScanResultsService(commands, properties);
     }
 
     private Void invocationOfCommand(InvocationOnMock invocation) {

@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import uk.gov.companieshouse.addresslookup.lambda.scan.InvalidReason;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
 import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.FileType;
@@ -33,10 +34,10 @@ public final class ScanResultsService {
   private final String ingestBucket;
   private final String cleanBucket;
 
-  public ScanResultsService(Commands commands, String ingestBucket, String cleanBucket) {
+  public ScanResultsService(Commands commands, AcquisitionProperties properties) {
     this.commands = commands;
-    this.ingestBucket = required(ingestBucket, "INGEST_BUCKET");
-    this.cleanBucket = required(cleanBucket, "SCANNED_BUCKET");
+    this.ingestBucket = required(properties.ingestBucket(), "INGEST_BUCKET");
+    this.cleanBucket = required(properties.scannedBucket(), "SCANNED_BUCKET");
   }
 
   public String scan(Map<String, Object> event) throws Exception {

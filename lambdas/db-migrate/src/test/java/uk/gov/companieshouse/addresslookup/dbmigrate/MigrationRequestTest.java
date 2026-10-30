@@ -17,7 +17,7 @@ class MigrationRequestTest {
   private static Map<String, Object> payload(Object... pairs) {
     var map = new HashMap<String, Object>();
     map.put("command", "migrate");
-    map.put("key", "address-lookup-api/db-schema-snapshots/address-lookup-db-1.4.0.zip");
+    map.put("key", "address-lookup/db-schema-snapshots/address-lookup-db-1.4.0.zip");
     map.put("versionId", "v1");
     map.put("sha256", SHA);
     for (int i = 0; i < pairs.length; i += 2) {
@@ -36,7 +36,7 @@ class MigrationRequestTest {
   void parsesMigrate() {
     var request = MigrationRequest.parse(payload());
     assertEquals(Command.MIGRATE, request.command());
-    assertEquals("address-lookup-api/db-schema-snapshots/address-lookup-db-1.4.0.zip", request.key());
+    assertEquals("address-lookup/db-schema-snapshots/address-lookup-db-1.4.0.zip", request.key());
     assertEquals("v1", request.versionId());
     assertEquals(SHA, request.sha256());
   }
@@ -56,9 +56,9 @@ class MigrationRequestTest {
   @ValueSource(
       strings = {
         "latest.zip",
-        "address-lookup-api/db-schema-snapshots/../x.zip",
-        "address-lookup-api/db-schema-snapshots/a/b.zip",
-        "address-lookup-api/db-schema-snapshots/x.tar",
+        "address-lookup/db-schema-snapshots/../x.zip",
+        "address-lookup/db-schema-snapshots/a/b.zip",
+        "address-lookup/db-schema-snapshots/x.tar",
         "snapshots/x.zip",
         "changelogs/x.zip"
       })

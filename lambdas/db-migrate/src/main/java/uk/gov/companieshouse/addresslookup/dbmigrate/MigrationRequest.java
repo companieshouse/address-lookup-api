@@ -10,7 +10,7 @@ import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.C
 /**
  * Invocation payload, for example:
  *
- * <pre>{"command":"migrate","key":"address-lookup-api/db-schema-snapshots/address-lookup-db-1.4.0.zip","versionId":"…","sha256":"…"}</pre>
+ * <pre>{"command":"migrate","key":"address-lookup/db-schema-snapshots/address-lookup-db-1.4.0.zip","versionId":"…","sha256":"…"}</pre>
  *
  * The snapshot is pinned to an exact S3 object version, and its bytes must match the SHA-256
  * recorded when the pipeline gathered it.
@@ -18,12 +18,12 @@ import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.C
 public record MigrationRequest(Command command, String key, String versionId, String sha256) {
 
   private static final Set<String> FIELDS = Set.of("command", "key", "versionId", "sha256");
-  private static final Pattern KEY = Pattern.compile("address-lookup-api/db-schema-snapshots/[A-Za-z0-9._-]{1,200}\\.zip");
+  private static final Pattern KEY = Pattern.compile("address-lookup/db-schema-snapshots/[A-Za-z0-9._-]{1,200}\\.zip");
   private static final Pattern SHA256 = Pattern.compile("[0-9a-f]{64}");
 
   public MigrationRequest {
     require(command != null, "command is required");
-    require(key != null && KEY.matcher(key).matches(), "key must match address-lookup-api/db-schema-snapshots/<name>.zip");
+    require(key != null && KEY.matcher(key).matches(), "key must match address-lookup/db-schema-snapshots/<name>.zip");
     require(
         versionId != null && !versionId.isBlank() && versionId.length() <= 1024,
         "versionId is required");

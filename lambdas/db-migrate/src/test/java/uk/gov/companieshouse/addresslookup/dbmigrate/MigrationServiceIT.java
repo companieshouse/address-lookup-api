@@ -46,7 +46,7 @@ class MigrationServiceIT {
           .withCreateContainerCmdModifier(command -> command.withPlatform("linux/amd64"));
 
   private static final AtomicInteger DATABASES = new AtomicInteger();
-  private static final String KEY = "address-lookup-api/db-schema-snapshots/address-lookup-db-test.zip";
+  private static final String KEY = "address-lookup/db-schema-snapshots/address-lookup-db-test.zip";
   private static final List<String> BASELINE =
       List.of(
           "V2026.001__create_postgis_and_schemas.sql",

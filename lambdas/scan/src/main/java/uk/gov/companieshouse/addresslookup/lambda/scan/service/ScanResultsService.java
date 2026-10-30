@@ -49,13 +49,14 @@ public final class ScanResultsService {
     String key = text(s3Object, "objectKey");
     String versionId = text(s3Object, "versionId");
     String result = text(detail.path("scanResultDetails"), "scanResultStatus");
+    String objectUri = bucket != null && key != null ? "s3://" + bucket + "/" + key : null;
 
     Validation validation = validate(input, bucket, key, versionId);
     ObjectKey parsed = validation.parsed();
     InvalidReason invalidReason = validation.reason();
 
     Map<String, Object> payload = basePayload(parsed);
-    if (parsed != null) {
+    if (bucket != null || key != null || versionId != null) {
       payload.put("object", objectReference(bucket, key, versionId));
     }
 
@@ -63,7 +64,7 @@ public final class ScanResultsService {
     String rejectionCode = null;
     if (invalidReason != null) {
       rejectionCode = "INVALID_INPUT";
-      decision = reject(payload, parsed, rejectionCode, invalidReason.message());
+      decision = reject(payload, parsed, rejectionCode, invalidReason.message(), objectUri);
     } else if ("NO_THREATS_FOUND".equals(result)) {
       decision = switch (parsed.fileType()) {
         case ZIP -> "ExtractRequested";
@@ -78,7 +79,7 @@ public final class ScanResultsService {
           MALWARE_FOUND.equals(rejectionCode)
               ? threatNames(detail, result)
               : resultOrUnknown(result);
-      decision = reject(payload, parsed, rejectionCode, message);
+      decision = reject(payload, parsed, rejectionCode, message, objectUri);
     }
 
     logRoute(
@@ -87,6 +88,7 @@ public final class ScanResultsService {
         parsed,
         result,
         versionId,
+        objectUri,
         rejectionCode == null ? decision : "StepRejected:" + rejectionCode,
         rejectionCode == null ? null : payload.get("message"));
     return decision;
@@ -114,10 +116,11 @@ public final class ScanResultsService {
   }
 
   private String reject(
-      Map<String, Object> payload, ObjectKey parsed, String code, String message) {
+      Map<String, Object> payload, ObjectKey parsed, String code, String message, String objectUri) {
     payload.put("step", parsed == null ? "scan" : step(parsed.fileType()));
     payload.put("code", code);
     payload.put("message", message);
+    if (objectUri != null) payload.put("objectUri", objectUri);
     commands.sendIngestion("StepRejected", payload);
     return "StepRejected:" + code;
   }
@@ -180,6 +183,7 @@ public final class ScanResultsService {
       ObjectKey parsed,
       String result,
       String versionId,
+      String objectUri,
       String decision,
       Object message) {
     String releaseId = parsed == null ? null : parsed.releaseId();
@@ -188,24 +192,26 @@ public final class ScanResultsService {
     String fileType = parsed == null ? null : parsed.fileType().name();
     if (MALWARE_FOUND.equals(rejectionCode) || "SCAN_INCONCLUSIVE".equals(rejectionCode)) {
       LOG.error(
-          "Scan routed eventId={} releaseId={} dataset={} fileType={} scanResult={} versionId={} decision={} details={}",
+          "Scan routed eventId={} releaseId={} dataset={} fileType={} scanResult={} versionId={} objectUri={} decision={} details={}",
           eventId,
           releaseId,
           dataset,
           fileType,
           result,
           versionId,
+          objectUri,
           decision,
           message);
     } else {
       LOG.info(
-          "Scan routed eventId={} releaseId={} dataset={} fileType={} scanResult={} versionId={} decision={}",
+          "Scan routed eventId={} releaseId={} dataset={} fileType={} scanResult={} versionId={} objectUri={} decision={}",
           eventId,
           releaseId,
           dataset,
           fileType,
           result,
           versionId,
+          objectUri,
           decision);
     }
   }

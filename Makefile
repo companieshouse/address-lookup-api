@@ -132,3 +132,5 @@ lint: lint/docker-compose sonar
 lint/docker-compose:
 	@# Help: Lint docker file
 	docker-compose -f docker-compose.yml config
+
+#

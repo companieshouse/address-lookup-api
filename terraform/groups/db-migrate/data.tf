@@ -82,10 +82,10 @@ data "aws_iam_policy_document" "db_migrate" {
   }
 
   statement {
-    sid       = "DecryptSchemaOwnerCredentialsAndSnapshots"
+    sid       = "DecryptSchemaOwnerCredentials"
     effect    = "Allow"
     actions   = ["kms:Decrypt"]
-    resources = local.decrypt_key_arns
+    resources = [data.aws_kms_key.parameters.arn]
   }
 }
 

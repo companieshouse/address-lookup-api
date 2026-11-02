@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.output.MigrateResult;
 import org.junit.jupiter.api.Test;
@@ -174,17 +176,20 @@ class DatabaseFeedIT {
             "matchdate",
             "matchmethod",
             "matchingorganisation");
-    private static final Set<String> HAPPY_PATH_POSTCODES = Set.of(
-            "WF27QD",
-            "AB101AU",
-            "BT100BU",
-            "BT100EQ",
-            "BT513TU",
-            "GY80EE",
-            "GY79AD",
-            "IM11BD",
-            "JE27ND",
-            "JE27NA");
+    private static final Set<String> HAPPY_PATH_POSTCODES = Stream.concat(
+            Stream.of(
+                    "WF27QD",
+                    "AB101AU",
+                    "BT100BU",
+                    "BT100EQ",
+                    "BT513TU",
+                    "GY80EE",
+                    "GY79AD",
+                    "IM11BD",
+                    "JE27ND",
+                    "JE27NA"),
+            BorderPostcodeFixtures.compactPostcodes().stream())
+            .collect(Collectors.toUnmodifiableSet());
     private static final Map<String, Integer> NULL_COUNTRY_FIXTURES = Map.of(
             "add_gb_royalmailaddress_v2", 19,
             "add_isl_royalmailaddress_v2", 10403188);

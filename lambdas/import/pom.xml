@@ -24,9 +24,5 @@
             <artifactId>address-lookup-lambda-shared</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-lambda-java-core</artifactId>
-        </dependency>
     </dependencies>
 </project>

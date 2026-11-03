@@ -1,5 +1,5 @@
 output "lambda_function_name" {
-  description = "The function the environment's Concourse update, repair and API check-db-schema jobs invoke"
+  description = "The function the environment's Concourse <env>-db-schema-migrate, <env>-db-schema-repair and API check-db-schema jobs invoke"
   value       = module.lambda.lambda_function_name
 }
 

@@ -57,11 +57,6 @@ data "aws_kms_key" "parameters" {
   key_id = local.parameters_kms_alias
 }
 
-# The IAM user whose access keys the environment's Concourse jobs use.
-data "aws_iam_user" "concourse" {
-  user_name = var.concourse_iam_user_name
-}
-
 data "aws_sns_topic" "alarms" {
   name = local.alarm_topic_name
 }

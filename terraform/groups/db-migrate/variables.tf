@@ -68,17 +68,10 @@ variable "lambda_logs_retention_days" {
   default     = 90
 }
 
-
 variable "lock_timeout" {
   type        = string
   description = "PostgreSQL lock_timeout for each migration (LOCK_TIMEOUT)"
   default     = "10s"
-}
-
-variable "concourse_iam_user_name" {
-  type        = string
-  description = "The IAM user whose access keys the environment's Concourse jobs use; the only principal allowed to invoke the function"
-  default     = "concourse-platform"
 }
 
 variable "alarm_topic_name" {

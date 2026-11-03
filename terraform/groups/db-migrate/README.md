@@ -20,7 +20,7 @@ tag, using the major and minor versions in `database/version`, and
 the major or minor version, edit `database/version`.
 
 ```
-Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-lookup-db-migrate-<env>
+Concourse (env AWS keys) ──────lambda:InvokeFunction──▶ address-lookup-db-migrate-<env>
                                                           │  data subnets, own SG, no CIDR egress
                        ┌──────────────────────────────────┼──────────────────────────────┐
                  443 ▼ S3 gateway endpoint          443 ▼ SSM interface endpoint    5432 ▼ Aurora SG
@@ -36,7 +36,7 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
 | Reserved concurrency 1 | `lambda_reserved_concurrent_executions = 1`. Async retries are 0. |
 | Env `SNAPSHOT_BUCKET`, `DB_CREDENTIALS_PARAMETER`, `LOCK_TIMEOUT=10s`, `ALLOW_REPAIR=false` | `lambda_env_vars`, plus `AWS_ENDPOINT_URL_SSM` (see Network) |
 | No triggers | No event source mappings, EventBridge rules, schedules or SNS/SQS subscriptions are declared |
-| Invoke only by that environment's Concourse | Resource policy statement `AllowConcourseInvoke` for IAM user `var.concourse_iam_user_name` (`concourse-platform`) |
+| Invoke only by that environment's Concourse | No resource policy. Concourse invokes it in the same account with that environment's AWS keys, whose IAM permissions allow it. See "Anyone else → AccessDenied" below. |
 | Private subnets, own SG, no internet route | Data subnets (`data_subnet_pattern` from Vault). The SG has no CIDR egress. Its only egress rules go to Aurora 5432, the S3 gateway prefix list 443 and the SSM endpoint SG 443. |
 | Aurora allows 5432 from it | `aws_vpc_security_group_ingress_rule.aurora_from_lambda` on `<env>-address-rds-rds-sg` |
 | Endpoints S3 gateway, SSM, KMS, Logs | S3 gateway: the VPC's existing one, looked up. SSM: created by `terraform/groups/aurora` (`address-lookup-<env>-ssm`) and looked up by Name tag; this group adds the ingress rule from the function's SG. KMS and Logs: not needed (see Network). |
@@ -66,14 +66,16 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
   endpoint that admits only the migration Lambdas. The function is instead given
   `AWS_ENDPOINT_URL_SSM`, which the AWS SDK for Java 2.x honours.
 - **"Anyone else → AccessDenied".**
-  - The resource policy grants only Concourse. A resource policy can only
-    Allow, though, so principals *in the same account* whose identity policies
-    allow `lambda:InvokeFunction` on `*` (for example SSO administrator roles)
-    can still invoke it. Cross-account principals and same-account principals
-    without such a policy get AccessDenied.
+  - The function has no resource policy. Concourse invokes it with the
+    environment's own AWS keys (`((secrets.<account>-aws-access-key-id))`), and
+    in the same account those keys' IAM permissions are enough. A resource
+    policy can only Allow, so adding one for Concourse would not stop anyone.
+  - Cross-account principals get AccessDenied. Same-account principals whose
+    identity policies allow `lambda:InvokeFunction` (for example SSO
+    administrator roles) can still invoke it.
   - To close this completely, add an explicit Deny for
     `arn:aws:lambda:*:*:function:address-lookup-db-migrate-*` to the SSO
-    permission sets, or as an SCP with an exception for `concourse-platform`.
+    permission sets, or as an SCP with an exception for the Concourse identity.
 - **"Only db-migrate, Import and API reach Aurora".** This group adds only the
   db-migrate rule. The API and Import ingress rules belong to the groups that
   own those services. The Aurora SG has no ingress rules today (cidev, checked
@@ -84,7 +86,10 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
 1. `terraform/groups/aurora` is applied (ALS-90). It creates the cluster, the
    schema-owner role, the `/address-lookup/<env>/db/schema-owner` parameter and
    the SSM endpoint. This group looks up the cluster, its SG, the endpoint and
-   the endpoint's SG; the plan fails if they don't exist.
+   the endpoint's SG; the plan fails if they don't exist, with
+   `no matching EC2 VPC Endpoint found` (`data.aws_vpc_endpoint.ssm`) and
+   `no matching EC2 Security Group found` (`data.aws_security_group.ssm_endpoint`).
+   Merge and apply ALS-90 (`cidev-aurora-apply`) before this group.
 2. Vault `applications/<aws_profile>/<env>/common-services-stack/address-rds`
    holds `schema_owner_username` and `schema_owner_password` (read by the
    aurora group) and the existing `data_subnet_pattern` (read here).
@@ -101,8 +106,6 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
    `s3:GetObjectVersion` on `address-lookup/db-schema-snapshots/*` (statement
    `GetAddressLookupDbSnapshots` in aws-shared-services-infrastructure-terraform).
    The role's own IAM grant is not enough for a cross-account read.
-6. The environment's Concourse AWS credentials are the `concourse-platform` IAM
-   user. If not, set `concourse_iam_user_name`.
 
 ## Deployment
 
@@ -137,9 +140,9 @@ aws lambda invoke --function-name "$F" --cli-binary-format raw-in-base64-out \
   --payload '{"command":"info","key":"address-lookup/db-schema-snapshots/<tag>.zip","versionId":"<versionId>","sha256":"<sha256>"}' out.json
 cat out.json        # "status":"SUCCESS", schemaVersion, pending
 
-# Anyone else gets AccessDenied: the policy has a single Allow for concourse-platform
-aws lambda get-policy --function-name "$F" --query Policy --output text | jq '.Statement'
-# ...and, from another account or a role with no lambda:InvokeFunction grant:
+# Anyone else gets AccessDenied: there is no resource policy (ResourceNotFoundException),
+aws lambda get-policy --function-name "$F"
+# ...so from another account, or a role with no lambda:InvokeFunction grant:
 aws lambda invoke --function-name "arn:aws:lambda:eu-west-2:<account>:function:$F" out.json   # AccessDeniedException
 
 # No triggers
@@ -267,7 +270,6 @@ aws kms get-key-policy --key-id <key id> --policy-name default
 | [aws_vpc_security_group_ingress_rule.ssm_endpoint_from_lambda](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
 | [aws_iam_policy_document.db_migrate](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
-| [aws_iam_user.concourse](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_user) | data source |
 | [aws_kms_key.parameters](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/kms_key) | data source |
 | [aws_rds_cluster.aurora](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/rds_cluster) | data source |
 | [aws_security_group.aurora](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/security_group) | data source |
@@ -287,7 +289,6 @@ aws kms get-key-policy --key-id <key id> --policy-name default
 | <a name="input_alarm_topic_name"></a> [alarm\_topic\_name](#input\_alarm\_topic\_name) | The SNS topic the Errors alarm notifies. Defaults to the stack's common-services-<environment>-cloudwatch-alarms-notify-topic | `string` | `null` | no |
 | <a name="input_aws_profile"></a> [aws\_profile](#input\_aws\_profile) | The AWS profile name; used as a prefix for Vault secrets | `string` | n/a | yes |
 | <a name="input_aws_region"></a> [aws\_region](#input\_aws\_region) | The AWS region in which resources will be created | `string` | `"eu-west-2"` | no |
-| <a name="input_concourse_iam_user_name"></a> [concourse\_iam\_user\_name](#input\_concourse\_iam\_user\_name) | The IAM user whose access keys the environment's Concourse jobs use; the only principal allowed to invoke the function | `string` | `"concourse-platform"` | no |
 | <a name="input_environment"></a> [environment](#input\_environment) | The environment name to be used when creating AWS resources | `string` | n/a | yes |
 | <a name="input_hashicorp_vault_password"></a> [hashicorp\_vault\_password](#input\_hashicorp\_vault\_password) | The password used when retrieving configuration from Hashicorp Vault | `string` | n/a | yes |
 | <a name="input_hashicorp_vault_username"></a> [hashicorp\_vault\_username](#input\_hashicorp\_vault\_username) | The username used when retrieving configuration from Hashicorp Vault | `string` | n/a | yes |

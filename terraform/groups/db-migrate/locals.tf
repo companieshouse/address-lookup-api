@@ -1,7 +1,6 @@
 locals {
   stack_name            = "common-services"
   database_service_name = "address-rds"
-  database_name         = "addressdb"
   database_port         = data.aws_rds_cluster.aurora.port
 
   # terraform-modules aws/lambda names the function <function_name>-<environment>.

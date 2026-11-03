@@ -53,15 +53,6 @@ module "lambda" {
   lambda_reserved_concurrent_executions = 1
   lambda_maximum_retry_attempts         = 0
 
-  lambda_permissions = [
-    {
-      statement_id = "AllowConcourseInvoke"
-      action       = "lambda:InvokeFunction"
-      principal    = data.aws_iam_user.concourse.arn
-      source_arn   = null
-    }
-  ]
-
   additional_policies = [data.aws_iam_policy_document.db_migrate.json]
 
   # No CIDR egress at all, so no route to the internet. The only egress rules
@@ -81,7 +72,7 @@ module "lambda" {
 
 resource "aws_cloudwatch_metric_alarm" "errors" {
   alarm_name        = "${module.lambda.lambda_function_name}-errors"
-  alarm_description = "A ${module.lambda.lambda_function_name} invocation failed. Check the Concourse update-${var.environment} job and the function's logs."
+  alarm_description = "A ${module.lambda.lambda_function_name} invocation failed. Check the Concourse ${var.environment}-db-schema-migrate job and the function's logs."
 
   namespace   = "AWS/Lambda"
   metric_name = "Errors"

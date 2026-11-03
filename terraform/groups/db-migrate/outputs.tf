@@ -1,5 +1,5 @@
 output "lambda_function_name" {
-  description = "The function the environment's Concourse update, repair and API check-db-schema jobs invoke"
+  description = "The function the environment's Concourse <env>-db-schema-migrate, <env>-db-schema-repair and API check-db-schema jobs invoke"
   value       = module.lambda.lambda_function_name
 }
 
@@ -19,6 +19,6 @@ output "credentials_parameter_name" {
 }
 
 output "ssm_endpoint_dns_name" {
-  description = "The SSM interface endpoint the function uses (private DNS is off)"
-  value       = aws_vpc_endpoint.ssm.dns_entry[0].dns_name
+  description = "The SSM interface endpoint the function uses (terraform/groups/aurora; private DNS is off)"
+  value       = data.aws_vpc_endpoint.ssm.dns_entry[0].dns_name
 }

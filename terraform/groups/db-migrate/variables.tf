@@ -74,12 +74,6 @@ variable "lock_timeout" {
   default     = "10s"
 }
 
-variable "concourse_iam_user_name" {
-  type        = string
-  description = "The IAM user whose access keys the environment's Concourse jobs use; the only principal allowed to invoke the function"
-  default     = "concourse-platform"
-}
-
 variable "alarm_topic_name" {
   type        = string
   description = "The SNS topic the Errors alarm notifies. Defaults to the stack's common-services-<environment>-cloudwatch-alarms-notify-topic"

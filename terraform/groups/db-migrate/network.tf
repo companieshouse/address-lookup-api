@@ -5,14 +5,16 @@
 # keeps it off the internet: it has no CIDR egress, only
 #   * 5432 to the Aurora security group,
 #   * 443 to the S3 gateway endpoint's prefix list (snapshots), and
-#   * 443 to the SSM interface endpoint below (credentials).
+#   * 443 to the SSM interface endpoint (credentials).
 #
 # The S3 gateway endpoint belongs to the VPC and is looked up, not created.
-# The SSM endpoint is created here with private DNS off: turning it on would
-# send every SSM call in the shared VPC to an endpoint that only admits this
-# function. KMS and CloudWatch Logs endpoints are not needed: Parameter Store
-# decrypts the SecureString on the function's behalf, and Lambda ships the
-# function's logs itself, outside the VPC.
+# The SSM endpoint and its security group belong to terraform/groups/aurora,
+# which also writes the credentials parameter; they are looked up here and this
+# group adds only its own ingress rule. Private DNS is off on that endpoint:
+# turning it on would send every SSM call in the shared VPC to an endpoint that
+# only admits the migration Lambdas. KMS and CloudWatch Logs endpoints are not
+# needed: Parameter Store decrypts the SecureString on the function's behalf,
+# and Lambda ships the function's logs itself, outside the VPC.
 
 resource "aws_vpc_security_group_egress_rule" "lambda_to_aurora" {
   security_group_id = module.lambda.security_group_id
@@ -48,42 +50,19 @@ resource "aws_vpc_security_group_egress_rule" "lambda_to_ssm_endpoint" {
   security_group_id = module.lambda.security_group_id
   description       = "HTTPS to the SSM interface endpoint (credentials)"
 
-  referenced_security_group_id = aws_security_group.ssm_endpoint.id
+  referenced_security_group_id = data.aws_security_group.ssm_endpoint.id
   ip_protocol                  = "tcp"
   from_port                    = 443
   to_port                      = 443
 }
 
-resource "aws_security_group" "ssm_endpoint" {
-  name        = "${local.lambda_name}-ssm-endpoint"
-  description = "SSM interface endpoint used only by ${local.lambda_name}"
-  vpc_id      = data.aws_vpc.vpc.id
-
-  tags = merge(module.iac_tags.tags, module.owner_tags.tags, {
-    Name = "${local.lambda_name}-ssm-endpoint"
-  })
-}
 
 resource "aws_vpc_security_group_ingress_rule" "ssm_endpoint_from_lambda" {
-  security_group_id = aws_security_group.ssm_endpoint.id
+  security_group_id = data.aws_security_group.ssm_endpoint.id
   description       = "HTTPS from ${local.lambda_name}"
 
   referenced_security_group_id = module.lambda.security_group_id
   ip_protocol                  = "tcp"
   from_port                    = 443
   to_port                      = 443
-}
-
-resource "aws_vpc_endpoint" "ssm" {
-  vpc_id              = data.aws_vpc.vpc.id
-  service_name        = "com.amazonaws.${var.aws_region}.ssm"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = data.aws_subnets.data.ids
-  security_group_ids  = [aws_security_group.ssm_endpoint.id]
-  private_dns_enabled = false
-  policy              = data.aws_iam_policy_document.ssm_endpoint.json
-
-  tags = merge(module.iac_tags.tags, module.owner_tags.tags, {
-    Name = "${local.lambda_name}-ssm"
-  })
 }

@@ -36,6 +36,21 @@ class PostcodeControllerIT extends AddressTestBaseIT {
                 .andExpect(jsonPath("$.country").value("GB-ENG"));
     }
 
+    /** Verifies each approved regional fixture through the legacy single-address endpoint. */
+    @ParameterizedTest
+    @MethodSource("uk.gov.companieshouse.addresslookup.BorderPostcodeFixtures#cases")
+    void shouldReturnAddressForBorderPostcodes(
+            String postcode,
+            String expectedPostcode,
+            String expectedCountry) throws Exception {
+        this.mockMvc.perform(get("/address-lookup-api/postcode")
+                        .queryParam("postcode", postcode)
+                        .header(REQUEST_ID.value(), "request_id"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.postcode").value(expectedPostcode))
+                .andExpect(jsonPath("$.country").value(expectedCountry));
+    }
+
     @ParameterizedTest
     @MethodSource("addresses")
     void shouldReturnAddressIslPostcode(

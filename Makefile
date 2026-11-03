@@ -10,12 +10,11 @@ space               := $(empty) $(empty)
 liquibase_lambda_module   := lambdas/liquibase-schema-migrator
 liquibase_lambda_artifact := address-lookup-liquibase-lambda
 
-# Liquibase changelogs in $(api_module)/src/main/resources/db/changelog, released on the
-# db-schema-X.Y.Z tag stream. Only the master changelog and what it includes are
-# shipped; seeds and data are local only.
+# Flyway migrations in database/migrations, released on the db-schema-X.Y.Z tag
+# stream. Local repeatable seeds in database/local are never packaged.
 db_schema_artifact  := address-lookup-db-schema
-db_schema_root      := $(api_module)/src/main/resources
-db_schema_contents  := db/changelog/db.changelog-master.yaml db/changelog/changes/creation
+db_schema_root      := database
+db_schema_contents  := migrations
 
 .PHONY: all
 all: build
@@ -43,12 +42,25 @@ test: test-integration test-unit
 .PHONY: test-unit
 test-unit:
 	@# Help: Run unit tests
+	bash tests/test_local_api_smoke.sh
 	mvn test -Dskip.integration.tests=true
 
 .PHONY: test-integration
 test-integration:
 	@# Help: Run integration tests
 	mvn -pl $(api_module),$(liquibase_lambda_module) -am integration-test verify -Dskip.unit.tests=true failsafe:verify
+
+
+.PHONY: m2-check
+m2-check:
+	@# Help: Make sure ~/.m2/settings.xml is there and working with JFrog
+	perl tests/m2-check.pl
+
+.PHONY: test-flyway
+test-flyway:
+	@# Help: Test the Flyway database feed against fresh PostGIS
+	bash tests/test_database_layout.sh
+	mvn -pl $(api_module) -am -Dit.test=DatabaseFeedIT -Dfailsafe.failIfNoSpecifiedTests=false -Dskip.unit.tests=true test-compile failsafe:integration-test failsafe:verify
 
 # .PHONY: test-liquibase
 # test-liquibase:
@@ -94,7 +106,7 @@ endif
 
 .PHONY: package-db-schema
 package-db-schema:
-	@# Help: Package the Liquibase changelogs as $(db_schema_artifact)-<version>.zip
+	@# Help: Package production Flyway migrations as $(db_schema_artifact)-<version>.zip
 ifndef version
 	$(error No version given. Aborting)
 endif

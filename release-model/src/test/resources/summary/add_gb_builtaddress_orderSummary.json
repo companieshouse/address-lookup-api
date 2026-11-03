@@ -1,0 +1,8 @@
+{
+  "featureName": "add-gb-builtaddress",
+  "crs": "http://www.opengis.net/def/crs/EPSG/0/27700",
+  "schemaVersion": "3.0",
+  "validFromDate": "2026-10-06",
+  "validToDate": "2026-10-07",
+  "recordCount": 123
+}

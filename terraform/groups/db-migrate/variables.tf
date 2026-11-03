@@ -22,7 +22,7 @@ variable "release_artifact_key" {
 
 variable "snapshot_bucket_name" {
   type        = string
-  description = "The versioned bucket the Concourse gather-snapshot job writes Flyway snapshots to (SNAPSHOT_BUCKET)"
+  description = "The versioned shared-services configs bucket the Concourse gather-snapshot job writes Flyway snapshots to (SNAPSHOT_BUCKET)"
 }
 
 # ---------------- OPTIONAL VARIABLES ----------------
@@ -34,14 +34,8 @@ variable "aws_region" {
 
 variable "snapshot_prefix" {
   type        = string
-  description = "The key prefix of the snapshots in the snapshot bucket; the function can read nothing else"
-  default     = "snapshots"
-}
-
-variable "snapshot_kms_key_arn" {
-  type        = string
-  description = "The KMS key the snapshot bucket encrypts with, if it uses SSE-KMS. Empty for SSE-S3"
-  default     = ""
+  description = "The key prefix of the db schema snapshots in the snapshot bucket; the function can read nothing else"
+  default     = "address-lookup/db-schema-snapshots"
 }
 
 variable "lambda_runtime" {

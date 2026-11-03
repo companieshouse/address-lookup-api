@@ -1,11 +1,11 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CompletedPart;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,8 +29,10 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
  * Bounded 256 MiB parts, with checksum validation before multipart completion.
  */
 public final class StreamingS3 {
-    private static final Logger LOG = LoggerFactory.getLogger(StreamingS3.class);
+    private static final Logger LOG = LoggerFactory.getLogger(StreamingS3.class.getName());
 
+    private static final String BUCKET_FIELD = "bucket";
+    private static final String KEY_FIELD = "key";
     private static final int PART_SIZE_BYTES = 256 * 1024 * 1024;
     private static final String S3_VERSIONING_MESSAGE = "S3 versioning must be enabled";
 
@@ -76,7 +78,7 @@ public final class StreamingS3 {
             InputStream in, String bucket, String key, String expectedMd5, long limit,
             boolean reuseExisting) throws Exception {
         String upload = s3.createMultipartUpload(b -> b.bucket(bucket).key(key)).uploadId();
-        LOG.info("Multipart upload started bucket={} key={}", bucket, key);
+        LOG.info("Multipart upload started", Map.of(BUCKET_FIELD, bucket, KEY_FIELD, key));
 
         var parts = new ArrayList<CompletedPart>();
         var md5 = MessageDigest.getInstance("MD5");
@@ -128,9 +130,9 @@ public final class StreamingS3 {
             String evidence =
                     JSON.writeValueAsString(
                             Map.of(
-                                    "bucket",
+                                    BUCKET_FIELD,
                                     bucket,
-                                    "key",
+                                    KEY_FIELD,
                                     key,
                                     "versionId",
                                     version,
@@ -145,7 +147,7 @@ public final class StreamingS3 {
             saveChecksumEvidence(bucket, checksumKey, evidence, reuseExisting, uploaded);
             return uploaded;
         } catch (Exception e) {
-            abortIncompleteUpload(bucket, key, upload, e.getMessage());
+            abortIncompleteUpload(bucket, key, upload, e);
             throw e;
         }
     }
@@ -157,9 +159,11 @@ public final class StreamingS3 {
                     b -> b.bucket(bucket).key(checksumKey).ifNoneMatch("*"),
                     RequestBody.fromString(evidence));
 
-            LOG.info(
-                    "Multipart upload completed bucket={} key={} bytes={} md5={} sha256={} version={}",
-                    bucket, uploaded.key(), uploaded.bytes(), uploaded.md5(), uploaded.sha256(), uploaded.version());
+            LOG.info("Multipart upload completed",
+                    Map.of(BUCKET_FIELD, bucket,
+                            KEY_FIELD, uploaded.key(),
+                            "bytes", uploaded.bytes(),
+                            "version", uploaded.version()));
         } catch (S3Exception e) {
             if (!reuseExisting || !ReleaseStore.isPreconditionFailed(e)) throw e;
             var recorded = new ReleaseStore(s3).read(bucket, checksumKey);
@@ -211,15 +215,20 @@ public final class StreamingS3 {
     }
 
     // Best effort cleanup: incomplete multipart uploads should not become readable objects.
-    private void abortIncompleteUpload(String bucket, String key, String uploadId, String reason) {
-        LOG.warn("Multipart upload failed bucket={} key={} reason={}", bucket, key, reason);
+    private void abortIncompleteUpload(
+            String bucket, String key, String uploadId, Exception failure) {
+        LOG.error("Multipart upload failed",
+                failure,
+                Map.of(BUCKET_FIELD, bucket, KEY_FIELD, key));
 
         try {
             s3.abortMultipartUpload(b -> b.bucket(bucket).key(key).uploadId(uploadId));
-            LOG.info("Incomplete multipart upload cleaned up bucket={} key={}", bucket, key);
+            LOG.info("Incomplete multipart upload cleaned up",
+                    Map.of(BUCKET_FIELD, bucket, KEY_FIELD, key));
         } catch (Exception abortFailure) {
-            LOG.warn("Incomplete multipart upload cleanup failed bucket={} key={} reason={}",
-                    bucket, key, abortFailure.getMessage());
+            LOG.error("Incomplete multipart upload cleanup failed",
+                    abortFailure,
+                    Map.of(BUCKET_FIELD, bucket, KEY_FIELD, key));
         }
     }
 }

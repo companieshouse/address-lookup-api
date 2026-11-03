@@ -1,8 +1,6 @@
 package uk.gov.companieshouse.addresslookup.lambda.scan.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import uk.gov.companieshouse.addresslookup.lambda.scan.InvalidReason;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
@@ -10,6 +8,8 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
 import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.FileType;
 import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.ObjectKey;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -25,7 +25,7 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
  */
 @Component
 public final class ScanResultsService {
-  private static final Logger LOG = LoggerFactory.getLogger(ScanResultsService.class);
+  private static final Logger LOG = LoggerFactory.getLogger(ScanResultsService.class.getName());
   private static final String SOURCE = "aws.guardduty";
   private static final String DETAIL_TYPE = "GuardDuty Malware Protection Object Scan Result";
   private static final String MALWARE_FOUND = "MALWARE_FOUND";
@@ -50,7 +50,6 @@ public final class ScanResultsService {
     String versionId = text(s3Object, "versionId");
     String result = text(detail.path("scanResultDetails"), "scanResultStatus");
     String objectUri = bucket != null && key != null ? "s3://" + bucket + "/" + key : null;
-
     Validation validation = validate(input, bucket, key, versionId);
     ObjectKey parsed = validation.parsed();
     InvalidReason invalidReason = validation.reason();
@@ -88,9 +87,7 @@ public final class ScanResultsService {
         parsed,
         result,
         versionId,
-        objectUri,
-        rejectionCode == null ? decision : "StepRejected:" + rejectionCode,
-        rejectionCode == null ? null : payload.get("message"));
+        rejectionCode == null ? decision : "StepRejected:" + rejectionCode);
     return decision;
   }
 
@@ -183,37 +180,29 @@ public final class ScanResultsService {
       ObjectKey parsed,
       String result,
       String versionId,
-      String objectUri,
-      String decision,
-      Object message) {
+      String decision) {
     String releaseId = parsed == null ? null : parsed.releaseId();
     String dataset =
         parsed == null || parsed.dataset() == null ? null : parsed.dataset().datasetName();
     String fileType = parsed == null ? null : parsed.fileType().name();
+    Map<String, Object> context = new LinkedHashMap<>();
+    putIfPresent(context, "event_id", eventId);
+    putIfPresent(context, "release_id", releaseId);
+    putIfPresent(context, "dataset", dataset);
+    putIfPresent(context, "file_type", fileType);
+    putIfPresent(context, "scan_result", result);
+    putIfPresent(context, "version_id", versionId);
+    putIfPresent(context, "decision", decision);
+    putIfPresent(context, "rejection_code", rejectionCode);
     if (MALWARE_FOUND.equals(rejectionCode) || "SCAN_INCONCLUSIVE".equals(rejectionCode)) {
-      LOG.error(
-          "Scan routed eventId={} releaseId={} dataset={} fileType={} scanResult={} versionId={} objectUri={} decision={} details={}",
-          eventId,
-          releaseId,
-          dataset,
-          fileType,
-          result,
-          versionId,
-          objectUri,
-          decision,
-          message);
+      LOG.error("Scan routed", context);
     } else {
-      LOG.info(
-          "Scan routed eventId={} releaseId={} dataset={} fileType={} scanResult={} versionId={} objectUri={} decision={}",
-          eventId,
-          releaseId,
-          dataset,
-          fileType,
-          result,
-          versionId,
-          objectUri,
-          decision);
+      LOG.info("Scan routed", context);
     }
+  }
+
+  private static void putIfPresent(Map<String, Object> context, String key, Object value) {
+    if (value != null) context.put(key, value);
   }
 
   private static String resultOrUnknown(String result) {

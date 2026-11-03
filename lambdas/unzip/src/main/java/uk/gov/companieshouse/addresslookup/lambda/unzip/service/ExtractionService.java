@@ -4,8 +4,6 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.jspecify.annotations.NonNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -28,6 +26,8 @@ import java.util.zip.ZipInputStream;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import software.amazon.awssdk.services.s3.model.S3Exception;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
 
 import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.*;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
@@ -48,7 +48,9 @@ public final class ExtractionService {
     private static final String VERSION_FIELD = "version";
     private static final String SHA256_FIELD = "sha256";
     private static final String CSV_SCAN_STATUS = "CSV_SCAN";
-    private static final Logger LOG = LoggerFactory.getLogger(ExtractionService.class);
+    private static final String CSV_NOT_FOUND = "CSV_NOT_FOUND";
+    private static final String STATUS = "status";
+    private static final Logger LOG = LoggerFactory.getLogger(ExtractionService.class.getName());
 
     private record ReceiptIdentity(String releaseId, String dataset, String zipKey,
                                    String zipVersion, String csvKey, String schemaVersion) {
@@ -83,15 +85,15 @@ public final class ExtractionService {
     public String unzip(Map<String, Object> event, Context context) throws Exception {
         // Validate input
         JsonNode input = detail(event);
-        var inputKeys = new HashSet<String>();
-        input.fieldNames().forEachRemaining(inputKeys::add);
-        LOG.info("UNZIP requestId={} eventKeys={} inputKeys={}",
-                context.getAwsRequestId(), event.keySet(), inputKeys);
         String dataset = required(input, DATASET_FIELD);
         check(dataset.matches("[a-z][a-z0-9_]*"), "Invalid dataset");
         var table = table(dataset);
 
         String releaseId = required(input, RELEASE_ID_FIELD);
+        LOG.info("Extraction started",
+                Map.of("request_id", requestId(context),
+                        RELEASE_ID_FIELD, releaseId,
+                        DATASET_FIELD, dataset));
         JsonNode scanObject = input.path("object");
         String scanBucket = required(scanObject, "bucket");
         String s3Key = required(scanObject, "key");
@@ -109,8 +111,6 @@ public final class ExtractionService {
             return "WAITING_FOR_ZIP_SCAN";
         }
         check(zipVersion.equals(store.version(scanBucket, s3Key)), "ZIP version changed after scan");
-
-        LOG.info("UNZIP STARTED - dataset={}\n", dataset);
 
         // Check schema version
         check(input.path(SCHEMA_VERSION_FIELD).isInt()
@@ -138,16 +138,16 @@ public final class ExtractionService {
         try (var zip = new ZipInputStream(s3.getObject(request))) {
             return extractZip(zip, table, expectedReceipt, store, scanBucket, checked, context);
         } catch (ZipException e) {
-            LOG.error("UNZIP FAILURE - status=MALFORMED_ZIP message={}\n", e.getMessage());
+            logExtractionFailure("MALFORMED_ZIP", e, releaseId, dataset);
             return "MALFORMED_ZIP";
         } catch (CsvHeaderException e) {
-            LOG.error("UNZIP FAILURE - status=HEADER_MISMATCH message={}\n", e.getMessage());
+            logExtractionFailure("HEADER_MISMATCH", e, releaseId, dataset);
             return "HEADER_MISMATCH";
         } catch (MissingPrimaryCsvException e) {
-            LOG.error("UNZIP FAILURE - status=CSV_NOT_FOUND message={}\n", e.getMessage());
-            return "CSV_NOT_FOUND";
+            logExtractionFailure(CSV_NOT_FOUND, e, releaseId, dataset);
+            return CSV_NOT_FOUND;
         } catch (ArchiveValidationException e) {
-            LOG.error("UNZIP FAILURE - status=ARCHIVE_INVALID message={}\n", e.getMessage());
+            logExtractionFailure("ARCHIVE_INVALID", e, releaseId, dataset);
             return "ARCHIVE_INVALID";
         }
     }
@@ -179,12 +179,16 @@ public final class ExtractionService {
                 var receiptData = buildUnzipReceiptData(expected, result, names.size());
                 var headers = receiptData.putArray("csvHeaders");
                 extractionHeaders.forEach(headers::add);
-                LOG.info("UNZIP - receiptData={}\n", receiptData);
+                LOG.info("Extraction receipt prepared",
+                        Map.of(RELEASE_ID_FIELD, expected.releaseId(),
+                                DATASET_FIELD, expected.dataset(),
+                                "csv_key", result.key()));
 
                 saveExtractReceipt(store, scanBucket, checked, receiptData, result, expected);
                 commands.send(CSV_SCAN_STATUS, table.name());
 
-                LOG.info("UNZIP - Completed\n");
+                LOG.info("Extraction completed",
+                        Map.of(RELEASE_ID_FIELD, expected.releaseId(), DATASET_FIELD, expected.dataset()));
                 return CSV_SCAN_STATUS;
             } else {
                 check(name.startsWith(table.name() + "_") && name.endsWith(".csv"),
@@ -195,7 +199,19 @@ public final class ExtractionService {
             zip.closeEntry();
         }
 
-        return new MissingPrimaryCsvException("CSV_NOT_FOUND").getMessage();
+        return new MissingPrimaryCsvException(CSV_NOT_FOUND).getMessage();
+    }
+
+    private static void logExtractionFailure(
+            String status, Exception failure, String releaseId, String dataset) {
+        LOG.error("ZIP extraction failed",
+                failure,
+                Map.of(STATUS, status, RELEASE_ID_FIELD, releaseId, DATASET_FIELD, dataset));
+    }
+
+    private static String requestId(Context context) {
+        String requestId = context.getAwsRequestId();
+        return requestId == null ? "unknown" : requestId;
     }
 
     private void saveExtractReceipt(ReleaseStore store, String scanBucket, String checked,
@@ -223,7 +239,7 @@ public final class ExtractionService {
               .put("zipVersion", expected.zipVersion())
               .put("zipFileCount", zipFileCount)
               .put(SCHEMA_VERSION_FIELD, expected.schemaVersion())
-              .put("status", "EXTRACTED")
+              .put(STATUS, "EXTRACTED")
               .put(VERSION_FIELD, result.version())
               .put("key", result.key())
               .put(SHA256_FIELD, result.sha256())
@@ -238,7 +254,7 @@ public final class ExtractionService {
                         && expected.zipVersion().equals(required(receipt, "zipVersion"))
                         && expected.schemaVersion().equals(required(receipt, SCHEMA_VERSION_FIELD))
                         && expected.csvKey().equals(required(receipt, "key"))
-                        && "EXTRACTED".equals(required(receipt, "status")),
+                        && "EXTRACTED".equals(required(receipt, STATUS)),
                 "Existing extract receipt does not match the scanned ZIP");
         String version = required(receipt, VERSION_FIELD);
         String checksum = required(receipt, SHA256_FIELD);

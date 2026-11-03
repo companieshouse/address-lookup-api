@@ -14,6 +14,8 @@ import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseRepository;
 import uk.gov.companieshouse.release.model.Dataset;
 import uk.gov.companieshouse.release.model.ObjectReference;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
 
 import java.util.*;
 
@@ -24,6 +26,8 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
  */
 @Component
 public final class ImportService {
+  private static final Logger LOG = LoggerFactory.getLogger(ImportService.class.getName());
+
   private final S3Client s3;
   private final ImportProperties properties;
   private final ReleaseRegistration registration;
@@ -99,7 +103,11 @@ public final class ImportService {
               "Some manifests, files or promotions failed; successful work remains committed for"
                   + " retry");
       // Lambda's serialized exception does not reliably include suppressed causes.
-      failures.forEach(Throwable::printStackTrace);
+      for (Exception cause : failures) {
+        LOG.error("Import processing failed",
+            cause,
+            Map.of("failure_type", cause.getClass().getSimpleName()));
+      }
       failures.forEach(failure::addSuppressed);
       throw failure;
     }

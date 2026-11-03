@@ -13,8 +13,8 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
-import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
 import uk.gov.companieshouse.addresslookup.release.importer.ImportService;
+import uk.gov.companieshouse.addresslookup.release.runtime.ImportApplication;
 
 import java.util.Map;
 
@@ -34,8 +34,8 @@ class HandlerTest {
 
     @BeforeEach
     void setup() {
-        try (MockedStatic<AcquisitionApplication> mockApp = Mockito.mockStatic(AcquisitionApplication.class)) {
-            mockApp.when(() -> AcquisitionApplication.start(ImportService.class))
+        try (MockedStatic<ImportApplication> mockApp = Mockito.mockStatic(ImportApplication.class)) {
+            mockApp.when(ImportApplication::start)
                     .thenReturn(service);
             handler = new Handler();
         }

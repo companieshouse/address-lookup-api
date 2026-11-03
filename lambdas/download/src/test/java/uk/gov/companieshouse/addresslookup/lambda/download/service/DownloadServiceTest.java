@@ -4,15 +4,21 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
 import uk.gov.companieshouse.addresslookup.lambda.shared.testsupport.FakeS3;
+import uk.gov.companieshouse.logging.StructuredLogger;
 
 import java.io.ByteArrayInputStream;
 import java.lang.reflect.Proxy;
@@ -39,6 +45,8 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 
 @ExtendWith(MockitoExtension.class)
 final class DownloadServiceTest {
+    private static final Logger STRUCTURED_LOGGER =
+            (Logger) LoggerFactory.getLogger(StructuredLogger.class);
     private static final String BUCKET = "source-bucket";
     private static final String PLAN_KEY =
             "acquisitions/2026-05-16/4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json";
@@ -264,18 +272,17 @@ final class DownloadServiceTest {
         var event = event();
         var context = context();
         String expected = "Acquisition plan not found planKey=" + PLAN_KEY + " dataset=" + DATASET;
-        var out = new java.io.ByteArrayOutputStream();
-        var originalOut = System.out;
-        System.setOut(new java.io.PrintStream(out, true, StandardCharsets.UTF_8));
+        var appender = captureStructuredLogs();
         try {
             var e = assertThrows(IllegalArgumentException.class, () -> service.download(event, context));
             assertEquals(expected, e.getMessage());
             verifyNoInteractions(os);
         } finally {
-            System.setOut(originalOut);
+            stopCapturingStructuredLogs(appender);
         }
-        // LambdaRuntime.getLogger() writes to System.out outside the Lambda runtime; the level is not rendered.
-        assertTrue(out.toString(StandardCharsets.UTF_8).contains(expected));
+        assertTrue(appender.list.stream()
+                .map(ILoggingEvent::getFormattedMessage)
+                .anyMatch(message -> message.contains("Acquisition plan not found")));
     }
     @Test
     void receiptIsCreatedConditionallyAndNeverOverwritten() throws Exception {
@@ -336,20 +343,18 @@ final class DownloadServiceTest {
         s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
         when(os.download(anyString())).thenReturn(new ByteArrayInputStream("wrong content".getBytes(StandardCharsets.UTF_8)));
         var service = new DownloadService(s3.client(), os, properties());
-        var out = new java.io.ByteArrayOutputStream();
-        var originalOut = System.out;
-        System.setOut(new java.io.PrintStream(out, true, StandardCharsets.UTF_8));
+        var appender = captureStructuredLogs();
         try {
             assertEquals("CHECKSUM_MISMATCH", service.download(event(), context()));
         } finally {
-            System.setOut(originalOut);
+            stopCapturingStructuredLogs(appender);
         }
-        // LambdaRuntime.getLogger() writes to System.out outside the Lambda runtime; the level is not rendered.
-        String logged = out.toString(StandardCharsets.UTF_8);
-        assertTrue(
-                logged.contains("Download checksum mismatch")
-                        && logged.contains("expected=")
-                        && logged.contains("actual="),
+        assertTrue(appender.list.stream()
+                .filter(event -> event.getFormattedMessage().equals("Download checksum mismatch"))
+                .map(event -> structuredField(event, "checksum_mismatch"))
+                .anyMatch(mismatch -> mismatch != null
+                        && mismatch.contains("expected=")
+                        && mismatch.contains("actual=")),
                 "mismatch must be logged with both MD5 values");
         assertTrue(s3.abortedUploads > 0, "multipart upload should be aborted");
         assertFalse(
@@ -357,6 +362,30 @@ final class DownloadServiceTest {
                 "checksum mismatch must not publish a receipt");
         assertTrue(s3.completedKeys.isEmpty(), "checksum mismatch must not complete a ZIP object");
         assertTrue(s3.objects.keySet().stream().noneMatch(k -> k.endsWith(".download-attempt.json")));
+    }
+
+    private static ListAppender<ILoggingEvent> captureStructuredLogs() {
+        var appender = new ListAppender<ILoggingEvent>();
+        appender.setContext((LoggerContext) LoggerFactory.getILoggerFactory());
+        appender.start();
+        STRUCTURED_LOGGER.addAppender(appender);
+        return appender;
+    }
+
+    private static void stopCapturingStructuredLogs(ListAppender<ILoggingEvent> appender) {
+        STRUCTURED_LOGGER.detachAppender(appender);
+        appender.stop();
+    }
+
+    private static String structuredField(ILoggingEvent event, String field) {
+        for (Object argument : event.getArgumentArray()) {
+            if (argument instanceof Map<?, ?> logData
+                    && logData.get("data") instanceof Map<?, ?> data
+                    && data.get(field) != null) {
+                return data.get(field).toString();
+            }
+        }
+        return null;
     }
 
     @Test

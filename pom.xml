@@ -215,6 +215,28 @@
             </plugins>
         </pluginManagement>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>properties</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${maven-surefire-plugin.version}</version>
+                <configuration>
+                    <argLine>-Dfile.encoding=UTF-8</argLine>
+                    <argLine>${surefireArgLine}</argLine>
+                    <argLine>${argLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
+                    <skipTests>${skip.unit.tests}</skipTests>
+                </configuration>
+            </plugin>
             <!-- Activates the JaCoCo executions managed by companies-house-parent so that
                  target/site/jacoco/jacoco.xml is produced for Sonar coverage. -->
             <plugin>

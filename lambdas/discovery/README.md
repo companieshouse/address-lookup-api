@@ -1,6 +1,6 @@
 # Discovery Lambda
 
-Minimum build target and Lambda runtime: Java 21.
+Build target and Lambda runtime: Java 25.
 
 ## Overview
 The *Discover Lambda* is responsible for querying the OS (Ordnance Survey) data package API, to download the Order Summary and ZIP File meta-data.  This is used to create a **Manifest* file. The manifest file is then saved in the S3 Bucket, and `DOWNLOAD` events, including the location of the manifest file, is published to the EventBridge, one for each dataset of interest, to be consumed by the *Download Lambda*.
@@ -74,7 +74,6 @@ Once the manifest is created successfully, for each dataset, a *command* is sent
     "planKey": "acquisitions/<target>/<releaseId>.json",
     "dataset": "<dataset-name>" 
   }
-
 ```
 
 The `<dataset-name>` will be one of `add_gb_royalmailaddress` or `add_isl_royalmailaddress`.
@@ -154,7 +153,9 @@ The initial trust policy used to create the role applicable for the Discovery La
 
 The role then needs to have the Full Access policy for S3 to be added to the role to allow reading and writing from the S3 bucket:
 
-    arn:aws:iam::aws:policy/AmazonS3FullAccess
+```
+arn:aws:iam::aws:policy/AmazonS3FullAccess
+```
 
 A policy needs to be defined, and attached to the role, to allow the Lambda to output events to the event bridge, for the Download Lambda to consume:
 

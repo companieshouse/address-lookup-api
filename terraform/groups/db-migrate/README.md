@@ -113,9 +113,9 @@ Pipeline `address-lookup-api`:
 
 | Environment | Jobs |
 |---|---|
-| cidev (automatic) | `cidev-db-migrate-plan`, then `cidev-db-migrate-apply` |
-| staging (manual) | `staging-db-migrate-plan`, then `staging-db-migrate-apply` |
-| live (manual) | `live-db-migrate-plan`, then `live-db-migrate-apply` |
+| cidev (plan automatic, apply manual) | `cidev-db-migrate-lambda-plan`, then `cidev-db-migrate-lambda-apply` |
+| staging (manual) | `staging-db-migrate-lambda-plan`, then `staging-db-migrate-lambda-apply` |
+| live (manual) | `live-db-migrate-lambda-plan`, then `live-db-migrate-lambda-apply` |
 
 - staging and live take the exact Lambda release and terraform that the
   previous environment applied.

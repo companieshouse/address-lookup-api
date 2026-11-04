@@ -11,6 +11,9 @@ dependency-reduced-pom.xml
 .idea/
 *.iml
 
+# IntelliJ HTTP client private variables (secrets)
+http-client.private.env.json
+
 # Mac files
 .DS_Store
 ._*

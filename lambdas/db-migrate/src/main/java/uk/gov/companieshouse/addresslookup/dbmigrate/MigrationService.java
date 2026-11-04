@@ -110,7 +110,8 @@ public final class MigrationService {
   private FlywayRunner.Outcome executeFlywayCommand(MigrationRequest request, SnapshotZipExtractor.ExtractedSnapshot extractedSqlFiles) {
     DatabaseCredentials dbCredentials = dbCredentialsSource.get(migrationConfig.dbCredentialsParameterPath());
     // Only the sanitised URL and the user name are logged, never the password.
-    LOG.info("Connecting to {} as {}", dbCredentials.sanitisedJdbcUrl(), dbCredentials.username());
+    String sanitisedJdbcUrl = dbCredentials.sanitisedJdbcUrl();
+    LOG.info("Connecting to {} as {}", sanitisedJdbcUrl, dbCredentials.username());
     validateDbConnectionAvailable(dbCredentials);
     LOG.info("Database connection is valid, running Flyway {} with lock timeout {}", request.command().wireName(), migrationConfig.lockTimeout());
     return flywayRunner.run(request.command(), extractedSqlFiles.migrations(), () -> dbConnectionFactory.open(dbCredentials), migrationConfig.lockTimeout());

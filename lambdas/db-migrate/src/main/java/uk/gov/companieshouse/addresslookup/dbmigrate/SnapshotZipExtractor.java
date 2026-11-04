@@ -28,7 +28,7 @@ public final class SnapshotZipExtractor {
   static final String MIGRATIONS_DIR_NAME = "migrations";
   /** Allowed migration SQL file names: versioned ({@code V2026.001__desc.sql}) or repeatable ({@code R__desc.sql}). */
   private static final Pattern SQL_FILE_NAME_PATTERN =
-      Pattern.compile("(V\\d+(\\.\\d+)*|R)__\\w+\\.sql");
+      Pattern.compile("(V\\d+(\\.\\d+)*+|R)__\\w+\\.sql");
   private static final String UNSAFE_ENTRY_MESSAGE_PREFIX = "Unsafe snapshot entry: ";
   private static final int COPY_BUFFER_BYTES = 64 * 1024;
 

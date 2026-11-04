@@ -39,21 +39,23 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
           request.versionId(),
           request.sha256());
       Map<String, Object> result = service.handle(request);
+      String migrationSummary = summary(result);
       LOG.info(
           "db-migration-lambda command={} status={} schemaVersion={} {} durationMs={}",
           flywayCommandName,
           result.get("status"),
           result.get("schemaVersion"),
-          summary(result),
+          migrationSummary,
           result.get("durationMs"));
       return result;
     } catch (MigrationException e) {
       // The message already has the form CODE: detail, so the code is visible in CloudWatch.
       LOG.error("db-migration-lambda command={} failed {}", flywayCommandName, e.getMessage());
-      throw e;
+      throw new MigrationException(e.code(), e.detail(), e);
     } catch (RuntimeException e) {
       LOG.error("db-migration-lambda command={} failed unexpectedly", flywayCommandName, e);
-      throw e;
+      throw new IllegalStateException(
+          "db-migration-lambda command=" + flywayCommandName + " failed unexpectedly", e);
     }
   }
 

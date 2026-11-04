@@ -245,7 +245,7 @@
                 <configuration>
                     <argLine>-Dfile.encoding=UTF-8</argLine>
                     <argLine>${surefireArgLine}</argLine>
-                    <argLine>${argLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
+                    <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
                     <skipTests>${skip.unit.tests}</skipTests>
                 </configuration>
             </plugin>

@@ -100,7 +100,7 @@ class HandlerTest {
   }
 
   @Test
-  void serviceFailureIsRethrownUnchanged() {
+  void serviceFailureIsRethrownWithTheSameCodeAndMessageAndTheOriginalAsCause() {
     var expectedRequest = new MigrationRequest(Command.MIGRATE, SNAPSHOT_KEY, VERSION_ID, SHA256_HEX);
     var serviceFailure = new MigrationException(MigrationException.Code.MIGRATION_FAILED, "boom");
     when(migrationService.handle(expectedRequest)).thenThrow(serviceFailure);
@@ -110,7 +110,24 @@ class HandlerTest {
         assertThrows(
             MigrationException.class, () -> handler.handleRequest(migrateEventPayload, lambdaContext));
 
-    assertSame(serviceFailure, thrown);
+    assertEquals(MigrationException.Code.MIGRATION_FAILED, thrown.code());
+    assertEquals("MIGRATION_FAILED: boom", thrown.getMessage());
+    assertSame(serviceFailure, thrown.getCause());
+  }
+
+  @Test
+  void unexpectedFailureIsWrappedWithTheCommandNameAndTheOriginalAsCause() {
+    var expectedRequest = new MigrationRequest(Command.INFO, SNAPSHOT_KEY, VERSION_ID, SHA256_HEX);
+    var unexpectedFailure = new IllegalStateException("kaboom");
+    when(migrationService.handle(expectedRequest)).thenThrow(unexpectedFailure);
+
+    var infoEventPayload = buildEventPayload("info");
+    var thrown =
+        assertThrows(
+            IllegalStateException.class, () -> handler.handleRequest(infoEventPayload, lambdaContext));
+
+    assertEquals("db-migration-lambda command=info failed unexpectedly", thrown.getMessage());
+    assertSame(unexpectedFailure, thrown.getCause());
   }
 }
 

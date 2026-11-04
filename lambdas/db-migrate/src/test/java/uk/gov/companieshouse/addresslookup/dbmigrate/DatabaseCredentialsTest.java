@@ -63,4 +63,66 @@ class DatabaseCredentialsTest {
             MigrationException.class, () -> DatabaseCredentials.fromJson("{\"password\":\"s3cret\" broken"));
     assertFalse(migrationException.getMessage().contains("s3cret"));
   }
+
+  @Test
+  void usesTheDefaultPortWhenThePortIsMissing() {
+    var credentials =
+        DatabaseCredentials.fromJson("{\"host\":\"h\",\"dbname\":\"d\",\"username\":\"u\",\"password\":\"p\"}");
+
+    assertEquals("jdbc:postgresql://h:5432/d?sslmode=require", credentials.jdbcUrl());
+  }
+
+  @Test
+  void usesTheDefaultPortWhenThePortIsNotNumeric() {
+    var credentials =
+        DatabaseCredentials.fromJson(
+            "{\"host\":\"h\",\"port\":\"abc\",\"dbname\":\"d\",\"username\":\"u\",\"password\":\"p\"}");
+
+    assertEquals("jdbc:postgresql://h:5432/d?sslmode=require", credentials.jdbcUrl());
+  }
+
+  @Test
+  void ignoresHostAndDbNameWhenAJdbcUrlIsGiven() {
+    var credentials =
+        DatabaseCredentials.fromJson(
+            "{\"jdbcUrl\":\"jdbc:postgresql://explicit/db\",\"host\":\"ignored\",\"username\":\"u\",\"password\":\"p\"}");
+
+    assertEquals("jdbc:postgresql://explicit/db", credentials.jdbcUrl());
+  }
+
+  @Test
+  void fallsBackToHostAndDbNameWhenTheJdbcUrlIsNull() {
+    var credentials =
+        DatabaseCredentials.fromJson(
+            "{\"jdbcUrl\":null,\"host\":\"h\",\"dbname\":\"d\",\"username\":\"u\",\"password\":\"p\"}");
+
+    assertEquals("jdbc:postgresql://h:5432/d?sslmode=require", credentials.jdbcUrl());
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "null",
+        "\"text\"",
+        "{\"host\":\"h\",\"dbname\":\"d\",\"username\":\" \",\"password\":\"p\"}",
+        "{\"host\":\"h\",\"dbname\":\"d\",\"username\":\"u\",\"password\":123}",
+        "{\"host\":\"h\",\"dbname\":\"d\",\"username\":\"u\",\"password\":\"\"}",
+        "{\"host\":\"\",\"dbname\":\"d\",\"username\":\"u\",\"password\":\"p\"}",
+        "{\"host\":\"h\",\"username\":\"u\",\"password\":\"p\"}"
+      })
+  void rejectsBlankMissingOrNonTextFields(String dbCredentialsJson) {
+    var migrationException = assertThrows(MigrationException.class, () -> DatabaseCredentials.fromJson(dbCredentialsJson));
+
+    assertEquals(MigrationException.Code.CREDENTIALS_INVALID, migrationException.code());
+  }
+
+  @Test
+  void namesTheMissingFieldWithoutRevealingValues() {
+    var migrationException =
+        assertThrows(
+            MigrationException.class,
+            () -> DatabaseCredentials.fromJson("{\"host\":\"h\",\"dbname\":\"d\",\"password\":\"s3cret\"}"));
+
+    assertEquals("CREDENTIALS_INVALID: Database credentials are missing username", migrationException.getMessage());
+  }
 }

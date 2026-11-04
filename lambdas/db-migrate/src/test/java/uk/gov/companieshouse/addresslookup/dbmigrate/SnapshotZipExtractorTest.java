@@ -20,6 +20,7 @@ import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SnapshotZipExtractorTest {
 
@@ -118,5 +119,52 @@ class SnapshotZipExtractorTest {
     assertEquals(
         MigrationException.Code.MIGRATIONS_NOT_FOUND,
         extractAndGetFailureCode(buildZipBytes(Map.of("migrations/", "")), 1_000_000, 100));
+  }
+
+  @Test
+  void rejectsASnapshotWhoseFilesTogetherExceedTheExpandedSizeLimit() throws Exception {
+    var entries = new LinkedHashMap<String, String>();
+    entries.put("migrations/V1__first.sql", "x".repeat(3_000));
+    entries.put("migrations/V2__second.sql", "x".repeat(3_000));
+
+    assertEquals(MigrationException.Code.BUNDLE_TOO_LARGE, extractAndGetFailureCode(buildZipBytes(entries), 4_000, 100));
+  }
+
+  @Test
+  void acceptsASnapshotWithExactlyTheMaximumNumberOfEntries() throws Exception {
+    var entries = new LinkedHashMap<String, String>();
+    for (int i = 0; i < 4; i++) entries.put("migrations/V" + (i + 1) + "__f.sql", "x");
+
+    var extracted = SnapshotZipExtractor.copyAndExtract(new ByteArrayInputStream(buildZipBytes(entries)), tempWorkDir, 1_000_000, 4);
+
+    assertEquals(4, extracted.sqlFileCount());
+  }
+
+  @Test
+  void rejectsAGitkeepPlaceholderInsideMigrations() throws Exception {
+    var entries = new LinkedHashMap<String, String>();
+    entries.put("migrations/V1__ok.sql", "x");
+    entries.put("migrations/.gitkeep", "");
+
+    assertEquals(MigrationException.Code.VALIDATION_FAILED, extractAndGetFailureCode(buildZipBytes(entries), 1_000_000, 100));
+  }
+
+  @Test
+  void rejectsADescriptionContainingAHyphen() throws Exception {
+    assertEquals(
+        MigrationException.Code.VALIDATION_FAILED,
+        extractAndGetFailureCode(buildZipBytes(Map.of("migrations/R__refresh-view.sql", "x")), 1_000_000, 100));
+  }
+
+  @Test
+  void reportsTheMisnamedFileInTheErrorMessage() throws Exception {
+    var e =
+        assertThrows(
+            MigrationException.class,
+            () ->
+                SnapshotZipExtractor.copyAndExtract(
+                    new ByteArrayInputStream(buildZipBytes(Map.of("migrations/V1_bad.sql", "x"))), tempWorkDir, 1_000_000, 100));
+
+    assertTrue(e.getMessage().startsWith("VALIDATION_FAILED: Misnamed migration migrations/V1_bad.sql"));
   }
 }

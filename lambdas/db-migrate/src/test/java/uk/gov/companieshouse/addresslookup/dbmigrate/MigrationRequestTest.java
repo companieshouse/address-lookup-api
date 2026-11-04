@@ -5,6 +5,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -81,5 +82,55 @@ class MigrationRequestTest {
     assertInvalidInput(buildMigrationRequestPayload("command", "undo"));
     assertInvalidInput(buildMigrationRequestPayload("locations", "filesystem:/seed"));
     assertInvalidInput(buildMigrationRequestPayload("key", 42));
+  }
+
+  @Test
+  void rejectsANullPayload() {
+    assertInvalidInput(null);
+  }
+
+  @Test
+  void rejectsFieldsThatAreNotStrings() {
+    assertInvalidInput(buildMigrationRequestPayload("command", 1));
+    assertInvalidInput(buildMigrationRequestPayload("versionId", 7));
+    assertInvalidInput(buildMigrationRequestPayload("sha256", List.of("abc")));
+  }
+
+  @Test
+  void rejectsAMissingCommandAndAMissingKey() {
+    assertInvalidInput(buildMigrationRequestPayload("command", null));
+    assertInvalidInput(buildMigrationRequestPayload("key", null));
+  }
+
+  @Test
+  void acceptsAVersionIdOfExactlyTheMaximumLength() {
+    var versionId = "v".repeat(1024);
+
+    assertEquals(versionId, MigrationRequest.parse(buildMigrationRequestPayload("versionId", versionId)).versionId());
+  }
+
+  @Test
+  void rejectsAVersionIdLongerThanTheMaximum() {
+    assertInvalidInput(buildMigrationRequestPayload("versionId", "v".repeat(1025)));
+  }
+
+  @Test
+  void acceptsAKeyNameOfExactlyTheMaximumLength() {
+    var key = "address-lookup/db-schema-snapshots/" + "a".repeat(200) + ".zip";
+
+    assertEquals(key, MigrationRequest.parse(buildMigrationRequestPayload("key", key)).key());
+  }
+
+  @Test
+  void rejectsAKeyNameLongerThanTheMaximum() {
+    assertInvalidInput(
+        buildMigrationRequestPayload("key", "address-lookup/db-schema-snapshots/" + "a".repeat(201) + ".zip"));
+  }
+
+  @Test
+  void errorMessageNamesTheOffendingField() {
+    var e = assertThrows(MigrationException.class, () -> MigrationRequest.parse(buildMigrationRequestPayload("locations", "x")));
+
+    assertEquals("INVALID_INPUT: Unexpected field: locations", e.getMessage());
   }
 }

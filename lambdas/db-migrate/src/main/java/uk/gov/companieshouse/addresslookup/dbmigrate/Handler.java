@@ -27,17 +27,21 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
 
   @Override
   public Map<String, Object> handleRequest(Map<String, Object> event, Context context) {
+    // Stays "unknown" when the request cannot be parsed, so the failure log shows command=unknown.
+    String flywayCommandName = "unknown";
     try {
       MigrationRequest request = MigrationRequest.parse(event);
+      flywayCommandName = request.command().wireName();
       LOG.info(
-          "db-migrate start command={} key={} versionId={} sha256={}",
-          request.command().wireName(),
+          "db-migration-lambda start command={} key={} versionId={} sha256={}",
+          flywayCommandName,
           request.key(),
           request.versionId(),
           request.sha256());
       Map<String, Object> result = service.handle(request);
       LOG.info(
-          "db-migrate {} schemaVersion={} {} durationMs={}",
+          "db-migration-lambda command={} status={} schemaVersion={} {} durationMs={}",
+          flywayCommandName,
           result.get("status"),
           result.get("schemaVersion"),
           summary(result),
@@ -45,10 +49,10 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
       return result;
     } catch (MigrationException e) {
       // The message already has the form CODE: detail, so the code is visible in CloudWatch.
-      LOG.error("db-migrate failed {}", e.getMessage());
+      LOG.error("db-migration-lambda command={} failed {}", flywayCommandName, e.getMessage());
       throw e;
     } catch (RuntimeException e) {
-      LOG.error("db-migrate failed unexpectedly", e);
+      LOG.error("db-migration-lambda command={} failed unexpectedly", flywayCommandName, e);
       throw e;
     }
   }

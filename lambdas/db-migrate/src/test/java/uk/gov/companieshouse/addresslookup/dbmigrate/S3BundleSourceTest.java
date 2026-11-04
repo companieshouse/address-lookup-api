@@ -3,19 +3,26 @@ package uk.gov.companieshouse.addresslookup.dbmigrate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -84,6 +91,39 @@ class S3BundleSourceTest {
             S3Exception.class, () -> s3BundleSource.open(SNAPSHOT_BUCKET, SNAPSHOT_KEY, VERSION_ID));
 
     assertSame(accessDeniedException, thrown);
+  }
+
+  @Test
+  void returnsTheObjectStreamForTheRequestedVersion() throws Exception {
+    var objectStream =
+        new ResponseInputStream<>(
+            GetObjectResponse.builder().build(),
+            AbortableInputStream.create(new ByteArrayInputStream("zip-bytes".getBytes(StandardCharsets.UTF_8))));
+    when(s3Client.getObject(ArgumentMatchers.<Consumer<GetObjectRequest.Builder>>any())).thenReturn(objectStream);
+
+    try (var openedStream = s3BundleSource.open(SNAPSHOT_BUCKET, SNAPSHOT_KEY, VERSION_ID)) {
+      assertEquals("zip-bytes", new String(openedStream.readAllBytes(), StandardCharsets.UTF_8));
+    }
+  }
+
+  @Test
+  void requestsTheExactBucketKeyAndVersion() {
+    var objectStream =
+        new ResponseInputStream<>(
+            GetObjectResponse.builder().build(), AbortableInputStream.create(new ByteArrayInputStream(new byte[0])));
+    when(s3Client.getObject(ArgumentMatchers.<Consumer<GetObjectRequest.Builder>>any())).thenReturn(objectStream);
+
+    s3BundleSource.open(SNAPSHOT_BUCKET, SNAPSHOT_KEY, VERSION_ID);
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Consumer<GetObjectRequest.Builder>> requestCustomiserCaptor = ArgumentCaptor.forClass(Consumer.class);
+    verify(s3Client).getObject(requestCustomiserCaptor.capture());
+    var requestBuilder = GetObjectRequest.builder();
+    requestCustomiserCaptor.getValue().accept(requestBuilder);
+    var request = requestBuilder.build();
+    assertEquals(SNAPSHOT_BUCKET, request.bucket());
+    assertEquals(SNAPSHOT_KEY, request.key());
+    assertEquals(VERSION_ID, request.versionId());
   }
 }
 

@@ -57,11 +57,6 @@ data "aws_kms_key" "parameters" {
   key_id = local.parameters_kms_alias
 }
 
-# The IAM user whose access keys the environment's Concourse jobs use.
-data "aws_iam_user" "concourse" {
-  user_name = var.concourse_iam_user_name
-}
-
 data "aws_sns_topic" "alarms" {
   name = local.alarm_topic_name
 }
@@ -82,30 +77,29 @@ data "aws_iam_policy_document" "db_migrate" {
   }
 
   statement {
-    sid       = "DecryptSchemaOwnerCredentialsAndSnapshots"
+    sid       = "DecryptSchemaOwnerCredentials"
     effect    = "Allow"
     actions   = ["kms:Decrypt"]
-    resources = local.decrypt_key_arns
+    resources = [data.aws_kms_key.parameters.arn]
   }
 }
 
-# Only this function's role, and only its one parameter, through the endpoint.
-data "aws_iam_policy_document" "ssm_endpoint" {
-  statement {
-    sid       = "ReadSchemaOwnerCredentials"
-    effect    = "Allow"
-    actions   = ["ssm:GetParameter"]
-    resources = [local.credentials_parameter_arn]
+# Created by terraform/groups/aurora, which must be applied first: the plan
+# fails here until it has been.
+data "aws_vpc_endpoint" "ssm" {
+  vpc_id       = data.aws_vpc.vpc.id
+  service_name = "com.amazonaws.${var.aws_region}.ssm"
+  state        = "available"
 
-    principals {
-      type        = "AWS"
-      identifiers = ["*"]
-    }
+  tags = {
+    Name = local.ssm_endpoint_name
+  }
+}
 
-    condition {
-      test     = "ArnEquals"
-      variable = "aws:PrincipalArn"
-      values   = [module.lambda.lambda_role_arn]
-    }
+data "aws_security_group" "ssm_endpoint" {
+  vpc_id = data.aws_vpc.vpc.id
+
+  tags = {
+    Name = "${local.ssm_endpoint_name}-endpoint"
   }
 }

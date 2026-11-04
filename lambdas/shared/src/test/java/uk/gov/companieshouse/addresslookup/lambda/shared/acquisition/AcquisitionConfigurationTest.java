@@ -29,8 +29,6 @@ final class AcquisitionConfigurationTest {
 
         assertNotNull(os);
         assertNotNull(commands);
-        assertNotNull(configuration.downloadService(s3, os, properties));
-        assertNotNull(configuration.extractionService(s3, commands, properties));
     }
 
     @Test

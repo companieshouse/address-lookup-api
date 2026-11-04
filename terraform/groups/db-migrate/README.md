@@ -7,7 +7,7 @@ The `address-lookup-api` Concourse pipeline invokes the function
 synchronously:
 
 - `<env>-db-schema-migrate` runs `info`, `migrate` and `info` with the recorded
-  `snapshots/<tag>.zip`.
+  `address-lookup/db-schema-snapshots/<tag>.zip`.
 - `cidev-apply`, `staging-apply` and `live-apply` run `info` (check-db-schema).
 - `<env>-db-schema-repair` is break-glass only.
 
@@ -16,16 +16,16 @@ Nothing else triggers it.
 A snapshot is created when a change to `database/migrations/` is merged to
 main. `db-snapshot-release` then creates the next `address-lookup-db-X.Y.Z`
 tag, using the major and minor versions in `database/version`, and
-`gather-snapshot` uploads `snapshots/<tag>.zip`. To change the major or minor
-version, edit `database/version`.
+`gather-snapshot` uploads `address-lookup/db-schema-snapshots/<tag>.zip`. To change
+the major or minor version, edit `database/version`.
 
 ```
-Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-lookup-db-migrate-<env>
+Concourse (env AWS keys) ──────lambda:InvokeFunction──▶ address-lookup-db-migrate-<env>
                                                           │  data subnets, own SG, no CIDR egress
                        ┌──────────────────────────────────┼──────────────────────────────┐
                  443 ▼ S3 gateway endpoint          443 ▼ SSM interface endpoint    5432 ▼ Aurora SG
-          shared-services releases bucket      /address-lookup/<env>/db/       <env>-address-rds
-                  snapshots/*                       schema-owner                  (addressdb)
+          shared-services configs bucket       /address-lookup/<env>/db/       <env>-address-rds
+        address-lookup/db-schema-snapshots/*        schema-owner                  (addressdb)
 ```
 
 ## What it creates
@@ -36,12 +36,12 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
 | Reserved concurrency 1 | `lambda_reserved_concurrent_executions = 1`. Async retries are 0. |
 | Env `SNAPSHOT_BUCKET`, `DB_CREDENTIALS_PARAMETER`, `LOCK_TIMEOUT=10s`, `ALLOW_REPAIR=false` | `lambda_env_vars`, plus `AWS_ENDPOINT_URL_SSM` (see Network) |
 | No triggers | No event source mappings, EventBridge rules, schedules or SNS/SQS subscriptions are declared |
-| Invoke only by that environment's Concourse | Resource policy statement `AllowConcourseInvoke` for IAM user `var.concourse_iam_user_name` (`concourse-platform`) |
+| Invoke only by that environment's Concourse | No resource policy. Concourse invokes it in the same account with that environment's AWS keys, whose IAM permissions allow it. See "Anyone else → AccessDenied" below. |
 | Private subnets, own SG, no internet route | Data subnets (`data_subnet_pattern` from Vault). The SG has no CIDR egress. Its only egress rules go to Aurora 5432, the S3 gateway prefix list 443 and the SSM endpoint SG 443. |
 | Aurora allows 5432 from it | `aws_vpc_security_group_ingress_rule.aurora_from_lambda` on `<env>-address-rds-rds-sg` |
-| Endpoints S3 gateway, SSM, KMS, Logs | S3 gateway: the VPC's existing one, looked up. SSM: created here. KMS and Logs: not needed (see Network). |
-| IAM S3 Get on `snapshots/*`, `ssm:GetParameter` on the one parameter, `kms:Decrypt` | `data.aws_iam_policy_document.db_migrate` attached via `additional_policies` |
-| Credentials | SecureString `/address-lookup/<env>/db/schema-owner` = `{"username","password","jdbcUrl"}`, written from Vault by `module.credentials` (terraform-modules `aws/parameter-store`) and encrypted with `alias/<aws_profile>/environment-services-kms` |
+| Endpoints S3 gateway, SSM, KMS, Logs | S3 gateway: the VPC's existing one, looked up. SSM: created by `terraform/groups/aurora` (`address-lookup-<env>-ssm`) and looked up by Name tag; this group adds the ingress rule from the function's SG. KMS and Logs: not needed (see Network). |
+| IAM S3 Get on `address-lookup/db-schema-snapshots/*`, `ssm:GetParameter` on the one parameter, `kms:Decrypt` on the parameters key | `data.aws_iam_policy_document.db_migrate` attached via `additional_policies` |
+| Credentials | SecureString `/address-lookup/<env>/db/schema-owner` = `{"username","password","jdbcUrl"}`, written from Vault by `terraform/groups/aurora` (`module.credentials`, terraform-modules `aws/parameter-store`) and encrypted with `alias/<aws_profile>/environment-services-kms`. See [Schema-owner credentials (ALS-88)](#schema-owner-credentials-als-88) |
 | Log group | Created by the module (`/aws/lambda/address-lookup-db-migrate-<env>`), retention `lambda_logs_retention_days` (90) |
 | Errors > 0 alarm to the team channel | `aws_cloudwatch_metric_alarm.errors` → `common-services-<env>-cloudwatch-alarms-notify-topic` (override with `alarm_topic_name`) |
 
@@ -53,27 +53,29 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
 - **SSM permission from the module.** The module's base role grants
   `ssm:GetParameters` (plural) on `*` for `LAMBDA_GLOBAL_SSM_PREFIX`. The
   function calls `GetParameter` (singular), which this group grants on the one
-  parameter only. The SSM endpoint policy also allows only `GetParameter` on
-  that parameter, and only for this role.
+  parameter only. The SSM endpoint policy (aurora group) also allows this role
+  only `GetParameter` on that parameter.
 - **No KMS or Logs endpoints.**
   - Parameter Store decrypts the SecureString server-side (`WithDecryption`),
     using the role's `kms:Decrypt` grant, so the function never calls KMS.
-  - The snapshot bucket uses SSE-S3, so S3 needs no KMS call either. If it
-    moves to SSE-KMS, set `snapshot_kms_key_arn`.
+  - The snapshot bucket (the shared-services configs bucket) uses SSE-S3, so
+    S3 needs no KMS call either.
   - Lambda ships the function's logs itself, outside the VPC.
 - **SSM endpoint private DNS is off.** The VPC is shared. With private DNS on,
   every SSM call in the VPC (ECS agents, other services) would resolve to an
-  endpoint that admits only this function. The function is instead given
+  endpoint that admits only the migration Lambdas. The function is instead given
   `AWS_ENDPOINT_URL_SSM`, which the AWS SDK for Java 2.x honours.
 - **"Anyone else → AccessDenied".**
-  - The resource policy grants only Concourse. A resource policy can only
-    Allow, though, so principals *in the same account* whose identity policies
-    allow `lambda:InvokeFunction` on `*` (for example SSO administrator roles)
-    can still invoke it. Cross-account principals and same-account principals
-    without such a policy get AccessDenied.
+  - The function has no resource policy. Concourse invokes it with the
+    environment's own AWS keys (`((secrets.<account>-aws-access-key-id))`), and
+    in the same account those keys' IAM permissions are enough. A resource
+    policy can only Allow, so adding one for Concourse would not stop anyone.
+  - Cross-account principals get AccessDenied. Same-account principals whose
+    identity policies allow `lambda:InvokeFunction` (for example SSO
+    administrator roles) can still invoke it.
   - To close this completely, add an explicit Deny for
     `arn:aws:lambda:*:*:function:address-lookup-db-migrate-*` to the SSO
-    permission sets, or as an SCP with an exception for `concourse-platform`.
+    permission sets, or as an SCP with an exception for the Concourse identity.
 - **"Only db-migrate, Import and API reach Aurora".** This group adds only the
   db-migrate rule. The API and Import ingress rules belong to the groups that
   own those services. The Aurora SG has no ingress rules today (cidev, checked
@@ -81,23 +83,29 @@ Concourse (concourse-platform) ──lambda:InvokeFunction──▶ address-look
 
 ## Prerequisites
 
-1. `terraform/groups/aurora` is applied. This group looks up the cluster and
-   its SG by name.
+1. `terraform/groups/aurora` is applied (ALS-90). It creates the cluster, the
+   schema-owner role, the `/address-lookup/<env>/db/schema-owner` parameter and
+   the SSM endpoint. This group looks up the cluster, its SG, the endpoint and
+   the endpoint's SG; the plan fails if they don't exist, with
+   `no matching EC2 VPC Endpoint found` (`data.aws_vpc_endpoint.ssm`) and
+   `no matching EC2 Security Group found` (`data.aws_security_group.ssm_endpoint`).
+   Merge and apply ALS-90 (`cidev-aurora-apply`) before this group.
 2. Vault `applications/<aws_profile>/<env>/common-services-stack/address-rds`
-   holds `schema_owner_username` and `schema_owner_password`, as well as the
-   existing `data_subnet_pattern`. The plan fails without them.
-   - The same password is used when the role is created in the database
-     (ALS-90).
-   - To rotate it, change Vault, then re-apply this group and the ALS-90
-     bootstrap.
+   holds `schema_owner_username` and `schema_owner_password` (read by the
+   aurora group) and the existing `data_subnet_pattern` (read here).
+   To rotate the password, follow [Rotation](#rotation).
 3. The VPC has an S3 gateway endpoint associated with the data subnets' route
    tables. It is looked up; the plan fails if it is missing.
 4. The release `address-lookup-api/address-lookup-db-migrate-<version>.zip`
    exists in the shared-services release bucket. To produce it, push a
    `db-migrate-lambda-X.Y.Z` release for `lambdas/db-migrate`
-   (`make package-db-migrate-lambda`).
-5. The environment's Concourse AWS credentials are the `concourse-platform` IAM
-   user. If not, set `concourse_iam_user_name`.
+   (`make package-db-migrate-lambda`). No CA bundle is needed: the jdbcUrl the
+   aurora group writes uses `sslmode=require`.
+5. The shared-services configs bucket policy grants this function's role
+   (`address-lookup-db-migrate-<env>-lambda-role`) `s3:GetObject` and
+   `s3:GetObjectVersion` on `address-lookup/db-schema-snapshots/*` (statement
+   `GetAddressLookupDbSnapshots` in aws-shared-services-infrastructure-terraform).
+   The role's own IAM grant is not enough for a cross-account read.
 
 ## Deployment
 
@@ -105,9 +113,9 @@ Pipeline `address-lookup-api`:
 
 | Environment | Jobs |
 |---|---|
-| cidev (automatic) | `cidev-db-migrate-plan`, then `cidev-db-migrate-apply` |
-| staging (manual) | `staging-db-migrate-plan`, then `staging-db-migrate-apply` |
-| live (manual) | `live-db-migrate-plan`, then `live-db-migrate-apply` |
+| cidev (plan automatic, apply manual) | `cidev-db-migrate-lambda-plan`, then `cidev-db-migrate-lambda-apply` |
+| staging (manual) | `staging-db-migrate-lambda-plan`, then `staging-db-migrate-lambda-apply` |
+| live (manual) | `live-db-migrate-lambda-plan`, then `live-db-migrate-lambda-apply` |
 
 - staging and live take the exact Lambda release and terraform that the
   previous environment applied.
@@ -129,12 +137,12 @@ Run these from the environment's account (`F=address-lookup-db-migrate-<env>`).
 # info from Concourse returns SUCCESS (run with the Concourse credentials, or
 # re-run the <env>-db-schema-migrate job and read its info output)
 aws lambda invoke --function-name "$F" --cli-binary-format raw-in-base64-out \
-  --payload '{"command":"info","key":"snapshots/<tag>.zip","versionId":"<versionId>","sha256":"<sha256>"}' out.json
+  --payload '{"command":"info","key":"address-lookup/db-schema-snapshots/<tag>.zip","versionId":"<versionId>","sha256":"<sha256>"}' out.json
 cat out.json        # "status":"SUCCESS", schemaVersion, pending
 
-# Anyone else gets AccessDenied: the policy has a single Allow for concourse-platform
-aws lambda get-policy --function-name "$F" --query Policy --output text | jq '.Statement'
-# ...and, from another account or a role with no lambda:InvokeFunction grant:
+# Anyone else gets AccessDenied: there is no resource policy (ResourceNotFoundException),
+aws lambda get-policy --function-name "$F"
+# ...so from another account, or a role with no lambda:InvokeFunction grant:
 aws lambda invoke --function-name "arn:aws:lambda:eu-west-2:<account>:function:$F" out.json   # AccessDeniedException
 
 # No triggers
@@ -155,6 +163,77 @@ aws ec2 describe-security-group-rules --filters Name=group-id,Values="$LSG" \
 aws lambda get-function-concurrency --function-name "$F"   # ReservedConcurrentExecutions: 1
 ```
 
+## Schema-owner credentials (ALS-88)
+
+The function reads `/address-lookup/<env>/db/schema-owner` itself, with
+`ssm:GetParameter` and `WithDecryption`, on every invocation. The password
+therefore never appears in the invocation payload, the response or the
+pipeline logs.
+
+| | |
+|---|---|
+| Source | Vault `applications/<aws_profile>/<env>/common-services-stack/address-rds`, keys `schema_owner_username` and `schema_owner_password`. This is the schema-owner role: it owns the application schemas, runs DDL, and is used only by this function. It is not the Aurora master user. |
+| Parameter | `/address-lookup/<env>/db/schema-owner`, type `SecureString`, encrypted with the customer-managed key `alias/<aws_profile>/environment-services-kms` |
+| Value | `{"username": "<schema owner>", "password": "<from Vault>", "jdbcUrl": "jdbc:postgresql://<writer endpoint>:5432/addressdb?sslmode=require"}` |
+| Endpoint | The cluster (writer) endpoint, `module.aurora_postgres.cluster_endpoint` in the aurora group, never the reader |
+| TLS | `sslmode=require`: the connection is always encrypted, with no CA file in the repo or the zip. The cluster enforces TLS (`rds.force_ssl=1`, `ssl_min_protocol_version=TLSv1.3`). |
+| Writer | **Terraform**: `terraform/groups/aurora`'s `module.credentials`, run by the pipeline's aurora plan/apply jobs. It writes the master parameter (`/address-lookup/<env>/db/master`, read only by the ALS-90 bootstrap Lambda) in the same place, so one group owns every database credential and the role's password is set in the same apply. This is the platform standard (the org `aws/parameter-store` module). It replaces the drawn option of Concourse running `aws ssm put-parameter`, so Concourse needs no `ssm:PutParameter`. |
+| Reader | The function's role: `ssm:GetParameter` on this parameter only, and `kms:Decrypt`. The SSM endpoint's policy admits this role for this parameter only (and the bootstrap Lambda's role for the master and schema-owner parameters). |
+
+Text to record on the ticket: *"Writer: Terraform (terraform/groups/aurora,
+terraform-modules aws/parameter-store) reading Vault, applied by the
+address-lookup-api pipeline's aurora jobs. Key: the shared
+environment-services-kms customer-managed key."*
+
+### Known gaps
+
+- **The key is shared.** `environment-services-kms` is the account's standard
+  key for service parameters (org convention, chosen over a dedicated key). Any
+  role in the account that has both `ssm:GetParameter` on this name (or `*`) and
+  `kms:Decrypt` on that key can read the value, for example administrator
+  roles and possibly other services' roles. This group grants only the
+  migration Lambdas' roles. Nothing here denies other roles. A dedicated key whose
+  policy allows `Decrypt` only to the function (via SSM) would close this.
+- **The writer can also read.** Terraform reads the parameter back on every
+  plan, so the principal that runs it (Concourse) needs `kms:Decrypt` too. This
+  applies to any Terraform writer.
+- **The plan and state contain the value.** The plan shows
+  `(sensitive value)`, but the plan zip in the `<env>.terraform-plans` bucket and
+  the state file hold it in plain text, as for every Terraform-managed secret.
+
+### Rotation
+
+1. Change `schema_owner_password` in Vault. Use `vault kv patch` or the UI;
+   `put` would wipe the other keys.
+2. Plan and apply the aurora group. In one apply it overwrites the parameter
+   (`aws_ssm_parameter` updated in place) and re-runs the ALS-90 bootstrap,
+   whose trigger is the password's hash, which sets the role's new password.
+   The aurora plan jobs don't run on a Vault change, so trigger them by hand.
+3. Nothing in this group changes and the function is not redeployed. Its next
+   invocation reads the new value, so `info` succeeds.
+
+Don't run `<env>-db-schema-migrate` while the aurora apply is in progress.
+
+### Verifying the ALS-88 acceptance criteria
+
+```sh
+N=/address-lookup/<env>/db/schema-owner
+# SecureString with the customer-managed key
+aws ssm describe-parameters --parameter-filters Key=Name,Values="$N" \
+  --query 'Parameters[0].[Type,KeyId]' --output text
+aws kms describe-key --key-id alias/<aws_profile>/environment-services-kms --query KeyMetadata.KeyManager   # "CUSTOMER"
+
+# JSON has the fields (prints key names only, never the values)
+aws ssm get-parameter --name "$N" --with-decryption --query Parameter.Value --output text | jq -r 'keys[]'
+
+# Writer and readers: the function's role policy, and who else could decrypt
+aws iam list-role-policies --role-name "$(terraform output -raw lambda_role_arn | cut -d/ -f2)"
+aws kms get-key-policy --key-id <key id> --policy-name default
+
+# Never in pipeline output: the plan/apply logs show (sensitive value) and
+# <env>-db-schema-migrate prints only named fields of the function's response.
+```
+
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
 
@@ -168,14 +247,13 @@ aws lambda get-function-concurrency --function-name "$F"   # ReservedConcurrentE
 
 | Name | Version |
 |------|---------|
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.68.0 |
-| <a name="provider_vault"></a> [vault](#provider\_vault) | 5.12.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 6.0, < 7.0 |
+| <a name="provider_vault"></a> [vault](#provider\_vault) | >= 5.0, < 6.0 |
 
 ## Modules
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_credentials"></a> [credentials](#module\_credentials) | git@github.com:companieshouse/terraform-modules//aws/parameter-store | 1.0.442 |
 | <a name="module_iac_tags"></a> [iac\_tags](#module\_iac\_tags) | git@github.com:companieshouse/terraform-modules//aws/tagging/iac | 1.0.442 |
 | <a name="module_lambda"></a> [lambda](#module\_lambda) | git@github.com:companieshouse/terraform-modules//aws/lambda | 1.0.442 |
 | <a name="module_owner_tags"></a> [owner\_tags](#module\_owner\_tags) | git@github.com:companieshouse/terraform-modules//aws/tagging/owner | 1.0.442 |
@@ -185,8 +263,6 @@ aws lambda get-function-concurrency --function-name "$F"   # ReservedConcurrentE
 | Name | Type |
 |------|------|
 | [aws_cloudwatch_metric_alarm.errors](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_metric_alarm) | resource |
-| [aws_security_group.ssm_endpoint](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group) | resource |
-| [aws_vpc_endpoint.ssm](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_endpoint) | resource |
 | [aws_vpc_security_group_egress_rule.lambda_to_aurora](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_egress_rule) | resource |
 | [aws_vpc_security_group_egress_rule.lambda_to_s3](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_egress_rule) | resource |
 | [aws_vpc_security_group_egress_rule.lambda_to_ssm_endpoint](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_egress_rule) | resource |
@@ -194,15 +270,15 @@ aws lambda get-function-concurrency --function-name "$F"   # ReservedConcurrentE
 | [aws_vpc_security_group_ingress_rule.ssm_endpoint_from_lambda](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
 | [aws_iam_policy_document.db_migrate](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
-| [aws_iam_policy_document.ssm_endpoint](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
-| [aws_iam_user.concourse](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_user) | data source |
 | [aws_kms_key.parameters](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/kms_key) | data source |
 | [aws_rds_cluster.aurora](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/rds_cluster) | data source |
 | [aws_security_group.aurora](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/security_group) | data source |
+| [aws_security_group.ssm_endpoint](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/security_group) | data source |
 | [aws_sns_topic.alarms](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/sns_topic) | data source |
 | [aws_subnets.data](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/subnets) | data source |
 | [aws_vpc.vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/vpc) | data source |
 | [aws_vpc_endpoint.s3](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/vpc_endpoint) | data source |
+| [aws_vpc_endpoint.ssm](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/vpc_endpoint) | data source |
 | [vault_generic_secret.database_secrets](https://registry.terraform.io/providers/hashicorp/vault/latest/docs/data-sources/generic_secret) | data source |
 | [vault_generic_secret.stack_secrets](https://registry.terraform.io/providers/hashicorp/vault/latest/docs/data-sources/generic_secret) | data source |
 
@@ -213,7 +289,6 @@ aws lambda get-function-concurrency --function-name "$F"   # ReservedConcurrentE
 | <a name="input_alarm_topic_name"></a> [alarm\_topic\_name](#input\_alarm\_topic\_name) | The SNS topic the Errors alarm notifies. Defaults to the stack's common-services-<environment>-cloudwatch-alarms-notify-topic | `string` | `null` | no |
 | <a name="input_aws_profile"></a> [aws\_profile](#input\_aws\_profile) | The AWS profile name; used as a prefix for Vault secrets | `string` | n/a | yes |
 | <a name="input_aws_region"></a> [aws\_region](#input\_aws\_region) | The AWS region in which resources will be created | `string` | `"eu-west-2"` | no |
-| <a name="input_concourse_iam_user_name"></a> [concourse\_iam\_user\_name](#input\_concourse\_iam\_user\_name) | The IAM user whose access keys the environment's Concourse jobs use; the only principal allowed to invoke the function | `string` | `"concourse-platform"` | no |
 | <a name="input_environment"></a> [environment](#input\_environment) | The environment name to be used when creating AWS resources | `string` | n/a | yes |
 | <a name="input_hashicorp_vault_password"></a> [hashicorp\_vault\_password](#input\_hashicorp\_vault\_password) | The password used when retrieving configuration from Hashicorp Vault | `string` | n/a | yes |
 | <a name="input_hashicorp_vault_username"></a> [hashicorp\_vault\_username](#input\_hashicorp\_vault\_username) | The username used when retrieving configuration from Hashicorp Vault | `string` | n/a | yes |
@@ -225,9 +300,8 @@ aws lambda get-function-concurrency --function-name "$F"   # ReservedConcurrentE
 | <a name="input_lock_timeout"></a> [lock\_timeout](#input\_lock\_timeout) | PostgreSQL lock\_timeout for each migration (LOCK\_TIMEOUT) | `string` | `"10s"` | no |
 | <a name="input_release_artifact_key"></a> [release\_artifact\_key](#input\_release\_artifact\_key) | Key of the Lambda code object (address-lookup-db-migrate-<version>.zip) in the release bucket | `string` | n/a | yes |
 | <a name="input_release_bucket_name"></a> [release\_bucket\_name](#input\_release\_bucket\_name) | The name of the S3 bucket containing the Lambda release artefact | `string` | n/a | yes |
-| <a name="input_snapshot_bucket_name"></a> [snapshot\_bucket\_name](#input\_snapshot\_bucket\_name) | The versioned bucket the Concourse gather-snapshot job writes Flyway snapshots to (SNAPSHOT\_BUCKET) | `string` | n/a | yes |
-| <a name="input_snapshot_kms_key_arn"></a> [snapshot\_kms\_key\_arn](#input\_snapshot\_kms\_key\_arn) | The KMS key the snapshot bucket encrypts with, if it uses SSE-KMS. Empty for SSE-S3 | `string` | `""` | no |
-| <a name="input_snapshot_prefix"></a> [snapshot\_prefix](#input\_snapshot\_prefix) | The key prefix of the snapshots in the snapshot bucket; the function can read nothing else | `string` | `"snapshots"` | no |
+| <a name="input_snapshot_bucket_name"></a> [snapshot\_bucket\_name](#input\_snapshot\_bucket\_name) | The versioned shared-services configs bucket the Concourse gather-snapshot job writes Flyway snapshots to (SNAPSHOT\_BUCKET) | `string` | n/a | yes |
+| <a name="input_snapshot_prefix"></a> [snapshot\_prefix](#input\_snapshot\_prefix) | The key prefix of the db schema snapshots in the snapshot bucket; the function can read nothing else | `string` | `"address-lookup/db-schema-snapshots"` | no |
 
 ## Outputs
 
@@ -237,5 +311,5 @@ aws lambda get-function-concurrency --function-name "$F"   # ReservedConcurrentE
 | <a name="output_lambda_function_name"></a> [lambda\_function\_name](#output\_lambda\_function\_name) | The function the environment's Concourse update, repair and API check-db-schema jobs invoke |
 | <a name="output_lambda_role_arn"></a> [lambda\_role\_arn](#output\_lambda\_role\_arn) | The function's execution role |
 | <a name="output_security_group_id"></a> [security\_group\_id](#output\_security\_group\_id) | The function's security group; Aurora admits it on the database port |
-| <a name="output_ssm_endpoint_dns_name"></a> [ssm\_endpoint\_dns\_name](#output\_ssm\_endpoint\_dns\_name) | The SSM interface endpoint the function uses (private DNS is off) |
+| <a name="output_ssm_endpoint_dns_name"></a> [ssm\_endpoint\_dns\_name](#output\_ssm\_endpoint\_dns\_name) | The SSM interface endpoint the function uses (terraform/groups/aurora; private DNS is off) |
 <!-- END_TF_DOCS -->

@@ -8,7 +8,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.PropertySource;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
-import software.amazon.awssdk.services.s3.S3Client;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AwsClientsConfiguration;
 
@@ -34,15 +33,5 @@ public class AcquisitionConfiguration {
   Commands commands(EventBridgeClient events, AcquisitionProperties properties) {
     return new Commands(
         events, AcquisitionProperties.required(properties.eventBus(), "EVENT_BUS"), JSON);
-  }
-
-  @Bean
-  DownloadService downloadService(S3Client s3, OsClient os, AcquisitionProperties properties) {
-    return new DownloadService(s3, os, properties);
-  }
-
-  @Bean
-  ExtractionService extractionService(S3Client s3, Commands commands, AcquisitionProperties properties) {
-    return new ExtractionService(s3, commands, properties);
   }
 }

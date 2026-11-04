@@ -2,16 +2,18 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-script="$repo_root/scripts/local-api-smoke.sh"
 test_root="$(mktemp -d)"
+mkdir -p "$test_root/scripts"
+cp "$repo_root/scripts/local-api-smoke.sh" "$repo_root/scripts/maven.sh" "$test_root/scripts/"
+script="$test_root/scripts/local-api-smoke.sh"
 stub_bin="$test_root/bin"
 mkdir -p "$stub_bin"
 trap 'rm -rf "$test_root"' EXIT
 
-cat >"$stub_bin/d2" <<'STUB'
+cat >"$stub_bin/docker" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'd2 %s\n' "$*" >>"$CALL_LOG"
+printf 'docker %s\n' "$*" >>"$CALL_LOG"
 
 if [[ " $* " == *" createdb "* ]]; then
     if [[ "${FAKE_CREATEDB_FAIL:-0}" == "1" ]]; then
@@ -41,6 +43,21 @@ cat >"$stub_bin/mvn" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'mvn %s\n' "$*" >>"$CALL_LOG"
+if [[ "$*" == --version ]]; then
+    printf 'Java version: 21.0.13\n'
+    exit 0
+fi
+if [[ "${FAKE_MVN_EXIT:-0}" != "0" ]]; then
+    exit "$FAKE_MVN_EXIT"
+fi
+mkdir -p address-lookup-api/target
+touch address-lookup-api/target/address-lookup-api-test.jar
+STUB
+
+cat >"$stub_bin/java" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'java %s\n' "$*" >>"$CALL_LOG"
 printf '%s|%s|%s|%s|%s\n' \
     "$DOCKER_COMPOSE_ENABLED" \
     "$FLYWAY_ENABLED" \
@@ -48,8 +65,12 @@ printf '%s|%s|%s|%s|%s\n' \
     "$SPRING_DATASOURCE_USERNAME" \
     "$SPRING_DATASOURCE_PASSWORD" >"$MAVEN_ENV_FILE"
 
-if [[ "${FAKE_MVN_EXIT:-0}" != "0" ]]; then
-    exit "$FAKE_MVN_EXIT"
+if [[ "${FAKE_JAVA_EXIT:-0}" != "0" ]]; then
+    exit "$FAKE_JAVA_EXIT"
+fi
+[[ "$SERVER_PORT" == 0 ]] || exit 24
+if [[ "${FAKE_NO_PORT:-0}" == 0 ]]; then
+    printf 'Tomcat started on port 18998 (http)\n' >"$LOGGING_FILE_NAME"
 fi
 
 exec sleep 30
@@ -59,14 +80,7 @@ cat >"$stub_bin/curl" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'curl %s\n' "$*" >>"$CALL_LOG"
-if [[ ! -e "$CURL_PREFLIGHT_FILE" ]]; then
-    : >"$CURL_PREFLIGHT_FILE"
-    if [[ "${FAKE_PREFLIGHT_LISTENING:-0}" == "1" ]]; then
-        printf '%s' "${FAKE_PREFLIGHT_STATUS:-200}"
-        exit 0
-    fi
-    exit 7
-fi
+[[ "$*" == *http://127.0.0.1:18998/address-lookup-api/healthcheck* ]] || exit 25
 
 for ((attempt = 0; attempt < 100; attempt++)); do
     [[ -f "$MAVEN_ENV_FILE" ]] && break
@@ -79,7 +93,7 @@ fi
 printf '%s' "${FAKE_HTTP_STATUS:-200}"
 STUB
 
-chmod +x "$stub_bin/d2" "$stub_bin/mvn" "$stub_bin/curl"
+chmod +x "$stub_bin/docker" "$stub_bin/mvn" "$stub_bin/java" "$stub_bin/curl"
 
 fail() {
     printf 'FAIL: %s\n' "$*" >&2
@@ -94,7 +108,6 @@ run_helper() {
         CALL_LOG="$test_root/$name.log" \
         CREATED_DB_FILE="$test_root/$name.created" \
         DROPPED_DB_FILE="$test_root/$name.dropped" \
-        CURL_PREFLIGHT_FILE="$test_root/$name.curl-preflight" \
         MAVEN_ENV_FILE="$test_root/$name.maven-env" \
         SPRING_DATASOURCE_PASSWORD=postgres \
         "$@" \
@@ -116,18 +129,20 @@ dropped_db="$(cat "$test_root/success.dropped")"
     fail "temporary database name was not unique and ticket-scoped"
 [[ "$created_db" == "$dropped_db" ]] ||
     fail "success cleanup did not drop the exact created database"
-grep -Fq 'd2 als.docker.compose up -d postgres' "$test_root/success.log" ||
-    fail "PostGIS was not started through d2"
+grep -Fq 'docker compose -f compose.yaml up -d --wait postgres' "$test_root/success.log" ||
+    fail "PostGIS was not started through Compose with readiness checking"
 grep -Fq "createdb -U postgres $created_db" "$test_root/success.log" ||
-    fail "temporary database was not created through d2"
+    fail "temporary database was not created through Compose"
 grep -Fq "dropdb -U postgres $created_db" "$test_root/success.log" ||
-    fail "temporary database was not dropped through d2"
+    fail "temporary database was not dropped through Compose"
 grep -Fq "psql -U postgres -d $created_db" "$test_root/success.log" ||
     fail "Flyway history was not checked in the temporary database"
-grep -Fq 'mvn -pl address-lookup-api spring-boot:run -Dspring-boot.run.profiles=local' \
-    "$test_root/success.log" || fail "local-profile API command was not run"
+grep -Fq 'mvn -pl address-lookup-api -am package -DskipTests=true -Dskip.unit.tests=true -Dskip.integration.tests=true' \
+    "$test_root/success.log" || fail "API was not built with tests skipped"
+grep -Fq "java -jar $test_root/address-lookup-api/target/address-lookup-api-test.jar --spring.profiles.active=local" \
+    "$test_root/success.log" || fail "local-profile API JAR was not run directly"
 grep -Fq "false|true|jdbc:postgresql://localhost:5433/$created_db|postgres|postgres" \
-    "$test_root/success.maven-env" || fail "Maven did not receive the expected datasource settings"
+    "$test_root/success.maven-env" || fail "API did not receive the expected datasource settings"
 if grep -Eq 'dropdb -U postgres address_lookup$' "$test_root/success.log"; then
     fail "the default address_lookup database was targeted for removal"
 fi
@@ -140,7 +155,15 @@ if grep -Fq 'dropdb ' "$test_root/create-failure.log"; then
     fail "cleanup targeted a database that was not created"
 fi
 
-expect_failure startup-failure FAKE_MVN_EXIT=23
+expect_failure build-failure FAKE_MVN_EXIT=23
+[[ "$(cat "$test_root/build-failure.created")" == \
+    "$(cat "$test_root/build-failure.dropped")" ]] ||
+    fail "build failure did not drop the exact temporary database"
+if grep -Fq 'java ' "$test_root/build-failure.log"; then
+    fail "API started after Maven build failure"
+fi
+
+expect_failure startup-failure FAKE_JAVA_EXIT=23
 [[ "$(cat "$test_root/startup-failure.created")" == \
     "$(cat "$test_root/startup-failure.dropped")" ]] ||
     fail "startup failure did not drop the exact temporary database"
@@ -160,21 +183,17 @@ expect_failure health-timeout \
 grep -Fq 'Timed out waiting for healthcheck' "$test_root/health-timeout.out" ||
     fail "health timeout did not report its failure"
 
-expect_failure existing-health-service \
-    FAKE_PREFLIGHT_LISTENING=1 \
-    FAKE_PREFLIGHT_STATUS=404
-grep -Fq 'Health endpoint already responds' \
-    "$test_root/existing-health-service.out" ||
-    fail "an existing health endpoint was not reported"
-if grep -Fq 'd2 als.docker.compose up -d postgres' \
-    "$test_root/existing-health-service.log"; then
-    fail "PostGIS startup continued when the health endpoint was already in use"
-fi
-if grep -Fq 'createdb ' "$test_root/existing-health-service.log"; then
-    fail "a temporary database was created when the health endpoint was already in use"
-fi
-if grep -Fq 'mvn ' "$test_root/existing-health-service.log"; then
-    fail "Maven started when the health endpoint was already in use"
-fi
+expect_failure port-timeout \
+    FAKE_NO_PORT=1 \
+    LOCAL_API_STARTUP_TIMEOUT_SECONDS=1 \
+    LOCAL_API_HEALTH_POLL_INTERVAL_SECONDS=1
+[[ "$(cat "$test_root/port-timeout.created")" == \
+    "$(cat "$test_root/port-timeout.dropped")" ]] ||
+    fail "port discovery timeout did not drop the exact temporary database"
+grep -Fq 'Timed out waiting for healthcheck' "$test_root/port-timeout.out" ||
+    fail "port discovery timeout did not report its failure"
+
+grep -Fq 'http://127.0.0.1:18998/address-lookup-api/healthcheck' \
+    "$test_root/success.log" || fail "healthcheck did not use the assigned API port"
 
 printf 'PASS: local API smoke helper success and failure cleanup\n'

@@ -39,14 +39,16 @@ For an isolated startup and health check, run:
 ./scripts/local-api-smoke.sh
 ```
 
-The helper requires `d2`, Maven, `curl`, and Docker. It starts PostGIS through
-`d2 als.docker.compose`, creates a uniquely named temporary database, starts
-the API with the local profile, and waits up to 90 seconds for HTTP 200 from
+The helper requires Java, Maven, `curl`, and Docker Compose v2. It starts PostGIS
+through `docker compose -f compose.yaml up -d --wait postgres`, creates a
+uniquely named temporary database, builds the API with tests skipped, starts
+the executable JAR directly with the local profile,
+and waits up to 90 seconds for HTTP 200 from
 `/address-lookup-api/healthcheck`. It also verifies that Flyway recorded at
 least one migration in the temporary database. It then stops the API process
 it started, drops only that temporary database, and verifies its removal. The
-helper refuses to continue if the health endpoint already responds on port
-8080, avoiding a false success against another running service. The default
+helper starts its API on an OS-assigned port and checks that specific endpoint,
+so an existing development API can remain running on port 8080. The default
 `address_lookup` database and `~/.pgpass` are not used or modified. Set
 `SPRING_DATASOURCE_USERNAME` or `SPRING_DATASOURCE_PASSWORD` only when the
 local Compose credentials have been changed. The health-check timeout and poll

@@ -17,3 +17,7 @@ http-client.private.env.json
 # Mac files
 .DS_Store
 ._*
+
+# Local process state, logs and analysis results
+.local-run/
+.scannerwork/

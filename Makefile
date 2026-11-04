@@ -20,12 +20,32 @@ db_schema_artifact  := address-lookup-db-schema
 db_schema_root      := database
 db_schema_contents  := migrations
 
+LOCAL_API_PORT ?= 8080
+LOCAL_API_TIMEOUT ?= 180
+CONFIRM ?=
+SQL ?=
+MIN_COVERAGE ?= 0.80
+PR ?=
+PR_BRANCH ?=
+PR_BASE ?=
+ifeq ($(strip $(SONAR_HOST_URL)),)
+SONAR_HOST_URL = https://sonarqube.companieshouse.gov.uk
+endif
+ifeq ($(strip $(SONAR_PROJECT_KEY)),)
+SONAR_PROJECT_KEY = uk.gov.companieshouse:address-lookup-api
+endif
+export LOCAL_API_PORT LOCAL_API_TIMEOUT CONFIRM MIN_COVERAGE PR PR_BRANCH PR_BASE
+export SONAR_HOST_URL SONAR_PROJECT_KEY
+export SQL
+export MAKE_JACOCO_AUTO := true
+MVN := bash scripts/maven.sh
+
 .PHONY: all
 all: build
 
 .PHONY: clean
 clean:
-	mvn clean
+	$(MVN) clean
 	rm -f $(artifact_name)-*.zip
 	rm -f $(liquibase_lambda_artifact)-*.zip
 	rm -f $(db_bootstrap_lambda_artifact)-*.zip
@@ -36,8 +56,8 @@ clean:
 
 .PHONY: build
 build:
-	mvn versions:set -DnewVersion=$(version) -DgenerateBackupPoms=false
-	mvn -pl $(api_module) -am package -DskipTests=true
+	$(MVN) versions:set -DnewVersion=$(version) -DgenerateBackupPoms=false
+	$(MVN) -pl $(api_module) -am package -DskipTests=true
 	cp ./$(api_module)/target/$(artifact_name)-$(version).jar ./$(artifact_name).jar
 
 .PHONY: test
@@ -47,13 +67,47 @@ test: test-integration test-unit
 .PHONY: test-unit
 test-unit:
 	@# Help: Run unit tests
+	$(MVN) test -Dskip.integration.tests=true
+
+.PHONY: api-start api-stop api-restart db-start db-stop start stop db-reset
+api-start api-stop api-restart db-start db-stop start stop db-reset:
+	@bash scripts/local-services.sh $@
+
+.PHONY: db
+db:
+	@docker compose -f compose.yaml exec postgres psql -X -U postgres -d address_lookup
+
+.PHONY: db-exec
+db-exec:
+	@bash scripts/db-exec.sh
+
+.PHONY: test-commands test-smoke coverage coverage-check sonar sonar-pr sonar-report
+test-commands:
+	bash tests/test_commands.sh
 	bash tests/test_local_api_smoke.sh
-	mvn test -Dskip.integration.tests=true
+	bash tests/test_postcodes.sh
+	bash tests/test_maven.sh
+
+test-smoke:
+	bash scripts/local-api-smoke.sh
+
+.PHONY: test-postcodes
+test-postcodes: start
+	@bash scripts/test-postcodes.sh
+
+coverage:
+	$(MVN) clean verify -Pcoverage -Dskip.integration.tests=true
+
+coverage-check:
+	$(MVN) clean verify -Pcoverage -Dskip.integration.tests=true -Dcoverage.check.skip=false "-Dcoverage.minimum=$${MIN_COVERAGE}"
+
+sonar sonar-pr sonar-report:
+	@bash scripts/sonar.sh $@
 
 .PHONY: test-integration
 test-integration:
 	@# Help: Run integration tests
-	mvn -pl $(api_module),$(liquibase_lambda_module) -am integration-test verify -Dskip.unit.tests=true failsafe:verify
+	$(MVN) -pl $(api_module),$(liquibase_lambda_module) -am integration-test verify -Dskip.unit.tests=true failsafe:verify
 
 
 .PHONY: m2-check
@@ -65,17 +119,17 @@ m2-check:
 test-flyway:
 	@# Help: Test the Flyway database feed against fresh PostGIS
 	bash tests/test_database_layout.sh
-	mvn -pl $(api_module) -am -Dit.test=DatabaseFeedIT -Dfailsafe.failIfNoSpecifiedTests=false -Dskip.unit.tests=true test-compile failsafe:integration-test failsafe:verify
+	$(MVN) -pl $(api_module) -am -Dit.test=DatabaseFeedIT -Dfailsafe.failIfNoSpecifiedTests=false -Dskip.unit.tests=true test-compile failsafe:integration-test failsafe:verify
 
 .PHONY: test-db-bootstrap
 test-db-bootstrap:
 	@# Help: Run DB bootstrap unit tests (no Docker required)
-	mvn -pl $(db_bootstrap_lambda_module) -am test -Dskip.integration.tests=true
+	$(MVN) -pl $(db_bootstrap_lambda_module) -am test -Dskip.integration.tests=true
 
 .PHONY: test-db-bootstrap-integration
 test-db-bootstrap-integration:
 	@# Help: Test bootstrap and first Flyway run as the non-master owner (requires Docker)
-	mvn -pl $(db_bootstrap_lambda_module) -am -Dit.test=DatabaseBootstrapIT -Dfailsafe.failIfNoSpecifiedTests=false verify
+	$(MVN) -pl $(db_bootstrap_lambda_module) -am -Dit.test=DatabaseBootstrapIT -Dfailsafe.failIfNoSpecifiedTests=false verify
 
 # .PHONY: test-liquibase
 # test-liquibase:
@@ -93,7 +147,7 @@ build-container: build
 
 .PHONY: docker-image
 docker-image: clean
-	mvn -pl $(api_module) -am package -Dskip.unit.tests=true -Dskip.integration.tests=true jib:dockerBuild
+	$(MVN) -pl $(api_module) -am package -Dskip.unit.tests=true -Dskip.integration.tests=true jib:dockerBuild
 
 .PHONY: package
 package:
@@ -101,8 +155,8 @@ ifndef version
 	$(error No version given. Aborting)
 endif
 	$(info Packaging version: $(version))
-	mvn versions:set -DnewVersion=$(version) -DgenerateBackupPoms=false
-	mvn -pl $(api_module) -am package -DskipTests=true
+	$(MVN) versions:set -DnewVersion=$(version) -DgenerateBackupPoms=false
+	$(MVN) -pl $(api_module) -am package -DskipTests=true
 	$(eval tmpdir:=$(shell mktemp -d build-XXXXXXXXXX))
 	cp ./$(api_module)/target/$(artifact_name)-$(version).jar $(tmpdir)/$(artifact_name).jar
 	cd $(tmpdir); zip -r ../$(artifact_name)-$(version).zip *
@@ -115,8 +169,8 @@ ifndef version
 	$(error No version given. Aborting)
 endif
 	$(info Packaging Liquibase Lambda version: $(version))
-	mvn versions:set -DnewVersion=$(version) -DgenerateBackupPoms=false
-	mvn -pl $(liquibase_lambda_module) -am package -DskipTests=true
+	$(MVN) versions:set -DnewVersion=$(version) -DgenerateBackupPoms=false
+	$(MVN) -pl $(liquibase_lambda_module) -am package -DskipTests=true
 	cp ./$(liquibase_lambda_module)/target/$(liquibase_lambda_artifact)-$(version)-lambda.jar ./$(liquibase_lambda_artifact)-$(version).zip
 
 .PHONY: package-db-bootstrap-lambda
@@ -126,8 +180,8 @@ ifndef version
 	$(error No version given. Aborting)
 endif
 	$(info Packaging DB bootstrap Lambda version: $(version))
-	mvn versions:set -DnewVersion=$(version) -DgenerateBackupPoms=false
-	mvn -pl $(db_bootstrap_lambda_module) -am package -DskipTests=true
+	$(MVN) versions:set -DnewVersion=$(version) -DgenerateBackupPoms=false
+	$(MVN) -pl $(db_bootstrap_lambda_module) -am package -DskipTests=true
 	cp ./$(db_bootstrap_lambda_module)/target/$(db_bootstrap_lambda_artifact)-$(version)-lambda.jar ./$(db_bootstrap_lambda_artifact)-$(version).zip
 
 .PHONY: package-db-schema
@@ -147,14 +201,14 @@ deps:
 
 .PHONY: dependency-check
 dependency-check: build package
-	mvn install -DskipTests -Dskip.integration.tests=true
+	$(MVN) install -DskipTests -Dskip.integration.tests=true
 	dependency-check-runner --repo-name=address-lookup-api
 
 .PHONY: lint
-lint: lint/docker-compose sonar
-	@# Help: Run all lint/* targets and sonar
+lint: lint/docker-compose
+	@# Sonar analysis must be explicitly requested with make sonar or make sonar-pr.
 
 .PHONY: lint/docker-compose
 lint/docker-compose:
 	@# Help: Lint docker file
-	docker-compose -f docker-compose.yml config
+	docker compose -f compose.yaml config --quiet

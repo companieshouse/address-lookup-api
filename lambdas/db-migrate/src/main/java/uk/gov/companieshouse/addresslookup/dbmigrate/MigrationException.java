@@ -30,9 +30,4 @@ public final class MigrationException extends RuntimeException {
   public Code code() {
     return code;
   }
-
-  /** The message without the {@code CODE: } prefix. */
-  public String detail() {
-    return getMessage().substring(code.name().length() + 2);
-  }
 }

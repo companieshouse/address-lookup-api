@@ -48,12 +48,9 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
           migrationSummary,
           result.get("durationMs"));
       return result;
-    } catch (MigrationException e) {
-      // The message already has the form CODE: detail, so the code is visible in CloudWatch.
-      LOG.error("db-migration-lambda command={} failed {}", flywayCommandName, e.getMessage());
-      throw new MigrationException(e.code(), e.detail(), e);
     } catch (RuntimeException e) {
-      LOG.error("db-migration-lambda command={} failed unexpectedly", flywayCommandName, e);
+      // A MigrationException already has the form CODE: detail, so it is surfaced unchanged.
+      if (e instanceof MigrationException) throw e;
       throw new IllegalStateException(
           "db-migration-lambda command=" + flywayCommandName + " failed unexpectedly", e);
     }

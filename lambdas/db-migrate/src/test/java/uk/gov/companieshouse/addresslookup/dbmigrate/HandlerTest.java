@@ -100,7 +100,7 @@ class HandlerTest {
   }
 
   @Test
-  void serviceFailureIsRethrownWithTheSameCodeAndMessageAndTheOriginalAsCause() {
+  void serviceFailureIsRethrownUnchanged() {
     var expectedRequest = new MigrationRequest(Command.MIGRATE, SNAPSHOT_KEY, VERSION_ID, SHA256_HEX);
     var serviceFailure = new MigrationException(MigrationException.Code.MIGRATION_FAILED, "boom");
     when(migrationService.handle(expectedRequest)).thenThrow(serviceFailure);
@@ -110,9 +110,7 @@ class HandlerTest {
         assertThrows(
             MigrationException.class, () -> handler.handleRequest(migrateEventPayload, lambdaContext));
 
-    assertEquals(MigrationException.Code.MIGRATION_FAILED, thrown.code());
-    assertEquals("MIGRATION_FAILED: boom", thrown.getMessage());
-    assertSame(serviceFailure, thrown.getCause());
+    assertSame(serviceFailure, thrown);
   }
 
   @Test

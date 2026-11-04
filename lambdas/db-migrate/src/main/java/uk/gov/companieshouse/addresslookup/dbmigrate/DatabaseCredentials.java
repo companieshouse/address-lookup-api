@@ -65,6 +65,7 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
 
   @Override
   public String toString() {
-    return "DatabaseCredentials[jdbcUrl=" + sanitisedJdbcUrl() + ", username=" + username + ", password=***]";
+    // The secret is deliberately left out of this text.
+    return "DatabaseCredentials[jdbcUrl=" + sanitisedJdbcUrl() + ", username=" + username + "]";
   }
 }

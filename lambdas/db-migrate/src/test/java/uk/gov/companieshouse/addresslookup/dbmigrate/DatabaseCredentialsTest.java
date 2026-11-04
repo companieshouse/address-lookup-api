@@ -37,9 +37,16 @@ class DatabaseCredentialsTest {
         "not json",
         "[]",
         "{\"host\":\"h\",\"dbname\":\"d\",\"username\":\"u\"}",
-        "{\"jdbcUrl\":\"jdbc:mysql://h/d\",\"username\":\"u\",\"password\":\"p\"}"
+        "{\"jdbcUrl\":\"jdbc:mysql://h/d\",\"username\":\"u\",\"password\":\"p\"}",
+        "null",
+        "\"text\"",
+        "{\"host\":\"h\",\"dbname\":\"d\",\"username\":\" \",\"password\":\"p\"}",
+        "{\"host\":\"h\",\"dbname\":\"d\",\"username\":\"u\",\"password\":123}",
+        "{\"host\":\"h\",\"dbname\":\"d\",\"username\":\"u\",\"password\":\"\"}",
+        "{\"host\":\"\",\"dbname\":\"d\",\"username\":\"u\",\"password\":\"p\"}",
+        "{\"host\":\"h\",\"username\":\"u\",\"password\":\"p\"}"
       })
-  void rejectsIncompleteOrForeignCredentials(String dbCredentialsJson) {
+  void rejectsIncompleteBlankNonTextOrForeignCredentials(String dbCredentialsJson) {
     var migrationException = assertThrows(MigrationException.class, () -> DatabaseCredentials.fromJson(dbCredentialsJson));
     assertEquals(MigrationException.Code.CREDENTIALS_INVALID, migrationException.code());
   }
@@ -99,22 +106,6 @@ class DatabaseCredentialsTest {
     assertEquals("jdbc:postgresql://h:5432/d?sslmode=require", credentials.jdbcUrl());
   }
 
-  @ParameterizedTest
-  @ValueSource(
-      strings = {
-        "null",
-        "\"text\"",
-        "{\"host\":\"h\",\"dbname\":\"d\",\"username\":\" \",\"password\":\"p\"}",
-        "{\"host\":\"h\",\"dbname\":\"d\",\"username\":\"u\",\"password\":123}",
-        "{\"host\":\"h\",\"dbname\":\"d\",\"username\":\"u\",\"password\":\"\"}",
-        "{\"host\":\"\",\"dbname\":\"d\",\"username\":\"u\",\"password\":\"p\"}",
-        "{\"host\":\"h\",\"username\":\"u\",\"password\":\"p\"}"
-      })
-  void rejectsBlankMissingOrNonTextFields(String dbCredentialsJson) {
-    var migrationException = assertThrows(MigrationException.class, () -> DatabaseCredentials.fromJson(dbCredentialsJson));
-
-    assertEquals(MigrationException.Code.CREDENTIALS_INVALID, migrationException.code());
-  }
 
   @Test
   void namesTheMissingFieldWithoutRevealingValues() {

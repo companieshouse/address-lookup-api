@@ -13,7 +13,7 @@ public record MigrationConfig(
     long maxBundleBytes,
     int maxBundleEntries) {
 
-  private static final Pattern DURATION = Pattern.compile("[1-9][0-9]{0,5}(ms|s)");
+  private static final Pattern DURATION = Pattern.compile("[1-9]\\d{0,5}(ms|s)");
   private static final String DEFAULT_LOCK_TIMEOUT = "10s";
   private static final long DEFAULT_MAX_BUNDLE_BYTES = 50L * 1024 * 1024; // 50 MiB
   private static final int DEFAULT_MAX_BUNDLE_ENTRIES = 1000;

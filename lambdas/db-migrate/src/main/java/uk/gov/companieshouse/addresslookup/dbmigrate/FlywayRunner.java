@@ -186,10 +186,14 @@ public final class FlywayRunner {
     }
 
     @Override
-    public void setLogWriter(PrintWriter out) {}
+    public void setLogWriter(PrintWriter out) {
+      // Intentionally empty because Flyway does not use the data source log writer
+    }
 
     @Override
-    public void setLoginTimeout(int seconds) {}
+    public void setLoginTimeout(int seconds) {
+      // Intentionally empty because the connection supplier decides the connect timeout
+    }
 
     @Override
     public int getLoginTimeout() {

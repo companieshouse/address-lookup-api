@@ -204,7 +204,7 @@ class MigrationServiceTest {
   // ---- Failures are reported as they are, and nothing later runs -----------------------------
 
   @Test
-  void missingSnapshotFailsAsBundleNotFoundBeforeCredentialsOrDatabase() throws Exception {
+  void missingSnapshotFailsAsBundleNotFoundBeforeCredentialsOrDatabase() {
     var request = new MigrationRequest(Command.MIGRATE, SNAPSHOT_KEY, VERSION_ID, "0".repeat(64));
     var bundleNotFoundException = new MigrationException(MigrationException.Code.BUNDLE_NOT_FOUND, "missing");
     when(s3BundlesSource.open(SNAPSHOT_BUCKET, SNAPSHOT_KEY, VERSION_ID)).thenThrow(bundleNotFoundException);

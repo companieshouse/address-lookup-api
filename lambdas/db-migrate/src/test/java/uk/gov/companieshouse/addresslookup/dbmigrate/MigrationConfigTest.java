@@ -71,10 +71,9 @@ class MigrationConfigTest {
 
   @Test
   void missingSnapshotBucketIsRejected() {
+    var environmentWithoutBucket = buildEnvironmentVariables("SNAPSHOT_BUCKET", null);
     var migrationException =
-        assertThrows(
-            IllegalStateException.class,
-            () -> MigrationConfig.fromEnv(buildEnvironmentVariables("SNAPSHOT_BUCKET", null)));
+        assertThrows(IllegalStateException.class, () -> MigrationConfig.fromEnv(environmentWithoutBucket));
 
     assertEquals("Missing SNAPSHOT_BUCKET", migrationException.getMessage());
   }
@@ -92,10 +91,9 @@ class MigrationConfigTest {
 
   @Test
   void missingDbCredentialsParameterIsRejected() {
+    var environmentWithoutParameter = buildEnvironmentVariables("DB_CREDENTIALS_PARAMETER", null);
     var migrationException =
-        assertThrows(
-            IllegalStateException.class,
-            () -> MigrationConfig.fromEnv(buildEnvironmentVariables("DB_CREDENTIALS_PARAMETER", null)));
+        assertThrows(IllegalStateException.class, () -> MigrationConfig.fromEnv(environmentWithoutParameter));
 
     assertEquals("Missing DB_CREDENTIALS_PARAMETER", migrationException.getMessage());
   }
@@ -171,16 +169,14 @@ class MigrationConfigTest {
 
   @Test
   void nonNumericLimitsFailWhileReadingTheEnvironment() {
+    var environmentWithTextBytes = buildEnvironmentVariables("MAX_BUNDLE_BYTES", "abc");
     var maxBundleBytesException =
-        assertThrows(
-            IllegalStateException.class,
-            () -> MigrationConfig.fromEnv(buildEnvironmentVariables("MAX_BUNDLE_BYTES", "abc")));
+        assertThrows(IllegalStateException.class, () -> MigrationConfig.fromEnv(environmentWithTextBytes));
     assertEquals("MAX_BUNDLE_BYTES must be a whole number but was abc", maxBundleBytesException.getMessage());
 
+    var environmentWithDecimalEntries = buildEnvironmentVariables("MAX_BUNDLE_ENTRIES", "1.5");
     var maxBundleEntriesException =
-        assertThrows(
-            IllegalStateException.class,
-            () -> MigrationConfig.fromEnv(buildEnvironmentVariables("MAX_BUNDLE_ENTRIES", "1.5")));
+        assertThrows(IllegalStateException.class, () -> MigrationConfig.fromEnv(environmentWithDecimalEntries));
     assertEquals("MAX_BUNDLE_ENTRIES must be a whole number but was 1.5", maxBundleEntriesException.getMessage());
   }
 }

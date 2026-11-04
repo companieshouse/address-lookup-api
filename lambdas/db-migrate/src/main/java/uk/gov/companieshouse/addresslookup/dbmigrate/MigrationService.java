@@ -10,10 +10,14 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.sql.SQLException;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.BUNDLE_CHECKSUM_MISMATCH;
 import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.DATABASE_UNAVAILABLE;
@@ -156,8 +160,11 @@ public final class MigrationService {
   }
 
   private static Path createTempWorkDir() {
+    // Only the owner may read, write or enter the directory.
+    FileAttribute<Set<PosixFilePermission>> ownerOnlyPermissions =
+        PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------"));
     try {
-      return Files.createTempDirectory("db-migrate-");
+      return Files.createTempDirectory("db-migrate-", ownerOnlyPermissions);
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }

@@ -62,9 +62,10 @@ class HandlerTest {
 
   @Test
   void unknownCommandFailsAsInvalidInputWithoutCallingTheService() {
+    var unknownCommandPayload = buildEventPayload("clean");
     var migrationException =
         assertThrows(
-            MigrationException.class, () -> handler.handleRequest(buildEventPayload("clean"), lambdaContext));
+            MigrationException.class, () -> handler.handleRequest(unknownCommandPayload, lambdaContext));
 
     assertEquals(MigrationException.Code.INVALID_INPUT, migrationException.code());
     assertEquals("INVALID_INPUT: Unknown command: clean", migrationException.getMessage());
@@ -104,9 +105,10 @@ class HandlerTest {
     var serviceFailure = new MigrationException(MigrationException.Code.MIGRATION_FAILED, "boom");
     when(migrationService.handle(expectedRequest)).thenThrow(serviceFailure);
 
+    var migrateEventPayload = buildEventPayload("migrate");
     var thrown =
         assertThrows(
-            MigrationException.class, () -> handler.handleRequest(buildEventPayload("migrate"), lambdaContext));
+            MigrationException.class, () -> handler.handleRequest(migrateEventPayload, lambdaContext));
 
     assertSame(serviceFailure, thrown);
   }

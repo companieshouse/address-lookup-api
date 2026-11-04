@@ -129,7 +129,8 @@ class MigrationRequestTest {
 
   @Test
   void errorMessageNamesTheOffendingField() {
-    var e = assertThrows(MigrationException.class, () -> MigrationRequest.parse(buildMigrationRequestPayload("locations", "x")));
+    var payloadWithUnexpectedField = buildMigrationRequestPayload("locations", "x");
+    var e = assertThrows(MigrationException.class, () -> MigrationRequest.parse(payloadWithUnexpectedField));
 
     assertEquals("INVALID_INPUT: Unexpected field: locations", e.getMessage());
   }

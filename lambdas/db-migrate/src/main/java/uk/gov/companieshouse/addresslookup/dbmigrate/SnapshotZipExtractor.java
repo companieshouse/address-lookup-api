@@ -28,7 +28,8 @@ public final class SnapshotZipExtractor {
   static final String MIGRATIONS_DIR_NAME = "migrations";
   /** Allowed migration SQL file names: versioned ({@code V2026.001__desc.sql}) or repeatable ({@code R__desc.sql}). */
   private static final Pattern SQL_FILE_NAME_PATTERN =
-      Pattern.compile("(V[0-9]+(\\.[0-9]+)*|R)__[A-Za-z0-9_]+\\.sql");
+      Pattern.compile("(V\\d+(\\.\\d+)*|R)__\\w+\\.sql");
+  private static final String UNSAFE_ENTRY_MESSAGE_PREFIX = "Unsafe snapshot entry: ";
   private static final int COPY_BUFFER_BYTES = 64 * 1024;
 
   private SnapshotZipExtractor() {}
@@ -154,13 +155,13 @@ public final class SnapshotZipExtractor {
         || zipEntryName.contains("\\")
         || zipEntryName.contains(":")
         || zipEntryName.contains("\0"))
-      throw new MigrationException(BUNDLE_INVALID, "Unsafe snapshot entry: " + zipEntryName);
+      throw new MigrationException(BUNDLE_INVALID, UNSAFE_ENTRY_MESSAGE_PREFIX + zipEntryName);
     for (String segment : zipEntryName.split("/"))
       if (segment.equals("..") || segment.equals("."))
-        throw new MigrationException(BUNDLE_INVALID, "Unsafe snapshot entry: " + zipEntryName);
+        throw new MigrationException(BUNDLE_INVALID, UNSAFE_ENTRY_MESSAGE_PREFIX + zipEntryName);
     Path targetPath = root.resolve(zipEntryName).normalize();
     if (!targetPath.startsWith(root))
-      throw new MigrationException(BUNDLE_INVALID, "Unsafe snapshot entry: " + zipEntryName);
+      throw new MigrationException(BUNDLE_INVALID, UNSAFE_ENTRY_MESSAGE_PREFIX + zipEntryName);
     return targetPath;
   }
 

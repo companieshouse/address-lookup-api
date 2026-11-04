@@ -40,9 +40,10 @@ class SnapshotZipExtractorTest {
 
   private MigrationException.Code extractAndGetFailureCode(
       byte[] zipBytes, long maxZipFileBytes, int maxZipFileEntries) {
+    var zipInputStream = new ByteArrayInputStream(zipBytes);
     return assertThrows(
             MigrationException.class,
-            () -> SnapshotZipExtractor.copyAndExtract(new ByteArrayInputStream(zipBytes), tempWorkDir, maxZipFileBytes, maxZipFileEntries))
+            () -> SnapshotZipExtractor.copyAndExtract(zipInputStream, tempWorkDir, maxZipFileBytes, maxZipFileEntries))
         .code();
   }
 
@@ -157,13 +158,14 @@ class SnapshotZipExtractorTest {
   }
 
   @Test
-  void reportsTheMisnamedFileInTheErrorMessage() throws Exception {
+  void reportsTheMisnamedFileInTheErrorMessage() throws IOException {
+    var misnamedZipInputStream =
+        new ByteArrayInputStream(buildZipBytes(Map.of("migrations/V1_bad.sql", "x")));
+
     var e =
         assertThrows(
             MigrationException.class,
-            () ->
-                SnapshotZipExtractor.copyAndExtract(
-                    new ByteArrayInputStream(buildZipBytes(Map.of("migrations/V1_bad.sql", "x"))), tempWorkDir, 1_000_000, 100));
+            () -> SnapshotZipExtractor.copyAndExtract(misnamedZipInputStream, tempWorkDir, 1_000_000, 100));
 
     assertTrue(e.getMessage().startsWith("VALIDATION_FAILED: Misnamed migration migrations/V1_bad.sql"));
   }

@@ -259,7 +259,9 @@ class MigrationServiceIT {
     byte[] snapshot = realMigrations();
     var request = new MigrationRequest(Command.MIGRATE, KEY, "v1", "0".repeat(64));
 
-    var e = assertThrows(MigrationException.class, () -> service(snapshot, "10s", false).handle(request));
+    var migrationService = service(snapshot, "10s", false);
+
+    var e = assertThrows(MigrationException.class, () -> migrationService.handle(request));
 
     assertEquals(MigrationException.Code.BUNDLE_CHECKSUM_MISMATCH, e.code());
     assertFalse(schemaExists("os_data"));
@@ -276,10 +278,9 @@ class MigrationServiceIT {
             ConnectionFactory.jdbc(),
             new FlywayRunner());
 
-    var e =
-        assertThrows(
-            MigrationException.class,
-            () -> service.handle(new MigrationRequest(Command.INFO, KEY, "v1", sha256(snapshot))));
+    var request = new MigrationRequest(Command.INFO, KEY, "v1", sha256(snapshot));
+
+    var e = assertThrows(MigrationException.class, () -> service.handle(request));
 
     assertEquals(MigrationException.Code.DATABASE_UNAVAILABLE, e.code());
   }

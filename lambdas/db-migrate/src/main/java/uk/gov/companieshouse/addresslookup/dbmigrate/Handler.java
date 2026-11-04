@@ -48,9 +48,10 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
           migrationSummary,
           result.get("durationMs"));
       return result;
+    } catch (MigrationException e) {
+      // The message already has the form CODE: detail, so it is surfaced unchanged.
+      throw e;
     } catch (RuntimeException e) {
-      // A MigrationException already has the form CODE: detail, so it is surfaced unchanged.
-      if (e instanceof MigrationException) throw e;
       throw new IllegalStateException(
           "db-migration-lambda command=" + flywayCommandName + " failed unexpectedly", e);
     }

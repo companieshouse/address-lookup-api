@@ -14,6 +14,12 @@ liquibase_lambda_artifact := address-lookup-liquibase-lambda
 db_bootstrap_lambda_module   := lambdas/db-bootstrap
 db_bootstrap_lambda_artifact := address-lookup-db-bootstrap
 
+# Released independently on the db-migrate-lambda-X.Y.Z tag stream and invoked by the DB pipeline
+# to apply a pinned Flyway snapshot. The module's artifactId follows the address-lookup-lambda-* naming.
+db_migrate_lambda_module   := lambdas/db-migrate
+db_migrate_lambda_jar      := address-lookup-lambda-db-migrate
+db_migrate_lambda_artifact := address-lookup-db-migrate
+
 # Flyway migrations in database/migrations, released on the db-schema-X.Y.Z tag
 # stream. Local repeatable seeds in database/local are never packaged.
 db_schema_artifact  := address-lookup-db-schema
@@ -29,6 +35,7 @@ clean:
 	rm -f $(artifact_name)-*.zip
 	rm -f $(liquibase_lambda_artifact)-*.zip
 	rm -f $(db_bootstrap_lambda_artifact)-*.zip
+	rm -f $(db_migrate_lambda_artifact)-*.zip
 	rm -f $(db_schema_artifact)-*.zip
 	rm -f $(artifact_name).jar
 	rm -rf ./build-*
@@ -129,6 +136,17 @@ endif
 	mvn versions:set -DnewVersion=$(version) -DgenerateBackupPoms=false
 	mvn -pl $(db_bootstrap_lambda_module) -am package -DskipTests=true
 	cp ./$(db_bootstrap_lambda_module)/target/$(db_bootstrap_lambda_artifact)-$(version)-lambda.jar ./$(db_bootstrap_lambda_artifact)-$(version).zip
+
+.PHONY: package-db-migrate-lambda
+package-db-migrate-lambda:
+	@# Help: Build the DB migrate Lambda release as $(db_migrate_lambda_artifact)-<version>.zip
+ifndef version
+	$(error No version given. Aborting)
+endif
+	$(info Packaging DB migrate Lambda version: $(version))
+	mvn versions:set -DnewVersion=$(version) -DgenerateBackupPoms=false
+	mvn -pl $(db_migrate_lambda_module) -am package -DskipTests=true
+	cp ./$(db_migrate_lambda_module)/target/$(db_migrate_lambda_jar)-$(version)-lambda.jar ./$(db_migrate_lambda_artifact)-$(version).zip
 
 .PHONY: package-db-schema
 package-db-schema:

@@ -18,14 +18,14 @@ GET https://postcode.cidev.aws.chdev.org/multiple-addresses/AB124NY
 ###
 # @name [OS] query the detailed dataPackageId
 GET https://api.os.uk/downloads/v1/dataPackages/24833/versions/150450
-key: MO9rg3h1GNRUOz7U5fKmVBF6Iw489Rle
+key: {{os_api_key}}
 
 ###
 # @name [OS] show all data package available
 GET https://api.os.uk/downloads/v1/dataPackages
-key: MO9rg3h1GNRUOz7U5fKmVBF6Iw489Rle
+key: {{os_api_key}}
 
 ###
 # @name [OS] query the new data package with using dataPackageId
 GET https://api.os.uk/downloads/v1/dataPackages/24833
-key: MO9rg3h1GNRUOz7U5fKmVBF6Iw489Rle
+key: {{os_api_key}}

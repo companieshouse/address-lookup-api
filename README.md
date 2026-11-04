@@ -89,6 +89,11 @@ provide a PostgreSQL datasource. Credentials must allow Flyway to apply
 pending migrations wherever API startup is configured to run them. Local seed
 files are not part of the production package.
 
+## Sample HTTP requests
+
+`rest-api.http` holds sample requests for the API and the Ordnance Survey download API. See
+[docs/rest-api-http.md](docs/rest-api-http.md) for how to run it in IntelliJ with your own OS API key.
+
 ## Environment variables
 
 | Variable              | Description                                                                | Example (from docker-chs-development) |

@@ -213,7 +213,7 @@ class DatabaseFeedIT {
         Flyway productionFlyway = flyway(databaseRoot.resolve("migrations"));
 
         MigrateResult productionResult = productionFlyway.migrate();
-        assertEquals(4, productionResult.migrationsExecuted);
+        assertEquals(6, productionResult.migrationsExecuted);
         productionFlyway.validate();
         assertEquals(0, productionFlyway.migrate().migrationsExecuted);
 

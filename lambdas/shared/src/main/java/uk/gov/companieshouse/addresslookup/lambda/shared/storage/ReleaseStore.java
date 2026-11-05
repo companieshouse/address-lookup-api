@@ -146,6 +146,15 @@ public final class ReleaseStore {
     return SCANNED_PREFIX + UUID.fromString(id) + "/" + dataset + ".csv";
   }
 
+  /** Marker written by quarantine when any file of the release failed its scan. */
+  public static String blockedKey(String id) {
+    return "control/" + UUID.fromString(id) + "/BLOCKED.json";
+  }
+
+  public boolean isBlocked(String bucket, String id) throws Exception {
+    return read(bucket, blockedKey(id)) != null;
+  }
+
   public static String downloadZipKey(String id, String dataset) {
     return SCANNED_PREFIX + UUID.fromString(id) + "/" + dataset + ".zip";
   }

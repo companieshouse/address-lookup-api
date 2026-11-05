@@ -25,7 +25,7 @@ public interface LegacyAddressMapper {
     LegacyAddress toLegacyAddressWithoutPremise(RoyalMailAddressLookup address);
 
     /**
-     * Combines the sub-building name and building number for the legacy premise field.
+     * Combines the sub-building name, building name and building number for the legacy premise field.
      *
      * @param address address with the premise components
      * @return nonblank components joined by a comma, or an empty string
@@ -33,6 +33,7 @@ public interface LegacyAddressMapper {
     default String toPremise(RoyalMailAddressLookup address) {
         return join(
                 address.getSubBuildingName(),
+                address.getBuildingName(),
                 address.getBuildingNumber() == null ? null : address.getBuildingNumber().toString());
     }
 

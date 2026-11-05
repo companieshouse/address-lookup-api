@@ -121,8 +121,10 @@ class DatabaseCredentialsTest {
         "jdbc:postgresql://h/d?sslmode=require&+user=other"
       })
   void rejectsCredentialPropertiesInTheJdbcUrl(String jdbcUrl) {
+    var credentialsJson = credentialsJsonWithUrl(jdbcUrl);
+
     var migrationException =
-        assertThrows(MigrationException.class, () -> DatabaseCredentials.fromJson(credentialsJsonWithUrl(jdbcUrl)));
+        assertThrows(MigrationException.class, () -> DatabaseCredentials.fromJson(credentialsJson));
 
     assertEquals("CREDENTIALS_INVALID: jdbcUrl must not contain a username or password", migrationException.getMessage());
   }
@@ -139,8 +141,10 @@ class DatabaseCredentialsTest {
         "jdbc:postgresql://h/d?sslmode=require&sslmode=disable"
       })
   void rejectsAJdbcUrlThatDoesNotRequireTls(String jdbcUrl) {
+    var credentialsJson = credentialsJsonWithUrl(jdbcUrl);
+
     var migrationException =
-        assertThrows(MigrationException.class, () -> DatabaseCredentials.fromJson(credentialsJsonWithUrl(jdbcUrl)));
+        assertThrows(MigrationException.class, () -> DatabaseCredentials.fromJson(credentialsJson));
 
     assertEquals(
         "CREDENTIALS_INVALID: jdbcUrl must set sslmode to require, verify-ca or verify-full",
@@ -157,10 +161,10 @@ class DatabaseCredentialsTest {
 
   @Test
   void reportsMalformedEncodingWithoutRevealingTheJdbcUrl() {
+    var credentialsJson = credentialsJsonWithUrl("jdbc:postgresql://h/d?sslmode=require&x=s3cret%zz");
+
     var migrationException =
-        assertThrows(
-            MigrationException.class,
-            () -> DatabaseCredentials.fromJson(credentialsJsonWithUrl("jdbc:postgresql://h/d?sslmode=require&x=s3cret%zz")));
+        assertThrows(MigrationException.class, () -> DatabaseCredentials.fromJson(credentialsJson));
 
     assertEquals("CREDENTIALS_INVALID: jdbcUrl contains malformed percent-encoding", migrationException.getMessage());
     assertFalse(migrationException.getMessage().contains("s3cret"));

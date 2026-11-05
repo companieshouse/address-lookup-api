@@ -4,11 +4,6 @@ version             := "unversioned"
 
 comma               := ,
 space               := $(empty) $(empty)
-# The Liquibase Lambda, released on its own liquibase-lambda-X.Y.Z tag stream (version file in
-# its module) and published as $(liquibase_lambda_artifact)-<version>.zip. Every Lambda gets its
-# own artefact name and tag stream so that releases never collide.
-liquibase_lambda_module   := lambdas/liquibase-schema-migrator
-liquibase_lambda_artifact := address-lookup-liquibase-lambda
 
 # Released independently and invoked by terraform/groups/aurora before migrations.
 db_bootstrap_lambda_module   := lambdas/db-bootstrap
@@ -53,7 +48,6 @@ all: build
 clean:
 	$(MVN) clean
 	rm -f $(artifact_name)-*.zip
-	rm -f $(liquibase_lambda_artifact)-*.zip
 	rm -f $(db_bootstrap_lambda_artifact)-*.zip
 	rm -f $(db_migrate_lambda_artifact)-*.zip
 	rm -f $(db_schema_artifact)-*.zip
@@ -114,7 +108,7 @@ sonar sonar-pr sonar-report:
 .PHONY: test-integration
 test-integration:
 	@# Help: Run integration tests
-	$(MVN) -pl $(api_module),$(liquibase_lambda_module) -am integration-test verify -Dskip.unit.tests=true failsafe:verify
+	$(MVN) -pl $(api_module) -am integration-test verify -Dskip.unit.tests=true failsafe:verify
 
 
 .PHONY: m2-check
@@ -138,16 +132,6 @@ test-db-bootstrap-integration:
 	@# Help: Test bootstrap and first Flyway run as the non-master owner (requires Docker)
 	$(MVN) -pl $(db_bootstrap_lambda_module) -am -Dit.test=DatabaseBootstrapIT -Dfailsafe.failIfNoSpecifiedTests=false verify
 
-# .PHONY: test-liquibase
-# test-liquibase:
-# 	@# Help: Test the Liquibase Lambda and validate the released changelogs (no Docker needed)
-# 	mvn -pl $(liquibase_lambda_module) -am verify
-
-.PHONY: test-liquibase
-test-liquibase:
-	@echo "Liquibase validation is temporarily disabled"
-	@echo "TODO: Enable when liquibase-schema-migrator Maven project is ready"
-
 .PHONY: build-container
 build-container: build
 	docker build .
@@ -169,17 +153,6 @@ endif
 	cd $(tmpdir); zip -r ../$(artifact_name)-$(version).zip *
 	rm -rf $(tmpdir)
 
-.PHONY: package-liquibase-lambda
-package-liquibase-lambda:
-	@# Help: Build the Liquibase Lambda as $(liquibase_lambda_artifact)-<version>.zip
-ifndef version
-	$(error No version given. Aborting)
-endif
-	$(info Packaging Liquibase Lambda version: $(version))
-	$(MVN) versions:set -DnewVersion=$(version) -DgenerateBackupPoms=false
-	$(MVN) -pl $(liquibase_lambda_module) -am package -DskipTests=true
-	cp ./$(liquibase_lambda_module)/target/$(liquibase_lambda_artifact)-$(version)-lambda.jar ./$(liquibase_lambda_artifact)-$(version).zip
-
 .PHONY: package-db-bootstrap-lambda
 package-db-bootstrap-lambda:
 	@# Help: Build the DB bootstrap Lambda release
@@ -198,8 +171,8 @@ ifndef version
 	$(error No version given. Aborting)
 endif
 	$(info Packaging DB migrate Lambda version: $(version))
-	mvn versions:set -DnewVersion=$(version) -DgenerateBackupPoms=false
-	mvn -pl $(db_migrate_lambda_module) -am package -DskipTests=true
+	$(MVN) versions:set -DnewVersion=$(version) -DgenerateBackupPoms=false
+	$(MVN) -pl $(db_migrate_lambda_module) -am package -DskipTests=true
 	cp ./$(db_migrate_lambda_module)/target/$(db_migrate_lambda_jar)-$(version)-lambda.jar ./$(db_migrate_lambda_artifact)-$(version).zip
 
 .PHONY: package-db-schema

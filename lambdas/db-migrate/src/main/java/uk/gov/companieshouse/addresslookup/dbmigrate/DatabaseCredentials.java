@@ -37,6 +37,9 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
                     getTextValueFromJsonField(dbCredentialsJsonNode, "dbname"));
     if (!url.startsWith("jdbc:postgresql://"))
       throw new MigrationException(CREDENTIALS_INVALID, "jdbcUrl must be a PostgreSQL JDBC URL");
+    // The username and password have their own fields, so they must not be in the URL.
+    if (url.contains("@"))
+      throw new MigrationException(CREDENTIALS_INVALID, "jdbcUrl must not contain a username or password");
     return new DatabaseCredentials(
         url,
         getTextValueFromJsonField(dbCredentialsJsonNode, "username"),

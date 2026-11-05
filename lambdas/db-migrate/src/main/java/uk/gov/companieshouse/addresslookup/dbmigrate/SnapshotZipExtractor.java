@@ -91,6 +91,9 @@ public final class SnapshotZipExtractor {
           continue;
         }
         validateMigrationSqlFileName(targetPath, migrationsDir, zipEntry);
+        // Names such as migrations/V1__a.sql and migrations//V1__a.sql resolve to the same file.
+        if (Files.exists(targetPath))
+          throw new MigrationException(BUNDLE_INVALID, "Duplicate snapshot entry: " + zipEntry.getName());
 
         totalExpandedByteCount += writeEntry(zipArchive, zipEntry, targetPath, maxZipFileBytes - totalExpandedByteCount);
         extractedSqlFileCount++;

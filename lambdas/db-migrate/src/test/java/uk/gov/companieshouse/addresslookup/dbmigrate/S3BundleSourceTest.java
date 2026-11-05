@@ -9,6 +9,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.http.AbortableInputStream;
+import software.amazon.awssdk.http.Abortable;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
@@ -22,6 +23,7 @@ import java.util.function.Consumer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,6 +35,7 @@ class S3BundleSourceTest {
   private static final String VERSION_ID = "v1";
 
   @Mock private S3Client s3Client;
+  @Mock private Abortable abortable;
 
   private S3BundleSource s3BundleSource;
 
@@ -104,6 +107,36 @@ class S3BundleSourceTest {
     try (var openedStream = s3BundleSource.open(SNAPSHOT_BUCKET, SNAPSHOT_KEY, VERSION_ID)) {
       assertEquals("zip-bytes", new String(openedStream.readAllBytes(), StandardCharsets.UTF_8));
     }
+  }
+
+  @Test
+  void closingBeforeTheEndAbortsTheRequest() throws Exception {
+    var objectStream =
+        new ResponseInputStream<>(
+            GetObjectResponse.builder().build(),
+            AbortableInputStream.create(new ByteArrayInputStream("zip-bytes".getBytes(StandardCharsets.UTF_8)), abortable));
+    when(s3Client.getObject(ArgumentMatchers.<Consumer<GetObjectRequest.Builder>>any())).thenReturn(objectStream);
+
+    try (var openedStream = s3BundleSource.open(SNAPSHOT_BUCKET, SNAPSHOT_KEY, VERSION_ID)) {
+      openedStream.read(new byte[3]);
+    }
+
+    verify(abortable).abort();
+  }
+
+  @Test
+  void closingAfterTheEndDoesNotAbortTheRequest() throws Exception {
+    var objectStream =
+        new ResponseInputStream<>(
+            GetObjectResponse.builder().build(),
+            AbortableInputStream.create(new ByteArrayInputStream("zip-bytes".getBytes(StandardCharsets.UTF_8)), abortable));
+    when(s3Client.getObject(ArgumentMatchers.<Consumer<GetObjectRequest.Builder>>any())).thenReturn(objectStream);
+
+    try (var openedStream = s3BundleSource.open(SNAPSHOT_BUCKET, SNAPSHOT_KEY, VERSION_ID)) {
+      openedStream.readAllBytes();
+    }
+
+    verify(abortable, never()).abort();
   }
 
   @Test

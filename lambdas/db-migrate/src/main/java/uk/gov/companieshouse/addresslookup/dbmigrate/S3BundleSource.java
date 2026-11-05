@@ -2,10 +2,14 @@ package uk.gov.companieshouse.addresslookup.dbmigrate;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
+import java.io.FilterInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 
 import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.BUNDLE_NOT_FOUND;
@@ -24,7 +28,7 @@ public final class S3BundleSource implements BundleSource {
   public InputStream open(String bucket, String key, String versionId) {
     LOG.info("Downloading s3://{}/{} version {}", bucket, key, versionId);
     try {
-      return s3.getObject(b -> b.bucket(bucket).key(key).versionId(versionId));
+      return new AbortOnEarlyCloseStream(s3.getObject(b -> b.bucket(bucket).key(key).versionId(versionId)));
     } catch (NoSuchKeyException e) {
       throw new MigrationException(BUNDLE_NOT_FOUND, "s3://" + bucket + "/" + key + " not found", e);
     } catch (S3Exception e) {
@@ -35,6 +39,40 @@ public final class S3BundleSource implements BundleSource {
             "s3://" + bucket + "/" + key + " version " + versionId + " not found",
             e);
       throw e;
+    }
+  }
+
+  /**
+   * Closing a stream before its end would make the HTTP client read the rest of the object.
+   * This stream aborts the request instead, so an oversized object is not downloaded in full.
+   */
+  private static final class AbortOnEarlyCloseStream extends FilterInputStream {
+    private final ResponseInputStream<GetObjectResponse> objectResponse;
+    private boolean endReached;
+
+    private AbortOnEarlyCloseStream(ResponseInputStream<GetObjectResponse> objectResponse) {
+      super(objectResponse);
+      this.objectResponse = objectResponse;
+    }
+
+    @Override
+    public int read() throws IOException {
+      int nextByte = super.read();
+      if (nextByte == -1) endReached = true;
+      return nextByte;
+    }
+
+    @Override
+    public int read(byte[] buffer, int offset, int length) throws IOException {
+      int bytesReadCount = super.read(buffer, offset, length);
+      if (bytesReadCount == -1) endReached = true;
+      return bytesReadCount;
+    }
+
+    @Override
+    public void close() throws IOException {
+      if (endReached) super.close();
+      else objectResponse.abort();
     }
   }
 }

@@ -158,6 +158,15 @@ class SnapshotZipExtractorTest {
   }
 
   @Test
+  void rejectsTwoEntriesThatResolveToTheSameFile() throws Exception {
+    var entries = new LinkedHashMap<String, String>();
+    entries.put("migrations/V1__first.sql", "SELECT 1;");
+    entries.put("migrations//V1__first.sql", "SELECT 2;");
+
+    assertEquals(MigrationException.Code.BUNDLE_INVALID, extractAndGetFailureCode(buildZipBytes(entries), 1_000_000, 100));
+  }
+
+  @Test
   void reportsTheMisnamedFileInTheErrorMessage() throws IOException {
     var misnamedZipInputStream =
         new ByteArrayInputStream(buildZipBytes(Map.of("migrations/V1_bad.sql", "x")));

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+cd "$root"
+
+make tidy FILE=.
+
+if ! git diff --quiet -- '*.java'; then
+    printf 'Commit stopped: review and stage the Java formatting changes, then commit again.\n' >&2
+    exit 1
+fi

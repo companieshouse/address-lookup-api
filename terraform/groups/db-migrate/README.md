@@ -32,7 +32,7 @@ Concourse (env AWS keys) ──────lambda:InvokeFunction──▶ addres
 
 | Requirement (ALS-87) | Implementation |
 |---|---|
-| Function, java21, handler, 1024 MB, 15 min | `module.lambda` (terraform-modules `aws/lambda` 1.0.442), artefact `address-lookup-api/address-lookup-db-migrate-<version>.zip` from the release bucket, produced by `lambdas/db-migrate` and released by the pipeline's `db-migrate-lambda-release` job |
+| Function, java21, handler, 1024 MB, 15 min | `module.lambda` (terraform-modules `aws/lambda` 1.0.442), artefact `address-lookup/address-lookup-db-migrate-<version>.zip` from the release bucket, produced by `lambdas/db-migrate` and released by the pipeline's `db-migrate-lambda-release` job |
 | Reserved concurrency 1 | `lambda_reserved_concurrent_executions = 1`. Async retries are 0. |
 | Env `SNAPSHOT_BUCKET`, `DB_CREDENTIALS_PARAMETER`, `LOCK_TIMEOUT=10s`, `ALLOW_REPAIR=false` | `lambda_env_vars`, plus `AWS_ENDPOINT_URL_SSM` (see Network) |
 | No triggers | No event source mappings, EventBridge rules, schedules or SNS/SQS subscriptions are declared |
@@ -96,7 +96,7 @@ Concourse (env AWS keys) ──────lambda:InvokeFunction──▶ addres
    To rotate the password, follow [Rotation](#rotation).
 3. The VPC has an S3 gateway endpoint associated with the data subnets' route
    tables. It is looked up; the plan fails if it is missing.
-4. The release `address-lookup-api/address-lookup-db-migrate-<version>.zip`
+4. The release `address-lookup/address-lookup-db-migrate-<version>.zip`
    exists in the shared-services release bucket. To produce it, push a
    `db-migrate-lambda-X.Y.Z` release for `lambdas/db-migrate`
    (`make package-db-migrate-lambda`). No CA bundle is needed: the jdbcUrl the

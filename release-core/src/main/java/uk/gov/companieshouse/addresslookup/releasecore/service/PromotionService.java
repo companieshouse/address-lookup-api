@@ -8,6 +8,7 @@ import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseFileReposito
 import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseRepository;
 import uk.gov.companieshouse.addresslookup.releasecore.state.WatermarkRepository;
 import uk.gov.companieshouse.release.model.Dataset;
+import uk.gov.companieshouse.release.model.SupplyType;
 
 import java.util.Objects;
 import java.util.UUID;
@@ -39,9 +40,15 @@ public class PromotionService {
     var ready = files.findByReleaseId(id);
     if (ready.size() != Dataset.values().length
         || ready.stream().anyMatch(f -> !f.ready(release.getSupplyType()))) return false;
+    boolean full = release.getSupplyType() == SupplyType.FULL;
+    if (full) aurora.createAddressTables();
     // Procedure rechecks the barrier, validates prospective data and atomically changes live
     // tables.
     aurora.promote(release.getSupplyType(), id);
+    if (full) {
+      aurora.createAddressIndexes();
+      aurora.createAddressLookupView();
+    }
     release.complete();
     watermark.advance(release.getValidTo());
     return true;

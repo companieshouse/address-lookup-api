@@ -190,9 +190,9 @@ class DatabaseFeedIT {
                     "JE27NA"),
             BorderPostcodeFixtures.compactPostcodes().stream())
             .collect(Collectors.toUnmodifiableSet());
-    private static final Map<String, Integer> NULL_COUNTRY_FIXTURES = Map.of(
-            "add_gb_royalmailaddress_v2", 19,
-            "add_isl_royalmailaddress_v2", 10403188);
+    private static final Map<String, Map<Integer, String>> COUNTRY_FIXTURES = Map.of(
+            "add_gb_royalmailaddress_v2", Map.of(19, "Scotland"),
+            "add_isl_royalmailaddress_v2", Map.of(10403188, "Channel Islands"));
 
     @SuppressWarnings("resource")
     @Container
@@ -213,7 +213,7 @@ class DatabaseFeedIT {
         Flyway productionFlyway = flyway(databaseRoot.resolve("migrations"));
 
         MigrateResult productionResult = productionFlyway.migrate();
-        assertEquals(4, productionResult.migrationsExecuted);
+        assertEquals(5, productionResult.migrationsExecuted);
         productionFlyway.validate();
         assertEquals(0, productionFlyway.migrate().migrationsExecuted);
 
@@ -264,6 +264,21 @@ class DatabaseFeedIT {
 
     private static void assertProductionSchema() throws SQLException {
         try (Connection connection = connection()) {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("DROP VIEW address_lookup.address_lookup");
+                statement.execute(
+                        "DROP TABLE os_data.add_gb_royalmailaddress_v2, "
+                                + "os_data.add_isl_royalmailaddress_v2");
+                statement.execute("CALL os_ingest.create_gb_royalmailaddress_table()");
+                statement.execute("CALL os_ingest.create_isl_royalmailaddress_table()");
+            }
+            for (String table : TABLES) {
+                assertIndexlessTable(connection, table);
+            }
+            try (Statement statement = connection.createStatement()) {
+                callArtefactProcedures(statement);
+                callArtefactProcedures(statement);
+            }
             assertRelation(connection, "os_control.schema_contract", true);
             assertRelation(connection, "os_control.index_definition", true);
             assertRelation(connection, "address_lookup.address_lookup", true);
@@ -274,6 +289,7 @@ class DatabaseFeedIT {
                 assertPhysicalColumns(connection, table);
                 assertPrimaryKey(connection, table);
                 assertPostcodeIndex(connection, table);
+                assertSecondaryIndex(connection, table);
             }
             assertEquals(Set.copyOf(TABLES), physicalTableNames(connection));
 
@@ -308,6 +324,28 @@ class DatabaseFeedIT {
             assertVarcharLength(connection, TABLES.get(0), "description", 25);
             assertVarcharLength(connection, TABLES.get(1), "description", 25);
         }
+    }
+
+    private static void assertIndexlessTable(Connection connection, String table)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT count(*) FROM pg_index WHERE indrelid = ?::regclass")) {
+            statement.setString(1, "os_data." + table);
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals(0, result.getInt(1), "Unexpected index on " + table);
+            }
+        }
+    }
+
+    private static void callArtefactProcedures(Statement statement) throws SQLException {
+        statement.execute("CALL os_ingest.create_gb_royalmailaddress_table()");
+        statement.execute("CALL os_ingest.create_isl_royalmailaddress_table()");
+        statement.execute("CALL os_ingest.add_gb_royalmailaddress_primary_index()");
+        statement.execute("CALL os_ingest.add_isl_royalmailaddress_primary_index()");
+        statement.execute("CALL os_ingest.add_gb_royalmailaddress_secondary_indexes()");
+        statement.execute("CALL os_ingest.add_isl_royalmailaddress_secondary_indexes()");
+        statement.execute("CALL os_ingest.create_address_lookup_view()");
     }
 
     private static void assertPhysicalColumns(Connection connection, String table)
@@ -402,6 +440,25 @@ class DatabaseFeedIT {
         }
     }
 
+    private static void assertSecondaryIndex(Connection connection, String table)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT pg_get_indexdef(indexes.indexrelid) AS definition, indexes.indisvalid "
+                        + "FROM pg_index indexes "
+                        + "JOIN pg_class index_relation ON index_relation.oid = indexes.indexrelid "
+                        + "JOIN pg_namespace index_schema ON index_schema.oid = index_relation.relnamespace "
+                        + "WHERE index_schema.nspname = 'os_data' "
+                        + "AND index_relation.relname = ?")) {
+            statement.setString(1, table + "_thoroughfare_idx");
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next(), "Missing thoroughfare index for " + table);
+                assertTrue(result.getString("definition").contains("(thoroughfare)"));
+                assertTrue(result.getBoolean("indisvalid"));
+                assertFalse(result.next(), "Duplicate thoroughfare index for " + table);
+            }
+        }
+    }
+
     private static void assertPrimaryKey(Connection connection, String table)
             throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
@@ -428,11 +485,15 @@ class DatabaseFeedIT {
                 "add_gb_royalmailaddress|add_gb_royalmailaddress_v2|"
                         + "add_gb_royalmailaddress_v2_postcode_idx|index|"
                         + "upper(replace(postcode, ' ', ''))",
+                "add_gb_royalmailaddress|add_gb_royalmailaddress_v2|"
+                        + "add_gb_royalmailaddress_v2_thoroughfare_idx|index|thoroughfare",
                 "add_isl_royalmailaddress|add_isl_royalmailaddress_v2|"
                         + "add_isl_royalmailaddress_v2_pkey|primary_key|udprn",
                 "add_isl_royalmailaddress|add_isl_royalmailaddress_v2|"
                         + "add_isl_royalmailaddress_v2_postcode_idx|index|"
-                        + "upper(replace(postcode, ' ', ''))");
+                        + "upper(replace(postcode, ' ', ''))",
+                "add_isl_royalmailaddress|add_isl_royalmailaddress_v2|"
+                        + "add_isl_royalmailaddress_v2_thoroughfare_idx|index|thoroughfare");
         Set<String> actual = new HashSet<>();
         try (Statement statement = connection.createStatement();
                 ResultSet result = statement.executeQuery(
@@ -470,20 +531,22 @@ class DatabaseFeedIT {
             assertEquals(0, countInvalidSourceIds(connection));
             assertRegionGeometry(connection, TABLES.get(0), 27700, true);
             assertRegionGeometry(connection, TABLES.get(1), 4258, false);
-            for (Map.Entry<String, Integer> fixture : NULL_COUNTRY_FIXTURES.entrySet()) {
-                assertNullCountryFixture(connection, fixture.getKey(), fixture.getValue());
+            for (Map.Entry<String, Map<Integer, String>> table : COUNTRY_FIXTURES.entrySet()) {
+                for (Map.Entry<Integer, String> fixture : table.getValue().entrySet()) {
+                    assertCountryFixture(connection, table.getKey(), fixture.getKey(), fixture.getValue());
+                }
             }
         }
     }
 
-    private static void assertNullCountryFixture(
-            Connection connection, String table, int udprn) throws SQLException {
+    private static void assertCountryFixture(
+            Connection connection, String table, int udprn, String country) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
                 "SELECT country, release_id FROM os_data." + table + " WHERE udprn = ?")) {
             statement.setInt(1, udprn);
             try (ResultSet result = statement.executeQuery()) {
-                assertTrue(result.next(), "Missing approved NULL-country fixture " + udprn);
-                assertNull(result.getString("country"));
+                assertTrue(result.next(), "Missing country fixture " + udprn);
+                assertEquals(country, result.getString("country"));
                 assertEquals("local", result.getString("release_id"));
                 assertFalse(result.next(), "Duplicate fixture " + udprn);
             }

@@ -43,8 +43,18 @@ runner is managed outside this feed and checkout. Do not treat the presence of
 SQL here as proof that an external database release was deployed.
 
 The two local repeatable seeds cover all ten current happy-path API postcode
-fixtures. They deliberately retain `country = NULL` for GB UDPRN 19 and ISL
-UDPRN 10403188, the two examples approved for this feed.
+fixtures. They preserve the source country values, including `Scotland` for GB
+UDPRN 19 and `Channel Islands` for ISL UDPRN 10403188.
+
+This experimental branch adds
+`V2026.005__manage_royalmailaddress_artefacts.sql` to install procedures for
+creating the v2 tables without indexes, adding primary and secondary indexes,
+and creating the lookup view. Existing tables and indexes are not removed.
+The FULL promotion path calls the table procedures before `promote_full`, then
+adds indexes and refreshes the view; COU promotion is unchanged. This wiring is
+experimental and cannot demonstrate a full import without the missing promotion
+procedure. See the [spike investigation](../docs/indirect-database-artefact-management-spike.md)
+for limitations and follow-on work.
 
 The `os_ingest.promote_full` procedure is not part of this initial feed phase.
 Ian Mclaughlin clarified on 2026-10-13 that it is intended to promote a FULL

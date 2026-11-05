@@ -99,4 +99,20 @@ public class AuroraOperations {
         type == SupplyType.COU ? "CALL os_ingest.promote_cou(?)" : "CALL os_ingest.promote_full(?)",
         id);
   }
+
+  public void createAddressTables() {
+    jdbc.execute("CALL os_ingest.create_gb_royalmailaddress_table()");
+    jdbc.execute("CALL os_ingest.create_isl_royalmailaddress_table()");
+  }
+
+  public void createAddressIndexes() {
+    jdbc.execute("CALL os_ingest.add_gb_royalmailaddress_primary_index()");
+    jdbc.execute("CALL os_ingest.add_isl_royalmailaddress_primary_index()");
+    jdbc.execute("CALL os_ingest.add_gb_royalmailaddress_secondary_indexes()");
+    jdbc.execute("CALL os_ingest.add_isl_royalmailaddress_secondary_indexes()");
+  }
+
+  public void createAddressLookupView() {
+    jdbc.execute("CALL os_ingest.create_address_lookup_view()");
+  }
 }

@@ -109,9 +109,9 @@ class PostcodeControllerIT extends AddressTestBaseIT {
     private static Stream<Arguments> addresses() {
         return Stream.of(
             Arguments.of("BT100BU", "BT10 0BU", "PORTER PARK", "BELFAST", "GB-NIR"),
-            Arguments.of("BT513TU", "BT51 3TU", "GRANARY CLOSE", "COLERAINE", "United Kingdom"),
-            Arguments.of("GY80EE", "GY8 0EE", "LES NOUETTES", "GUERNSEY", "United Kingdom"),
-            Arguments.of("IM11BD", "IM1 1BD", "PRINCES STREET", "ISLE OF MAN", "United Kingdom"),
-            Arguments.of("JE27ND", "JE2 7ND", "LANGLEY PARK", "JERSEY", "United Kingdom"));
+            Arguments.of("BT513TU", "BT51 3TU", "GRANARY CLOSE", "COLERAINE", "GB-NIR"),
+            Arguments.of("GY80EE", "GY8 0EE", "LES NOUETTES", "GUERNSEY", "Channel Islands"),
+            Arguments.of("IM11BD", "IM1 1BD", "PRINCES STREET", "ISLE OF MAN", "Isle of Man"),
+            Arguments.of("JE27ND", "JE2 7ND", "LANGLEY PARK", "JERSEY", "Channel Islands"));
     }
 }

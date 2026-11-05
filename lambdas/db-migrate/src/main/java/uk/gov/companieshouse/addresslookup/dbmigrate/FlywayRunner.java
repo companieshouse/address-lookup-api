@@ -7,8 +7,8 @@ import org.flywaydb.core.api.configuration.FluentConfiguration;
 import org.flywaydb.core.api.exception.FlywayValidateException;
 import org.flywaydb.core.api.output.RepairResult;
 import org.flywaydb.database.postgresql.PostgreSQLConfigurationExtension;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
 
 import javax.sql.DataSource;
 import java.io.PrintWriter;
@@ -17,6 +17,7 @@ import java.sql.Connection;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -29,7 +30,7 @@ import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.C
  * serialises concurrent runs, and each migration script runs in its own transaction.
  */
 public final class FlywayRunner {
-  private static final Logger LOG = LoggerFactory.getLogger(FlywayRunner.class);
+  private static final Logger LOG = LoggerFactory.getLogger(FlywayRunner.class.getName());
 
   /**
    * Migrations are named by their script file, e.g. {@code V2026.003__create_tables.sql}.
@@ -66,10 +67,16 @@ public final class FlywayRunner {
     // Concurrent runs are still serialised by the lock.
     configuration.getConfigurationExtension(PostgreSQLConfigurationExtension.class).setTransactionalLock(false);
     Flyway flyway = configuration.load();
-    LOG.info("Flyway {} using migrations in {}", command.wireName(), migrationsDir);
+    LOG.info(
+        "Flyway using migrations",
+        Map.of("command", command.wireName(), "migrationsDir", migrationsDir.toString()));
     try {
       Outcome outcome = executeFlywayCommand(command, flyway);
-      LOG.info("Flyway {} finished at schema version {}", command.wireName(), outcome.latestAppliedSchemaVersion());
+      LOG.info(
+          "Flyway finished",
+          Map.of(
+              "command", command.wireName(),
+              "schemaVersion", String.valueOf(outcome.latestAppliedSchemaVersion())));
       return outcome;
     } catch (MigrationException e) {
       // Rethrow as is, so the FlywayException branch below does not wrap it.

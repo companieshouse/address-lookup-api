@@ -1,9 +1,11 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.ssm.SsmClient;
 import software.amazon.awssdk.services.ssm.model.ParameterNotFoundException;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
+
+import java.util.Map;
 
 import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.CREDENTIALS_INVALID;
 
@@ -12,7 +14,7 @@ import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.C
  * invocation, so a rotated password is picked up without a redeploy.
  */
 public final class ParameterStoreDbCredentialsSource implements DbCredentialsSource {
-  private static final Logger LOG = LoggerFactory.getLogger(ParameterStoreDbCredentialsSource.class);
+  private static final Logger LOG = LoggerFactory.getLogger(ParameterStoreDbCredentialsSource.class.getName());
 
   private final SsmClient ssm;
 
@@ -23,7 +25,7 @@ public final class ParameterStoreDbCredentialsSource implements DbCredentialsSou
   @Override
   public DatabaseCredentials get(String dbCredentialsParameterPath) {
     // Only the parameter path is logged, never its value.
-    LOG.info("Reading database credentials from parameter {}", dbCredentialsParameterPath);
+    LOG.info("Reading database credentials", Map.of("parameter", dbCredentialsParameterPath));
     try {
       return DatabaseCredentials.fromJson(
           ssm.getParameter(b -> b.name(dbCredentialsParameterPath).withDecryption(true)).parameter().value());

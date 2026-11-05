@@ -1,9 +1,9 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.ssm.SsmClient;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -25,7 +25,7 @@ import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.C
 
 /** Fetch the pinned snapshot, resolve credentials, run one Flyway command, report what happened. */
 public final class MigrationService {
-  private static final Logger LOG = LoggerFactory.getLogger(MigrationService.class);
+  private static final Logger LOG = LoggerFactory.getLogger(MigrationService.class.getName());
   private static final int DB_CONNECTION_VALID_TIMEOUT_SECONDS = 5;
   private static final long NANOS_PER_MILLI = 1_000_000;
 
@@ -65,11 +65,12 @@ public final class MigrationService {
     try {
       SnapshotZipExtractor.ExtractedSnapshot extractedSqlFiles = extractSnapshotZipFile(request, tempWorkDir);
       LOG.info(
-          "Extracted snapshot of {} bytes with {} migration SQL files",
-          extractedSqlFiles.copiedZipFileBytes(),
-          extractedSqlFiles.sqlFileCount());
+          "Extracted snapshot",
+          Map.of(
+              "bytes", extractedSqlFiles.copiedZipFileBytes(),
+              "sqlFileCount", extractedSqlFiles.sqlFileCount()));
       validateChecksum(request, extractedSqlFiles);
-      LOG.info("Snapshot checksum verified sha256={}", extractedSqlFiles.zipFileSha256());
+      LOG.info("Snapshot checksum verified", Map.of("sha256", extractedSqlFiles.zipFileSha256()));
 
       // Execution: connect and run the single Flyway command.
       FlywayRunner.Outcome flywayResult = executeFlywayCommand(request, extractedSqlFiles);
@@ -79,7 +80,7 @@ public final class MigrationService {
               (System.nanoTime() - started) / NANOS_PER_MILLI);
     } finally {
       deleteTempWorkDirQuietly(tempWorkDir);
-      LOG.debug("Deleted temporary work directory {}", tempWorkDir);
+      LOG.debug("Deleted temporary work directory", Map.of("path", tempWorkDir.toString()));
     }
   }
 
@@ -109,11 +110,11 @@ public final class MigrationService {
   // ---- Flyway execution ----
   private FlywayRunner.Outcome executeFlywayCommand(MigrationRequest request, SnapshotZipExtractor.ExtractedSnapshot extractedSqlFiles) {
     DatabaseCredentials dbCredentials = dbCredentialsSource.get(migrationConfig.dbCredentialsParameterPath());
-    // Only the sanitised URL and the user name are logged, never the password.
-    String sanitisedJdbcUrl = dbCredentials.sanitisedJdbcUrl();
-    LOG.info("Connecting to {} as {}", sanitisedJdbcUrl, dbCredentials.username());
+    LOG.info("Connecting to the database");
     validateDbConnectionAvailable(dbCredentials);
-    LOG.info("Database connection is valid, running Flyway {} with lock timeout {}", request.command().wireName(), migrationConfig.lockTimeout());
+    LOG.info(
+        "Database connection is valid, running Flyway",
+        Map.of("command", request.command().wireName(), "lockTimeout", migrationConfig.lockTimeout()));
     return flywayRunner.run(request.command(), extractedSqlFiles.migrations(), () -> dbConnectionFactory.open(dbCredentials), migrationConfig.lockTimeout());
   }
 

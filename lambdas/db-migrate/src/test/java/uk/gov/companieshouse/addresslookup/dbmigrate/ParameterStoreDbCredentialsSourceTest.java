@@ -67,7 +67,7 @@ class ParameterStoreDbCredentialsSourceTest {
   @Test
   void requestsTheParameterByPathWithDecryption() {
     when(ssmClient.getParameter(ArgumentMatchers.<Consumer<GetParameterRequest.Builder>>any()))
-        .thenReturn(parameterResponseWithValue("{\"jdbcUrl\":\"jdbc:postgresql://h/d\",\"username\":\"u\",\"password\":\"p\"}"));
+        .thenReturn(parameterResponseWithValue("{\"jdbcUrl\":\"jdbc:postgresql://h/d?sslmode=require\",\"username\":\"u\",\"password\":\"p\"}"));
 
     parameterStoreDbCredentialsSource.get(DB_CREDENTIALS_PARAMETER_PATH);
 

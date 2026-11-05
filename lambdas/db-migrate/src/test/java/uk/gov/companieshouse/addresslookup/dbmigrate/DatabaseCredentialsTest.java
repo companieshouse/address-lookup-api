@@ -105,9 +105,69 @@ class DatabaseCredentialsTest {
   void ignoresHostAndDbNameWhenAJdbcUrlIsGiven() {
     var credentials =
         DatabaseCredentials.fromJson(
-            "{\"jdbcUrl\":\"jdbc:postgresql://explicit/db\",\"host\":\"ignored\",\"username\":\"u\",\"password\":\"p\"}");
+            "{\"jdbcUrl\":\"jdbc:postgresql://explicit/db?sslmode=require\",\"host\":\"ignored\",\"username\":\"u\",\"password\":\"p\"}");
 
-    assertEquals("jdbc:postgresql://explicit/db", credentials.jdbcUrl());
+    assertEquals("jdbc:postgresql://explicit/db?sslmode=require", credentials.jdbcUrl());
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "jdbc:postgresql://h/d?sslmode=require&user=other",
+        "jdbc:postgresql://h/d?sslmode=require&password=other",
+        "jdbc:postgresql://h/d?password&sslmode=require",
+        "jdbc:postgresql://h/d?sslmode=require&PASSWORD=other",
+        "jdbc:postgresql://h/d?sslmode=require&%70assword=other",
+        "jdbc:postgresql://h/d?sslmode=require&+user=other"
+      })
+  void rejectsCredentialPropertiesInTheJdbcUrl(String jdbcUrl) {
+    var migrationException =
+        assertThrows(MigrationException.class, () -> DatabaseCredentials.fromJson(credentialsJsonWithUrl(jdbcUrl)));
+
+    assertEquals("CREDENTIALS_INVALID: jdbcUrl must not contain a username or password", migrationException.getMessage());
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "jdbc:postgresql://h/d",
+        "jdbc:postgresql://h/d?ApplicationName=x",
+        "jdbc:postgresql://h/d?sslmode=disable",
+        "jdbc:postgresql://h/d?sslmode=prefer",
+        "jdbc:postgresql://h/d?sslmode=",
+        "jdbc:postgresql://h/d?SSLMODE=require",
+        "jdbc:postgresql://h/d?sslmode=require&sslmode=disable"
+      })
+  void rejectsAJdbcUrlThatDoesNotRequireTls(String jdbcUrl) {
+    var migrationException =
+        assertThrows(MigrationException.class, () -> DatabaseCredentials.fromJson(credentialsJsonWithUrl(jdbcUrl)));
+
+    assertEquals(
+        "CREDENTIALS_INVALID: jdbcUrl must set sslmode to require, verify-ca or verify-full",
+        migrationException.getMessage());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"require", "verify-ca", "verify-full", "disable&sslmode=require"})
+  void acceptsAnEncryptingSslMode(String sslMode) {
+    var jdbcUrl = "jdbc:postgresql://h/d?sslmode=" + sslMode;
+
+    assertEquals(jdbcUrl, DatabaseCredentials.fromJson(credentialsJsonWithUrl(jdbcUrl)).jdbcUrl());
+  }
+
+  @Test
+  void reportsMalformedEncodingWithoutRevealingTheJdbcUrl() {
+    var migrationException =
+        assertThrows(
+            MigrationException.class,
+            () -> DatabaseCredentials.fromJson(credentialsJsonWithUrl("jdbc:postgresql://h/d?sslmode=require&x=s3cret%zz")));
+
+    assertEquals("CREDENTIALS_INVALID: jdbcUrl contains malformed percent-encoding", migrationException.getMessage());
+    assertFalse(migrationException.getMessage().contains("s3cret"));
+  }
+
+  private static String credentialsJsonWithUrl(String jdbcUrl) {
+    return "{\"jdbcUrl\":\"" + jdbcUrl + "\",\"username\":\"u\",\"password\":\"p\"}";
   }
 
   @Test

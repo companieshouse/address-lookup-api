@@ -3,6 +3,10 @@ package uk.gov.companieshouse.addresslookup.dbmigrate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.CREDENTIALS_INVALID;
@@ -16,6 +20,11 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
   /** The {@code user:password@} part of {@code jdbc:postgresql://user:password@host/db}. */
   private static final Pattern USER_INFO = Pattern.compile("//[^/]*@");
   private static final int DEFAULT_POSTGRES_PORT = 5432;
+  /** The driver lets these URL properties override the username and password passed to it. */
+  private static final Set<String> CREDENTIAL_PROPERTIES = Set.of("user", "password");
+  private static final String SSL_MODE_PROPERTY = "sslmode";
+  /** Without one of these the driver may connect without TLS. */
+  private static final Set<String> ENCRYPTED_SSL_MODES = Set.of("require", "verify-ca", "verify-full");
 
   public static DatabaseCredentials fromJson(String dbCredentialsJson) {
     JsonNode dbCredentialsJsonNode;
@@ -40,10 +49,45 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
     // The username and password have their own fields, so they must not be in the URL.
     if (url.contains("@"))
       throw new MigrationException(CREDENTIALS_INVALID, "jdbcUrl must not contain a username or password");
+    validateUrlProperties(url);
     return new DatabaseCredentials(
         url,
         getTextValueFromJsonField(dbCredentialsJsonNode, "username"),
         getTextValueFromJsonField(dbCredentialsJsonNode, "password"));
+  }
+
+  /**
+   * Checks the connection properties after {@code ?}, for example {@code ?sslmode=require}. Rejects
+   * {@code user} or {@code password} in any letter case or percent-encoding, and requires an
+   * encrypting {@code sslmode}. The driver uses the last {@code sslmode} given, so this does too.
+   *
+   * @throws MigrationException CREDENTIALS_INVALID, without the URL, which may contain a secret
+   */
+  private static void validateUrlProperties(String url) {
+    int propertiesStart = url.indexOf('?');
+    String sslMode = null;
+    if (propertiesStart >= 0) {
+      for (String property : url.substring(propertiesStart + 1).split("&")) {
+        String[] nameAndValue = property.split("=", 2);
+        String name = decodeUrlComponent(nameAndValue[0]);
+        String value = nameAndValue.length > 1 ? decodeUrlComponent(nameAndValue[1]) : "";
+        if (CREDENTIAL_PROPERTIES.contains(name.strip().toLowerCase(Locale.ROOT)))
+          throw new MigrationException(CREDENTIALS_INVALID, "jdbcUrl must not contain a username or password");
+        if (name.equals(SSL_MODE_PROPERTY)) sslMode = value;
+      }
+    }
+    if (sslMode == null || !ENCRYPTED_SSL_MODES.contains(sslMode))
+      throw new MigrationException(
+          CREDENTIALS_INVALID, "jdbcUrl must set sslmode to require, verify-ca or verify-full");
+  }
+
+  private static String decodeUrlComponent(String component) {
+    try {
+      return URLDecoder.decode(component, StandardCharsets.UTF_8);
+    } catch (IllegalArgumentException e) {
+      // The decoder message quotes the input, which may contain a secret.
+      throw new MigrationException(CREDENTIALS_INVALID, "jdbcUrl contains malformed percent-encoding");
+    }
   }
 
   /**

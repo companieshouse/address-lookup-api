@@ -15,7 +15,7 @@
     <packaging>jar</packaging>
 
     <dependencies>
-        <!-- Provides SLF4J (and its logging implementation) transitively -->
+        <!-- Provides CH structured-logging transitively, as for the other lambdas -->
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>address-lookup-lambda-shared</artifactId>

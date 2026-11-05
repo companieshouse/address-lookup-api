@@ -24,6 +24,7 @@
         <module>lambdas/unzip</module>
         <module>lambdas/import</module>
         <module>lambdas/db-bootstrap</module>
+        <module>lambdas/db-migrate</module>
     </modules>
 
     <properties>

@@ -73,7 +73,7 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
         String value = nameAndValue.length > 1 ? decodeUrlComponent(nameAndValue[1]) : "";
         if (CREDENTIAL_PROPERTIES.contains(name.strip().toLowerCase(Locale.ROOT)))
           throw new MigrationException(CREDENTIALS_INVALID, "jdbcUrl must not contain a username or password");
-        if (name.equals(SSL_MODE_PROPERTY)) sslMode = value;
+        if (nameAndValue[0].equals(SSL_MODE_PROPERTY)) sslMode = value;
       }
     }
     if (sslMode == null || !ENCRYPTED_SSL_MODES.contains(sslMode))

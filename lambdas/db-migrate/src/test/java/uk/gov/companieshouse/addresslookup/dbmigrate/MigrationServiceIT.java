@@ -22,6 +22,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -31,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Runs the real {@code database/migrations} (zipped as the gather-snapshot job zips them) and
@@ -190,6 +195,46 @@ class MigrationServiceIT {
       reader.rollback();
     }
     assertEquals(List.of("V2__alter.sql"), run(next, Command.MIGRATE).get("applied"), "a re-run succeeds");
+  }
+
+  @Test
+  void twoConcurrentMigrationsApplyABlockedMigrationExactlyOnce() throws Exception {
+    run(fixture(Map.of("V1__table.sql", "CREATE TABLE shared_table (id int);")), Command.MIGRATE);
+    byte[] next =
+        fixture(
+            Map.of(
+                "V1__table.sql", "CREATE TABLE shared_table (id int);",
+                "V2__alter.sql", "ALTER TABLE public.shared_table ADD COLUMN extra int;"));
+
+    try (Connection reader = connect(database);
+        var readerStatement = reader.createStatement();
+        ExecutorService runners = Executors.newFixedThreadPool(2)) {
+      reader.setAutoCommit(false);
+      readerStatement.execute("LOCK TABLE public.shared_table IN ACCESS SHARE MODE");
+
+      Future<Map<String, Object>> firstRun = runners.submit(() -> run(next, Command.MIGRATE));
+      awaitCountAbove(
+          "SELECT count(*) FROM pg_locks l JOIN pg_database d ON d.oid = l.database"
+              + " WHERE d.datname = current_database() AND l.locktype = 'relation' AND NOT l.granted",
+          0);
+
+      String advisoryLockAttempts =
+          "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()"
+              + " AND pid <> pg_backend_pid() AND query LIKE '%pg_try_advisory_lock%'";
+      int advisoryLockAttemptsBeforeSecondRun = count(advisoryLockAttempts);
+      Future<Map<String, Object>> secondRun = runners.submit(() -> run(next, Command.MIGRATE));
+      awaitCountAbove(advisoryLockAttempts, advisoryLockAttemptsBeforeSecondRun);
+
+      reader.rollback();
+      var firstResult = firstRun.get(60, TimeUnit.SECONDS);
+      var secondResult = secondRun.get(60, TimeUnit.SECONDS);
+
+      assertEquals("SUCCESS", firstResult.get("status"));
+      assertEquals("SUCCESS", secondResult.get("status"));
+      assertEquals(List.of("V2__alter.sql"), firstResult.get("applied"));
+      assertEquals(List.of(), secondResult.get("applied"), "the second run waits and finds nothing pending");
+    }
+    assertEquals(1, count("SELECT count(*) FROM flyway_schema_history WHERE version = '2' AND success"));
   }
 
   @Test
@@ -374,6 +419,21 @@ class MigrationServiceIT {
       rows.next();
       return rows.getInt(1);
     }
+  }
+
+  /** Polls the count query every 50 ms for up to 30 seconds until it is above the baseline. */
+  private void awaitCountAbove(String countSql, int baseline) throws SQLException {
+    try (var probe = connect(database);
+        var statement = probe.createStatement()) {
+      for (int attempt = 0; attempt < 600; attempt++) {
+        try (var rows = statement.executeQuery(countSql)) {
+          rows.next();
+          if (rows.getInt(1) > baseline) return;
+        }
+        statement.execute("SELECT pg_sleep(0.05)");
+      }
+    }
+    fail("Timed out waiting for: " + countSql);
   }
 
   private boolean schemaExists(String schema) throws SQLException {

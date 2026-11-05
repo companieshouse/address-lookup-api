@@ -62,6 +62,16 @@ class DatabaseCredentialsTest {
   }
 
   @Test
+  void sanitisesAPasswordThatContainsAnAtSign() {
+    var credentials =
+        new DatabaseCredentials(
+            "jdbc:postgresql://owner:prefix@secret@db.local:5432/address_lookup", "u", "p");
+
+    assertEquals("jdbc:postgresql://db.local:5432/address_lookup", credentials.sanitisedJdbcUrl());
+    assertFalse(credentials.toString().contains("secret"));
+  }
+
+  @Test
   void neverRendersThePassword() {
     var credentials = new DatabaseCredentials("jdbc:postgresql://h/d", "u", "s3cret");
     assertFalse(credentials.toString().contains("s3cret"));

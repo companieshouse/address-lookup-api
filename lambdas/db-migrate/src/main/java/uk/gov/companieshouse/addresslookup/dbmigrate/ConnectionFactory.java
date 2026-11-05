@@ -29,10 +29,10 @@ public interface ConnectionFactory {
       try {
         return DriverManager.getConnection(credentials.jdbcUrl(), props);
       } catch (SQLException e) {
+        // The driver message and cause can include the full URL, so they are left out.
         throw new MigrationException(
             DATABASE_UNAVAILABLE,
-            "Cannot connect to " + credentials.sanitisedJdbcUrl() + ": " + e.getMessage(),
-            e);
+            "Cannot connect to " + credentials.sanitisedJdbcUrl() + " (SQLState " + e.getSQLState() + ")");
       }
     };
   }

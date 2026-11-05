@@ -14,7 +14,7 @@ import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.C
 public record DatabaseCredentials(String jdbcUrl, String username, String password) {
   private static final ObjectMapper JSON = new ObjectMapper();
   /** The {@code user:password@} part of {@code jdbc:postgresql://user:password@host/db}. */
-  private static final Pattern USER_INFO = Pattern.compile("//[^/@]*@");
+  private static final Pattern USER_INFO = Pattern.compile("//[^/]*@");
   private static final int DEFAULT_POSTGRES_PORT = 5432;
 
   public static DatabaseCredentials fromJson(String dbCredentialsJson) {

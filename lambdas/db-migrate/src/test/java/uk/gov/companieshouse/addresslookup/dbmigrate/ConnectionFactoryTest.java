@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -31,6 +32,19 @@ class ConnectionFactoryTest {
     var e = assertThrows(MigrationException.class, () -> connectionFactory.open(credentials));
 
     assertFalse(e.getMessage().contains("urlsecret"));
+  }
+
+  @Test
+  void malformedJdbcUrlDoesNotRevealThePasswordInTheMessageOrTheCause() {
+    var credentials =
+        new DatabaseCredentials("jdbc:postgresql://owner:urlsecret@127.0.0.1:notaport/address_lookup", "owner", "p");
+
+    var e = assertThrows(MigrationException.class, () -> connectionFactory.open(credentials));
+
+    assertEquals(MigrationException.Code.DATABASE_UNAVAILABLE, e.code());
+    assertTrue(e.getMessage().contains("(SQLState "));
+    assertFalse(e.getMessage().contains("urlsecret"));
+    assertNull(e.getCause());
   }
 
   @Test

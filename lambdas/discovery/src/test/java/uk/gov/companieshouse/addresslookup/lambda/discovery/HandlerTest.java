@@ -46,6 +46,7 @@ class HandlerTest {
     @Test
     void shouldReturnReleaseIdForSuccessfulDiscovery() throws Exception {
 
+        Mockito.when(context.getAwsRequestId()).thenReturn("request-id");
         Mockito.when(discoveryService.discover(TEST_DETAILS))
                 .thenReturn(TEST_RESPONSE_ID);
 
@@ -89,7 +90,7 @@ class HandlerTest {
             response = handler.handleRequest(testEvent, context);
         } catch (Exception e) {
             assertInstanceOf(RuntimeException.class, e);
-            assertTrue(e.getMessage().startsWith("discovery failed; durable state allows retry, event"));
+            assertTrue(e.getMessage().startsWith("Discovery failed; durable state allows retry"));
             assertTrue(e.getCause().getMessage().contains(EXCEPTION_TEXT));
         }
 

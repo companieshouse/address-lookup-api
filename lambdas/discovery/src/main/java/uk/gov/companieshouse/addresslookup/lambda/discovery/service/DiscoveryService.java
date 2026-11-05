@@ -4,6 +4,7 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.detail;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sanitizeUrl;
 import static uk.gov.companieshouse.release.model.SupplyType.COU;
 import static uk.gov.companieshouse.release.model.SupplyType.FULL;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -12,8 +13,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.annotations.NotNull;
@@ -30,6 +29,8 @@ import uk.gov.companieshouse.addresslookup.lambda.discovery.model.VersionCursor;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
 import uk.gov.companieshouse.release.model.DatasetDefault;
 import uk.gov.companieshouse.release.model.DetailType;
 import uk.gov.companieshouse.release.model.Download;
@@ -53,7 +54,7 @@ import java.util.UUID;
 @Component
 public final class DiscoveryService {
 
-    private static final Logger LOG = LoggerFactory.getLogger(DiscoveryService.class);
+    private static final Logger LOG = LoggerFactory.getLogger(DiscoveryService.class.getName());
 
     private final S3Client s3Client;
     private final OsClient osClient;
@@ -67,6 +68,7 @@ public final class DiscoveryService {
 
     private static final String DATA_PACKAGE_FIELD = "data_package";
     private static final String VERSION_ID_FIELD = "version_id";
+    private static final String RELEASE_ID_FIELD = "release_id";
     private static final String CURSOR_KEY = "control/address-release/active.json";
     private static final String PATH_KEY_STUB = "acquisitions/%s/%s.json";
 
@@ -100,7 +102,7 @@ public final class DiscoveryService {
 
         SupplyType mode = deriveMode(input);
 
-        LOG.debug("Start Discovery, mode [{}]", mode);
+        LOG.debug("Starting discovery", Map.of("mode", mode.name()));
 
         String urlPackageVersionData = "";
         VersionCursor cursor = null;
@@ -123,7 +125,7 @@ public final class DiscoveryService {
 
             urlPackageVersionData = getNextVersionUrl(cursor);
             if (urlPackageVersionData == null) {
-                LOG.error("For mode [{}], failed to get next Version URL", mode);
+                LOG.error("Failed to get next version URL", Map.of("mode", mode.name()));
                 return "No Next Version URL";
             }
         }
@@ -132,7 +134,8 @@ public final class DiscoveryService {
 
         check(packageVersionData != null, String.format("No Package Version Data for [%s]", urlPackageVersionData));
 
-        LOG.debug("Returned package version data: [{}]", packageVersionData);
+        LOG.debug("Retrieved package version data",
+                Map.of(VERSION_ID_FIELD, packageVersionData.id()));
 
         Map<DatasetDefault, DownloadDoublet> datasetDownloadsMap = verifyPackageVersionDataAndReturnDownloads(packageVersionData);
 
@@ -140,17 +143,17 @@ public final class DiscoveryService {
 
         LocalDate targetDate = calculateTargetDateIfThereIsAValidOne(orderSummaries);
 
-        LOG.debug("Target Date: [{}]", targetDate);
-
         if (targetDate == null) {
             return NO_COMMON_CONTIGUOUS_RELEASE_RESPONSE;
         }
+        LOG.debug("Calculated target date", Map.of("target_date", targetDate.toString()));
 
         ReleaseManifest releaseManifest = generateReleaseManifest(datasetDownloadsMap, packageVersionData,
                 packageId, orderSummaries, targetDate,
                 cursor != null ? cursor.lastProcessedDate() : null);
 
-        LOG.debug("Generated Release Manifest: [{}]", releaseManifest.json());
+        LOG.debug("Generated release manifest",
+                Map.of(RELEASE_ID_FIELD, releaseManifest.id().toString()));
 
         final String planKey = saveManifestReturnPlanKey(releaseManifest);
 
@@ -164,7 +167,7 @@ public final class DiscoveryService {
         saveOrUpdateCursorToS3Bucket(cursor);
 
         String releaseId = releaseManifest.id().toString();
-        LOG.info("Discovery completed successfully, Release ID [{}]", releaseId);
+        LOG.info("Discovery completed successfully", Map.of(RELEASE_ID_FIELD, releaseId));
 
         return releaseId;
     }
@@ -204,8 +207,9 @@ public final class DiscoveryService {
                             .build(),
                     RequestBody.fromString(JSON.writeValueAsString(payload)));
         } catch (S3Exception e) {
-            String error  = "Failed to save to S3 Bucket [" + properties.sourceBucket() + "] key [" + key + "], error: ";
-            LOG.error(error,e);
+            LOG.error("Failed to save to S3",
+                    e,
+                    Map.of("bucket", properties.sourceBucket(), "key", key));
             if (e.statusCode() != 412) throw e;
         }
     }
@@ -222,7 +226,8 @@ public final class DiscoveryService {
     }
 
     private PackageVersionData getPackageVersionData(String url) {
-        LOG.info("Discovery Lambda, Package Version Data URL: {}", url);
+        LOG.info("Retrieving package version data",
+                Map.of("url", sanitizeUrl(url)));
         return retrieveOSData(url, PackageVersionData.class);
     }
 
@@ -269,7 +274,8 @@ public final class DiscoveryService {
         String url = entry.getValue().orderSummaryDownload.url();
         OrderSummary orderSummary = retrieveOSData(url, OrderSummary.class);
         if (orderSummary == null) {
-            LOG.error("Failed to retrieve Order Summary data for URL [{}]", url);
+            LOG.error("Failed to retrieve order summary",
+                    Map.of("url", sanitizeUrl(url)));
             return;
         }
         verifyOrderSummary(orderSummary, entry.getKey());
@@ -381,7 +387,8 @@ public final class DiscoveryService {
     private void publishDownloadCommands(String planKey, String dataset) throws DiscoveryLambdaException {
         try {
             commands.send(DetailType.DOWNLOAD.name(), planKey, dataset);
-            LOG.info("Published command DOWNLOAD for dataset [{}], planKey [{}]", dataset, planKey);
+            LOG.info("Published download command",
+                    Map.of("dataset", dataset, "plan_key", planKey));
         } catch (Throwable throwable) {
             throw new DiscoveryLambdaException("An exception occurred whilst attempting to send a DOWNLOAD command to the EventBridge", throwable);
         }
@@ -392,11 +399,13 @@ public final class DiscoveryService {
         try {
             treeNode = osClient.json(url);
         } catch (Exception e) {
-            LOG.error("Failed to get data from OS for URL [{}]", url);
+            LOG.error("Failed to get data from OS",
+                    e,
+                    Map.of("url", sanitizeUrl(url)));
             throw new DiscoveryLambdaException(e);
         }
         if (treeNode == null || treeNode.size() == 0) {
-            LOG.error("Failed to get data from OS for URL [{}]", url);
+            LOG.error("OS returned no data", Map.of("url", sanitizeUrl(url)));
             return null;
         }
         T t;
@@ -405,8 +414,9 @@ public final class DiscoveryService {
             t = JSON.treeToValue(treeNode,
                     clazz);
         } catch (JsonProcessingException e) {
-            LOG.error("Error parsing returned OS data to class [{}], returned Data:\n{}",
-                    clazz.getName(), treeNode);
+            LOG.error("Failed to parse OS response",
+                    e,
+                    Map.of("response_type", clazz.getName(), "url", sanitizeUrl(url)));
             throw new DiscoveryLambdaException(e);
         }
 

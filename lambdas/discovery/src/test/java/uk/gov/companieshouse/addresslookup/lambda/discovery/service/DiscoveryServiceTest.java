@@ -39,6 +39,7 @@ import uk.gov.companieshouse.release.model.ReleaseJson;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @ExtendWith(MockitoExtension.class)
@@ -223,7 +224,13 @@ class DiscoveryServiceTest {
         try (MockedStatic<UUID> mockedUUID = mockStatic(UUID.class)) {
             mockedUUID.when(() -> UUID.nameUUIDFromBytes(any())).thenReturn(testUUID);
             mockedUUID.when(() -> UUID.fromString(anyString())).thenCallRealMethod();
-            releaseId = discoveryService.discover(FULL_REQUEST_JSON);
+            releaseId =
+                    discoveryService.discover(
+                            Map.<String, Object>of(
+                                    "mode",
+                                    "FULL",
+                                    "versions",
+                                    Map.of("data_package", "20780", "version_id", "130989")));
         }
 
         verify(osClient).json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/130989");

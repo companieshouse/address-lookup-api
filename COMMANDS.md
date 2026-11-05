@@ -241,6 +241,12 @@ Direct Maven equivalents from the root are `mvn -N spotless:apply` and
 `mvn -N spotless:check`. The latter uses Maven's usual failure status and
 truncated diagnostics, not the helper's complete path list or 255 contract.
 
+### Editor integration
+
+See [EDITOR.md](EDITOR.md) for VS Code, Vim and IntelliJ setup and usage.
+All editor actions use the existing Spotless helper and root `pom.xml`;
+there is no separate formatting configuration or automatic format-on-save.
+
 ### Optional pre-commit hook
 
 `scripts/git-hooks/pre-commit` runs `make tidy FILE=.` before a commit. It is opt-in:

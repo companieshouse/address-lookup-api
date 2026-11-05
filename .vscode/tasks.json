@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Spotless: format current Java file",
+      "type": "process",
+      "command": "bash",
+      "args": ["${workspaceFolder}/scripts/spotless.sh", "tidy"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "FILE": "${file}"
+        }
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always"
+      }
+    }
+  ]
+}

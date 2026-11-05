@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${SKIP_FORMAT:-false}" == true ]]; then
+    exit 0
+fi
+
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
 

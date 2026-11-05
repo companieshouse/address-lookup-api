@@ -285,19 +285,18 @@ Command-line `name=value` overrides Make variables, not Maven properties.
 |---|---|
 | `make all version=1.2.3` | Same as `build`. |
 | `make build version=1.2.3` | `versions:set` without backup POMs, API/required-module package with tests skipped, copy API JAR to root `address-lookup-api.jar`. Changes POM versions. |
-| `make clean` | Maven clean, remove generated API/Liquibase/DB-bootstrap/schema ZIPs, root API JAR, `./build-*`, and `./build.log`. Does not stop services or remove `.local-run/`. |
-| `make test` | Runs `test-integration` then `test-unit` in a serial invocation; not every `test-*` target. Currently blocked by integration selection's absent Liquibase module. |
-| `make test-integration` | Selects API and `lambdas/liquibase-schema-migrator` plus dependencies, requests `integration-test verify`, `-Dskip.unit.tests=true`, and `failsafe:verify`. The Liquibase module is absent in this checkout. |
+| `make clean` | Maven clean, remove generated API/DB-bootstrap/DB-migrate/schema ZIPs, root API JAR, `./build-*`, and `./build.log`. Does not stop services or remove `.local-run/`. |
+| `make test` | Runs `test-integration` then `test-unit` in a serial invocation; not every `test-*` target. |
+| `make test-integration` | Selects API plus dependencies, requests `integration-test verify`, `-Dskip.unit.tests=true`, and `failsafe:verify`. Docker required for Testcontainers. |
 | `make test-flyway` | Feed-layout shell checks then API/required-module `DatabaseFeedIT` via Failsafe. Requires Docker/PostGIS Testcontainers. |
 | `make test-db-bootstrap` | DB-bootstrap/required-module unit tests, integration tests skipped. |
 | `make test-db-bootstrap-integration` | DB-bootstrap/required-module `verify` selecting `DatabaseBootstrapIT`; also runs unit tests. Docker required. |
-| `make test-liquibase` | Prints that validation is disabled. A successful exit is not test evidence. |
 | `make m2-check` | Runs Perl helper; may prompt for a JFrog token/create `~/.m2/settings.xml`, sets permissions to `0600`, validates Git identity, then runs the API dependency-tree goal. Not read-only. |
 | `make build-container version=1.2.3` | Runs `build`, then `docker build .`; currently lacks a root Dockerfile. No explicit image tag. |
 | `make docker-image` | Cleans first, then Maven package/Jib `dockerBuild` with test-skip properties. Uses configured private ECR base image and local daemon output tag `address-lookup-api:latest` under its configured registry name. Does not push/deploy or set POM versions. |
 | `make package version=1.2.3` | Sets POM versions, builds API, ZIPs `address-lookup-api.jar` at archive root into `address-lookup-api-1.2.3.zip`; removes temporary build directory. |
-| `make package-liquibase-lambda version=1.2.3` | Intended Lambda package; sets POM versions and copies expected `-lambda.jar` to `.zip`. Blocked by absent Liquibase module. |
 | `make package-db-bootstrap-lambda version=1.2.3` | Sets POM versions, packages DB-bootstrap and dependencies, copies `-lambda.jar` to `address-lookup-db-bootstrap-1.2.3.zip`. |
+| `make package-db-migrate-lambda version=1.2.3` | Sets POM versions, packages DB-migrate and dependencies, copies `-lambda.jar` to `address-lookup-db-migrate-1.2.3.zip`. |
 | `make package-db-schema version=1.2.3` | Replaces same-version `address-lookup-db-schema-1.2.3.zip` with production `migrations/` only, using `zip -X`; no Java build, SQL version rewriting, migration application, or deployment. Excludes local fixtures. |
 | `make deps` | `brew install kafka` only; not a full development setup. |
 | `make dependency-check version=1.2.3` | Runs `build` and `package`, Maven install with tests/integration tests skipped, then external dependency checker. Changes versions/local Maven repository. |
@@ -311,10 +310,11 @@ Command-line `name=value` overrides Make variables, not Maven properties.
 | `version` | `"unversioned"` | Build and package targets, including their dependents; not Jib image tagging. |
 | `api_module` | `address-lookup-api` | API Maven selections and artifact copy paths, not reactor-wide `test-unit`. |
 | `artifact_name` | `address-lookup-api` | API artifact paths and cleanup; override must match Maven filenames. |
-| `liquibase_lambda_module` | `lambdas/liquibase-schema-migrator` | Integration selection and Liquibase packaging; absent by default. |
-| `liquibase_lambda_artifact` | `address-lookup-liquibase-lambda` | Liquibase artifact paths/cleanup. |
 | `db_bootstrap_lambda_module` | `lambdas/db-bootstrap` | DB-bootstrap tests and packaging. |
 | `db_bootstrap_lambda_artifact` | `address-lookup-db-bootstrap` | Bootstrap artifact paths/cleanup. |
+| `db_migrate_lambda_module` | `lambdas/db-migrate` | DB-migrate packaging. |
+| `db_migrate_lambda_jar` | `address-lookup-lambda-db-migrate` | DB-migrate Maven JAR name. |
+| `db_migrate_lambda_artifact` | `address-lookup-db-migrate` | DB-migrate artifact paths/cleanup. |
 | `db_schema_artifact` | `address-lookup-db-schema` | Schema archive name/cleanup. |
 | `db_schema_root` | `database` | Schema packaging source directory. |
 | `db_schema_contents` | `migrations` | Paths inside schema archive. Keep production default; adding `local` would ship fixtures. |
@@ -426,12 +426,10 @@ The disposable container/network and smoke-test database were removed.
 | `m2-check` | Passed with existing Maven settings; no interactive credential creation was exercised. |
 | `lint`, `lint/docker-compose` | Passed actual Compose configuration validation. |
 | `deps` | Passed; Homebrew installed Kafka 4.4.0 and installed/upgraded its dependencies. The Kafka service was not started. |
-| `test-integration`, `test`, `package-liquibase-lambda` | Failed because `lambdas/liquibase-schema-migrator` is absent. `test` stopped before its unit-test prerequisite; unit tests passed separately. |
 | `test-flyway` | Layout checks passed, but `DatabaseFeedIT` failed at `assertNullCountryFixture` (line 486): expected `null`, received `Scotland`. This is a real test failure, not a Docker availability error. |
 | `build-container` | API build passed; Docker build failed because the root `Dockerfile` is absent. |
 | `docker-image` | Failed before image construction: Maven could not resolve the `jib` plugin prefix in the selected reactor/configured repositories. Private ECR access was therefore not exercised. |
 | `dependency-check` | Build, package, and Maven install passed; the scan failed because `dependency-check-runner` is unavailable. No vulnerability-scan result was produced. |
-| `test-liquibase` | Exited zero after printing the disabled/TODO message; no validation ran. |
 | `db-reset` | Confirmation refusal verified against real tooling. The destructive confirmed path remains stub-tested only; the existing local database was not dropped. |
 | `sonar-pr` | Real branch-identity guard rejected PR 83's different source branch before submission. No open PR for the commands branch was found; successful remote PR analysis remains unverified. |
 | `sonar` | Not submitted: feature-branch analysis could replace the project's default-branch results. |

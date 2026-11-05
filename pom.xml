@@ -152,6 +152,11 @@
                 <version>${commons-lang-version}</version>
             </dependency>
             <dependency>
+                <groupId>uk.gov.companieshouse</groupId>
+                <artifactId>structured-logging</artifactId>
+                <version>${structured-logging.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter</artifactId>
                 <version>${junit-jupiter.version}</version>
@@ -242,9 +247,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven-surefire-plugin.version}</version>
                 <configuration>
-                    <argLine>-Dfile.encoding=UTF-8</argLine>
-                    <argLine>${surefireArgLine}</argLine>
-                    <argLine>${argLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
+                    <argLine>@{argLine} -Dfile.encoding=UTF-8 -javaagent:${org.mockito:mockito-core:jar}</argLine>
                     <skipTests>${skip.unit.tests}</skipTests>
                 </configuration>
             </plugin>

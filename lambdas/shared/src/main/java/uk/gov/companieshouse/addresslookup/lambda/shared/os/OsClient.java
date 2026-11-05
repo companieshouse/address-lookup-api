@@ -4,9 +4,9 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sanitizeUrl;
 import com.fasterxml.jackson.databind.JsonNode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -15,11 +15,12 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Map;
 
 
 /** API key is sent only to api.os.uk, never forwarded to the signed download host. */
 public final class OsClient {
-  private static final Logger LOG = LoggerFactory.getLogger(OsClient.class);
+  private static final Logger LOG = LoggerFactory.getLogger(OsClient.class.getName());
 
   private final HttpClient http;
   private final String key;
@@ -69,11 +70,10 @@ public final class OsClient {
       URI next = uri.resolve(r.headers().firstValue("location").orElseThrow());
       String sanitizedFromUrl = sanitizeUrl(uri.toString());
       String sanitizedToUrl = sanitizeUrl(next.toString());
-      LOG.info(
-          "OS download redirect followed status={} from={} to={}",
-          r.statusCode(),
-          sanitizedFromUrl,
-          sanitizedToUrl);
+      LOG.info("OS download redirect followed",
+          Map.of("status", r.statusCode(),
+              "from", sanitizedFromUrl,
+              "to", sanitizedToUrl));
       uri = next;
     }
     throw new IOException("Too many redirects");

@@ -138,6 +138,7 @@ final class ExtractionServiceTest {
     @Test
     void waitsForPendingZipScan() throws Exception {
         objects.put(stored(SOURCE, ZIP_KEY), validZip());
+        when(context.getAwsRequestId()).thenReturn("request-id");
         when(s3.getObjectTagging(any(GetObjectTaggingRequest.class)))
                 .thenReturn(GetObjectTaggingResponse.builder().build());
 

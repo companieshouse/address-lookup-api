@@ -158,7 +158,9 @@ no `dataset` field. As with other files, invalid manifest inputs publish `INVALI
 For invalid input, `releaseId` and `dataset` are omitted if the key cannot be parsed.
 The object contains the available bucket, key and version ID fields even if parsing fails;
 missing fields are omitted, and `object` is omitted when none are available.
-Scan routing logs also include `objectUri` for correlation in CloudWatch.
+Scan routing logs ("Scan routed") include `event_id`, `release_id`, `dataset`, `file_type`,
+`scan_result`, `version_id`, `decision` and `rejection_code` for CloudWatch correlation;
+`objectUri` is not included in the log context.
 No `ExtractRequested`, `DatasetReady`, `ReceiptReady` or `ManifestReady`
 is published for a rejected input.
 Duplicate deliveries can publish the same event again. A failed publication throws so the

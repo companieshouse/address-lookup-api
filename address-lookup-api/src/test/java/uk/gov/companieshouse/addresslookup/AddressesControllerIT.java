@@ -1,23 +1,24 @@
 package uk.gov.companieshouse.addresslookup;
 
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import static uk.gov.companieshouse.logging.util.LogContextProperties.REQUEST_ID;
 
 import org.junit.jupiter.api.Test;
-import java.util.stream.Stream;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.stream.Stream;
+
 /**
  * Integration tests for the /addresses endpoint.
  * Tests the full address lookup response with total results and address list.
  */
-
 class AddressesControllerIT extends AddressTestBaseIT {
 
     // ========================
@@ -26,9 +27,11 @@ class AddressesControllerIT extends AddressTestBaseIT {
 
     @Test
     void shouldReturnAddressesGBPostcode() throws Exception {
-        this.mockMvc.perform(get("/address-lookup-api/addresses")
-                        .queryParam("postcode", "WF27QD")
-                        .header(REQUEST_ID.value(), "request_id"))
+        this.mockMvc
+                .perform(
+                        get("/address-lookup-api/addresses")
+                                .queryParam("postcode", "WF27QD")
+                                .header(REQUEST_ID.value(), "request_id"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalResults").value(1))
                 .andExpect(jsonPath("$.addresses[0].udprn").value(26394069))
@@ -39,9 +42,11 @@ class AddressesControllerIT extends AddressTestBaseIT {
     @MethodSource("addresses")
     void shouldReturnAddressesIslPostcode(
             String postcode, String expectedPostcode, String expectedPostTown) throws Exception {
-        this.mockMvc.perform(get("/address-lookup-api/addresses")
-                        .queryParam("postcode", postcode)
-                        .header(REQUEST_ID.value(), "request_id"))
+        this.mockMvc
+                .perform(
+                        get("/address-lookup-api/addresses")
+                                .queryParam("postcode", postcode)
+                                .header(REQUEST_ID.value(), "request_id"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalResults").value(greaterThan(1)))
                 .andExpect(jsonPath("$.addresses[0].postcode").value(expectedPostcode))
@@ -53,18 +58,14 @@ class AddressesControllerIT extends AddressTestBaseIT {
     // ========================
 
     @ParameterizedTest
-    @ValueSource(strings = {
-        "",
-        "   ",
-        "ZZ1 1ZZ",
-        "INVALID",
-        "A VERY LONG POSTCODE",
-        "INVALID@POSTCODE"
-    })
+    @ValueSource(
+            strings = {"", "   ", "ZZ1 1ZZ", "INVALID", "A VERY LONG POSTCODE", "INVALID@POSTCODE"})
     void shouldReturnEmptyResultsForUnknownPostcode(String postcode) throws Exception {
-        this.mockMvc.perform(get("/address-lookup-api/addresses")
-                        .queryParam("postcode", postcode)
-                        .header(REQUEST_ID.value(), "request_id"))
+        this.mockMvc
+                .perform(
+                        get("/address-lookup-api/addresses")
+                                .queryParam("postcode", postcode)
+                                .header(REQUEST_ID.value(), "request_id"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalResults").value(0))
                 .andExpect(jsonPath("$.addresses").isArray())

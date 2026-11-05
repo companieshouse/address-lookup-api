@@ -1,22 +1,25 @@
 package uk.gov.companieshouse.addresslookup.dbbootstrap;
 
-import org.junit.jupiter.api.Test;
-
-import java.time.Duration;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+import java.util.Map;
+
 class BootstrapConfigurationTest {
 
     @Test
     void readsTheEnvironmentWithDefaults() {
-        BootstrapConfiguration config = BootstrapConfiguration.fromEnvironment(Map.of(
-                "MASTER_CREDENTIALS_PARAMETER", "/address-lookup/cidev/db/master",
-                "SCHEMA_OWNER_CREDENTIALS_PARAMETER", "/address-lookup/cidev/db/schema-owner"));
+        BootstrapConfiguration config =
+                BootstrapConfiguration.fromEnvironment(
+                        Map.of(
+                                "MASTER_CREDENTIALS_PARAMETER", "/address-lookup/cidev/db/master",
+                                "SCHEMA_OWNER_CREDENTIALS_PARAMETER",
+                                        "/address-lookup/cidev/db/schema-owner"));
 
         assertEquals("/address-lookup/cidev/db/master", config.masterParameter());
         assertEquals("/address-lookup/cidev/db/schema-owner", config.schemaOwnerParameter());
@@ -26,9 +29,17 @@ class BootstrapConfigurationTest {
 
     @Test
     void canSkipTlsChecks() {
-        BootstrapConfiguration config = BootstrapConfiguration.fromEnvironment(Map.of(
-                "MASTER_CREDENTIALS_PARAMETER", "m", "SCHEMA_OWNER_CREDENTIALS_PARAMETER", "o",
-                "VERIFY_TLS", "false", "CONNECT_TIMEOUT_SECONDS", "3"));
+        BootstrapConfiguration config =
+                BootstrapConfiguration.fromEnvironment(
+                        Map.of(
+                                "MASTER_CREDENTIALS_PARAMETER",
+                                "m",
+                                "SCHEMA_OWNER_CREDENTIALS_PARAMETER",
+                                "o",
+                                "VERIFY_TLS",
+                                "false",
+                                "CONNECT_TIMEOUT_SECONDS",
+                                "3"));
 
         assertFalse(config.verifyTls());
         assertEquals(Duration.ofSeconds(3), config.timeout());
@@ -38,7 +49,8 @@ class BootstrapConfigurationTest {
     void requiresBothParameters() {
         Map<String, String> environment = Map.of("MASTER_CREDENTIALS_PARAMETER", "m");
 
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(
+                IllegalArgumentException.class,
                 () -> BootstrapConfiguration.fromEnvironment(environment));
     }
 }

@@ -18,9 +18,10 @@ public final class ParameterStoreCredentials implements Function<String, Databas
 
     @Override
     public DatabaseCredentials apply(String parameterName) {
-        String value = ssm.getParameter(request -> request.name(parameterName).withDecryption(true))
-                .parameter()
-                .value();
+        String value =
+                ssm.getParameter(request -> request.name(parameterName).withDecryption(true))
+                        .parameter()
+                        .value();
         try {
             return DatabaseCredentials.fromJson(value);
         } catch (IllegalArgumentException e) {

@@ -2,6 +2,7 @@ package uk.gov.companieshouse.addresslookup.mapper;
 
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+
 import uk.gov.companieshouse.addresslookup.entity.RoyalMailAddressLookup;
 import uk.gov.companieshouse.addresslookup.model.LegacyAddress;
 
@@ -13,14 +14,26 @@ import java.util.stream.Stream;
 public interface LegacyAddressMapper {
 
     @Mapping(target = "premise", expression = "java(toPremise(address))")
-    @Mapping(target = "addressLine1", expression = "java(join(address.getDependentThoroughfare(), address.getThoroughfare()))")
-    @Mapping(target = "addressLine2", expression = "java(join(address.getDoubleDependentLocality(), address.getDependentLocality()))")
+    @Mapping(
+            target = "addressLine1",
+            expression =
+                    "java(join(address.getDependentThoroughfare(), address.getThoroughfare()))")
+    @Mapping(
+            target = "addressLine2",
+            expression =
+                    "java(join(address.getDoubleDependentLocality(), address.getDependentLocality()))")
     @Mapping(target = "country", expression = "java(toLegacyCountry(address.getCountry()))")
     LegacyAddress toLegacyAddress(RoyalMailAddressLookup address);
 
     @Mapping(target = "premise", expression = "java((String) null)")
-    @Mapping(target = "addressLine1", expression = "java(join(address.getDependentThoroughfare(), address.getThoroughfare()))")
-    @Mapping(target = "addressLine2", expression = "java(join(address.getDoubleDependentLocality(), address.getDependentLocality()))")
+    @Mapping(
+            target = "addressLine1",
+            expression =
+                    "java(join(address.getDependentThoroughfare(), address.getThoroughfare()))")
+    @Mapping(
+            target = "addressLine2",
+            expression =
+                    "java(join(address.getDoubleDependentLocality(), address.getDependentLocality()))")
     @Mapping(target = "country", expression = "java(toLegacyCountry(address.getCountry()))")
     LegacyAddress toLegacyAddressWithoutPremise(RoyalMailAddressLookup address);
 
@@ -33,15 +46,18 @@ public interface LegacyAddressMapper {
     default String toPremise(RoyalMailAddressLookup address) {
         return join(
                 address.getSubBuildingName(),
-                address.getBuildingNumber() == null ? null : address.getBuildingNumber().toString());
+                address.getBuildingNumber() == null
+                        ? null
+                        : address.getBuildingNumber().toString());
     }
 
     default String join(String... parts) {
-        String value = Stream.of(parts)
-                .filter(Objects::nonNull)
-                .map(String::trim)
-                .filter(part -> !part.isBlank())
-                .collect(Collectors.joining(", "));
+        String value =
+                Stream.of(parts)
+                        .filter(Objects::nonNull)
+                        .map(String::trim)
+                        .filter(part -> !part.isBlank())
+                        .collect(Collectors.joining(", "));
 
         return value.isBlank() ? "" : value;
     }

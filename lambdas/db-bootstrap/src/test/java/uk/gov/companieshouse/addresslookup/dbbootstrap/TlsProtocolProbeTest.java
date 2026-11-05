@@ -1,13 +1,14 @@
 package uk.gov.companieshouse.addresslookup.dbbootstrap;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocket;
 import java.io.DataInputStream;
 import java.io.InputStream;
 import java.net.InetAddress;
@@ -22,17 +23,16 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
 
 /** Runs the probe against an in-process server that answers like PostgreSQL with ssl_min_protocol_version=TLSv1.3. */
 class TlsProtocolProbeTest {
 
     private static final char[] PASSWORD = "changeit".toCharArray();
 
-    @TempDir
-    static Path directory;
+    @TempDir static Path directory;
 
     private static KeyStore keyStore;
 
@@ -41,12 +41,33 @@ class TlsProtocolProbeTest {
     @BeforeAll
     static void createCertificate() throws Exception {
         Path file = directory.resolve("server.p12");
-        Process keytool = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "keytool").toString(),
-                "-genkeypair", "-alias", "server", "-keyalg", "RSA", "-keysize", "2048", "-validity", "1",
-                "-dname", "CN=localhost", "-ext", "SAN=dns:localhost,ip:127.0.0.1",
-                "-storetype", "PKCS12", "-keystore", file.toString(),
-                "-storepass", new String(PASSWORD), "-keypass", new String(PASSWORD))
-                .redirectErrorStream(true).start();
+        Process keytool =
+                new ProcessBuilder(
+                                Path.of(System.getProperty("java.home"), "bin", "keytool")
+                                        .toString(),
+                                "-genkeypair",
+                                "-alias",
+                                "server",
+                                "-keyalg",
+                                "RSA",
+                                "-keysize",
+                                "2048",
+                                "-validity",
+                                "1",
+                                "-dname",
+                                "CN=localhost",
+                                "-ext",
+                                "SAN=dns:localhost,ip:127.0.0.1",
+                                "-storetype",
+                                "PKCS12",
+                                "-keystore",
+                                file.toString(),
+                                "-storepass",
+                                new String(PASSWORD),
+                                "-keypass",
+                                new String(PASSWORD))
+                        .redirectErrorStream(true)
+                        .start();
         String output = new String(keytool.getInputStream().readAllBytes());
         assertEquals(0, keytool.waitFor(), output);
         keyStore = KeyStore.getInstance("PKCS12");
@@ -65,25 +86,32 @@ class TlsProtocolProbeTest {
         TlsProtocolProbe probe = probe();
 
         try (ServerSocket server = server('S', 2)) {
-            assertEquals(TlsProtocolProbe.Result.REFUSED, probe.probe("localhost", server.getLocalPort(), "TLSv1.2").result());
-            assertEquals(TlsProtocolProbe.Result.ACCEPTED, probe.probe("localhost", server.getLocalPort(), "TLSv1.3").result());
+            assertEquals(
+                    TlsProtocolProbe.Result.REFUSED,
+                    probe.probe("localhost", server.getLocalPort(), "TLSv1.2").result());
+            assertEquals(
+                    TlsProtocolProbe.Result.ACCEPTED,
+                    probe.probe("localhost", server.getLocalPort(), "TLSv1.3").result());
         }
     }
 
     @Test
     void reportsAServerWithoutTls() throws Exception {
         try (ServerSocket server = server('N', 1)) {
-            assertEquals(TlsProtocolProbe.Result.SSL_NOT_SUPPORTED,
+            assertEquals(
+                    TlsProtocolProbe.Result.SSL_NOT_SUPPORTED,
                     probe().probe("localhost", server.getLocalPort(), "TLSv1.3").result());
         }
     }
 
     @Test
-    void acceptsTheProtocolWithAnUntrustedCertificateButNeverCompletesTheHandshake() throws Exception {
+    void acceptsTheProtocolWithAnUntrustedCertificateButNeverCompletesTheHandshake()
+            throws Exception {
         AtomicBoolean completed = new AtomicBoolean();
 
         try (ServerSocket server = server('S', 1, completed)) {
-            assertEquals(TlsProtocolProbe.Result.ACCEPTED,
+            assertEquals(
+                    TlsProtocolProbe.Result.ACCEPTED,
                     probe().probe("localhost", server.getLocalPort(), "TLSv1.3").result());
             executor.shutdown();
             assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
@@ -103,8 +131,10 @@ class TlsProtocolProbeTest {
      * Answers {@code connections} SSLRequests with {@code answer}, then handshakes with TLS 1.3 only, setting
      * {@code completed} if a handshake ever completes.
      */
-    private ServerSocket server(char answer, int connections, AtomicBoolean completed) throws Exception {
-        KeyManagerFactory keys = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+    private ServerSocket server(char answer, int connections, AtomicBoolean completed)
+            throws Exception {
+        KeyManagerFactory keys =
+                KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
         keys.init(keyStore, PASSWORD);
         SSLContext context = SSLContext.getInstance("TLS");
         context.init(keys.getKeyManagers(), null, null);
@@ -118,8 +148,11 @@ class TlsProtocolProbeTest {
                     socket.getOutputStream().write(answer);
                     socket.getOutputStream().flush();
                     if (answer == 'S') {
-                        try (SSLSocket tls = (SSLSocket) context.getSocketFactory()
-                                .createSocket(socket, null, socket.getPort(), true)) {
+                        try (SSLSocket tls =
+                                (SSLSocket)
+                                        context.getSocketFactory()
+                                                .createSocket(
+                                                        socket, null, socket.getPort(), true)) {
                             tls.setUseClientMode(false);
                             tls.setEnabledProtocols(new String[] {"TLSv1.3"});
                             tls.startHandshake();

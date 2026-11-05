@@ -45,10 +45,13 @@ public final class FakeS3 {
     public final Map<String, byte[]> objects = new LinkedHashMap<>();
     public final Map<String, Upload> uploads = new HashMap<>();
     public final List<String> completedKeys = new ArrayList<>();
+
     /** GuardDuty scan status by object key; objects without an entry have no scan tag yet. */
     public final Map<String, String> scanStatus = new HashMap<>();
+
     /** Version id returned by headObject; defaults to {@link #DEFAULT_VERSION}. */
     public final Map<String, String> versions = new HashMap<>();
+
     public int uploadCounter;
     public int abortedUploads;
 
@@ -58,7 +61,7 @@ public final class FakeS3 {
         return (S3Client)
                 Proxy.newProxyInstance(
                         S3Client.class.getClassLoader(),
-                        new Class<?>[]{S3Client.class},
+                        new Class<?>[] {S3Client.class},
                         (proxy, method, args) -> invoke(method.getName(), args));
     }
 
@@ -70,10 +73,13 @@ public final class FakeS3 {
             case "getObject" -> getObject(getObjectRequest(args[0]));
             case "headObject" -> headObject(headObjectRequest(args[0]));
             case "getObjectTagging" -> getObjectTagging(getObjectTaggingRequest(args[0]));
-            case "createMultipartUpload" -> createMultipartUpload(createMultipartUploadRequest(args[0]));
+            case "createMultipartUpload" ->
+                    createMultipartUpload(createMultipartUploadRequest(args[0]));
             case "uploadPart" -> uploadPart(uploadPartRequest(args[0]), (RequestBody) args[1]);
-            case "completeMultipartUpload" -> completeMultipartUpload(completeMultipartUploadRequest(args[0]));
-            case "abortMultipartUpload" -> abortMultipartUpload(abortMultipartUploadRequest(args[0]));
+            case "completeMultipartUpload" ->
+                    completeMultipartUpload(completeMultipartUploadRequest(args[0]));
+            case "abortMultipartUpload" ->
+                    abortMultipartUpload(abortMultipartUploadRequest(args[0]));
             case "putObject" -> putObject(putObjectRequest(args[0]), (RequestBody) args[1]);
             default -> throw new UnsupportedOperationException(method);
         };
@@ -90,8 +96,7 @@ public final class FakeS3 {
 
     private ResponseInputStream<GetObjectResponse> getObject(GetObjectRequest request) {
         byte[] bytes = objects.get(request.key());
-        if (bytes == null)
-            throw S3Exception.builder().statusCode(404).message("Not found").build();
+        if (bytes == null) throw S3Exception.builder().statusCode(404).message("Not found").build();
         return new ResponseInputStream<>(
                 GetObjectResponse.builder().build(),
                 AbortableInputStream.create(new ByteArrayInputStream(bytes)));
@@ -108,17 +113,23 @@ public final class FakeS3 {
         var tags =
                 status == null
                         ? List.<Tag>of()
-                        : List.of(Tag.builder().key("GuardDutyMalwareScanStatus").value(status).build());
+                        : List.of(
+                                Tag.builder()
+                                        .key("GuardDutyMalwareScanStatus")
+                                        .value(status)
+                                        .build());
         return GetObjectTaggingResponse.builder().tagSet(tags).build();
     }
 
-    private CreateMultipartUploadResponse createMultipartUpload(CreateMultipartUploadRequest request) {
+    private CreateMultipartUploadResponse createMultipartUpload(
+            CreateMultipartUploadRequest request) {
         String uploadId = "upload-" + (++uploadCounter);
         uploads.put(uploadId, new Upload(request.key()));
         return CreateMultipartUploadResponse.builder().uploadId(uploadId).build();
     }
 
-    private UploadPartResponse uploadPart(UploadPartRequest request, RequestBody body) throws Exception {
+    private UploadPartResponse uploadPart(UploadPartRequest request, RequestBody body)
+            throws Exception {
         uploads.get(request.uploadId()).parts.put(request.partNumber(), read(body));
         return UploadPartResponse.builder().eTag("etag-" + request.partNumber()).build();
     }
@@ -148,7 +159,8 @@ public final class FakeS3 {
         return AbortMultipartUploadResponse.builder().build();
     }
 
-    private PutObjectResponse putObject(PutObjectRequest request, RequestBody body) throws Exception {
+    private PutObjectResponse putObject(PutObjectRequest request, RequestBody body)
+            throws Exception {
         if ("*".equals(request.ifNoneMatch()) && objects.containsKey(request.key()))
             throw S3Exception.builder().statusCode(412).message("exists").build();
         objects.put(request.key(), read(body));
@@ -239,4 +251,3 @@ public final class FakeS3 {
         }
     }
 }
-

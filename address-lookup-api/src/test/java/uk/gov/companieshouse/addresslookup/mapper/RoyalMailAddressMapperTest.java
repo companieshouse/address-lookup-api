@@ -5,12 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.test.util.ReflectionTestUtils.setField;
 
-import java.math.BigDecimal;
-import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
+
 import uk.gov.companieshouse.addresslookup.entity.RoyalMailAddressLookup;
 import uk.gov.companieshouse.addresslookup.model.RoyalMailAddressDto;
+
+import java.math.BigDecimal;
+import java.util.Arrays;
 
 class RoyalMailAddressMapperTest {
 
@@ -39,17 +41,34 @@ class RoyalMailAddressMapperTest {
         setField(address, "longitude", new BigDecimal("-0.1000"));
         setField(address, "country", "England");
 
-        RoyalMailAddressDto expected = new RoyalMailAddressDto(
-                123, 456L, "Company", "Department", "Flat 1", "Building", 16,
-                "Old Road", "Main Road", "Village", "District", "London",
-                "SW1A 1AA", "1A", new BigDecimal("51.5000"), new BigDecimal("-0.1000"));
+        RoyalMailAddressDto expected =
+                new RoyalMailAddressDto(
+                        123,
+                        456L,
+                        "Company",
+                        "Department",
+                        "Flat 1",
+                        "Building",
+                        16,
+                        "Old Road",
+                        "Main Road",
+                        "Village",
+                        "District",
+                        "London",
+                        "SW1A 1AA",
+                        "1A",
+                        new BigDecimal("51.5000"),
+                        new BigDecimal("-0.1000"));
 
         assertAll(
                 () -> assertEquals("address-id", address.getId()),
                 () -> assertEquals("royal-mail", address.getAddressSource()),
                 () -> assertEquals("England", address.getCountry()),
                 () -> assertEquals(expected, mapper.toDto(address)),
-                () -> assertEquals(Arrays.asList(expected, null), mapper.toDtos(Arrays.asList(address, null))),
+                () ->
+                        assertEquals(
+                                Arrays.asList(expected, null),
+                                mapper.toDtos(Arrays.asList(address, null))),
                 () -> assertNull(mapper.toDto(null)),
                 () -> assertNull(mapper.toDtos(null)));
     }

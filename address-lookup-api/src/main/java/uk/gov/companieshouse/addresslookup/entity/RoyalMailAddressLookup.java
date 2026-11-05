@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+
 import org.hibernate.annotations.Immutable;
 
 import java.math.BigDecimal;
@@ -13,8 +14,7 @@ import java.math.BigDecimal;
 @Table(name = "address_lookup", schema = "address_lookup")
 public class RoyalMailAddressLookup {
 
-    @Id
-    private String id;
+    @Id private String id;
 
     @Column(name = "address_source")
     private String addressSource;

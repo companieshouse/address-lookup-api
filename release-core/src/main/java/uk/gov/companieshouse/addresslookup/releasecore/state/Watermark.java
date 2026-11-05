@@ -10,19 +10,18 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "watermark", schema = "os_control")
 public class Watermark {
-  @Id
-  private boolean singleton = true;
+    @Id private boolean singleton = true;
 
-  @Column(name = "valid_from")
-  private LocalDate date;
+    @Column(name = "valid_from")
+    private LocalDate date;
 
-  protected Watermark() {}
+    protected Watermark() {}
 
-  public LocalDate getDate() {
-    return date;
-  }
+    public LocalDate getDate() {
+        return date;
+    }
 
-  public void advance(LocalDate target) {
-    date = target;
-  }
+    public void advance(LocalDate target) {
+        date = target;
+    }
 }

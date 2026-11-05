@@ -2,14 +2,15 @@ package uk.gov.companieshouse.addresslookup.lambda.shared.runtime;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.IOException;
-import java.util.function.Supplier;
+
 import uk.gov.companieshouse.release.model.ReleaseJson;
 
+import java.io.IOException;
 import java.net.URI;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Map;
+import java.util.function.Supplier;
 
 public final class RuntimeSupport {
     public static final ObjectMapper JSON = ReleaseJson.MAPPER;
@@ -20,7 +21,8 @@ public final class RuntimeSupport {
         if (!value) throw new IllegalArgumentException(message);
     }
 
-    public static <E extends Exception> void check(boolean value, Supplier<E> exceptionSupplier) throws E {
+    public static <E extends Exception> void check(boolean value, Supplier<E> exceptionSupplier)
+            throws E {
         if (!value) throw exceptionSupplier.get();
     }
 
@@ -49,13 +51,17 @@ public final class RuntimeSupport {
     }
 
     public static String required(JsonNode jsonNode, String field) {
-        check(jsonNode.hasNonNull(field) && !jsonNode.get(field).asText().isBlank(), "Missing " + field);
+        check(
+                jsonNode.hasNonNull(field) && !jsonNode.get(field).asText().isBlank(),
+                "Missing " + field);
         return jsonNode.get(field).asText();
     }
 
     public static String sanitizeUrl(String value) {
         URI uri = URI.create(value);
-        return uri.getScheme() + "://" + uri.getHost()
+        return uri.getScheme()
+                + "://"
+                + uri.getHost()
                 + (uri.getRawPath() == null ? "" : uri.getRawPath())
                 + (uri.getRawQuery() == null ? "" : "?***")
                 + (uri.getRawFragment() == null ? "" : "#" + uri.getRawFragment());

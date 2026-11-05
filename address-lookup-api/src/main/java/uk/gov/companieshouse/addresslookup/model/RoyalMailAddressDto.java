@@ -18,5 +18,4 @@ public record RoyalMailAddressDto(
         String postcode,
         String deliveryPointSuffix,
         BigDecimal latitude,
-        BigDecimal longitude) {
-}
+        BigDecimal longitude) {}

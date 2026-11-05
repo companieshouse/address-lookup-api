@@ -1,11 +1,5 @@
 package uk.gov.companieshouse.addresslookup.dbbootstrap;
 
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.mockito.InOrder;
-
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -15,12 +9,20 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
 import static uk.gov.companieshouse.addresslookup.dbbootstrap.FakeDatabase.row;
+
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
+
+import java.util.List;
 
 class DatabaseBootstrapTest {
 
     private static final DatabaseCredentials OWNER =
-            new DatabaseCredentials("jdbc:postgresql://writer:5432/addressdb", "address_lookup_owner", "s3cret");
+            new DatabaseCredentials(
+                    "jdbc:postgresql://writer:5432/addressdb", "address_lookup_owner", "s3cret");
 
     @Test
     void installsPostgisAndCreatesTheSchemaOwner() throws Exception {
@@ -28,13 +30,18 @@ class DatabaseBootstrapTest {
 
         DatabaseBootstrap.bootstrap(db.connection, "master", OWNER);
 
-        assertEquals(List.of(
-                "CREATE EXTENSION IF NOT EXISTS postgis",
-                "CREATE ROLE \"address_lookup_owner\" LOGIN",
-                "GRANT CONNECT, CREATE ON DATABASE \"addressdb\" TO \"address_lookup_owner\"",
-                "GRANT USAGE, CREATE ON SCHEMA public TO \"address_lookup_owner\""), db.executed);
-        verify(db.pgConnection).alterUserPassword(eq("address_lookup_owner"), org.mockito.ArgumentMatchers.any(char[].class),
-                eq("scram-sha-256"));
+        assertEquals(
+                List.of(
+                        "CREATE EXTENSION IF NOT EXISTS postgis",
+                        "CREATE ROLE \"address_lookup_owner\" LOGIN",
+                        "GRANT CONNECT, CREATE ON DATABASE \"addressdb\" TO \"address_lookup_owner\"",
+                        "GRANT USAGE, CREATE ON SCHEMA public TO \"address_lookup_owner\""),
+                db.executed);
+        verify(db.pgConnection)
+                .alterUserPassword(
+                        eq("address_lookup_owner"),
+                        org.mockito.ArgumentMatchers.any(char[].class),
+                        eq("scram-sha-256"));
     }
 
     @Test
@@ -54,7 +61,9 @@ class DatabaseBootstrapTest {
 
         DatabaseBootstrap.bootstrap(db.connection, "master", OWNER);
 
-        verify(db.pgConnection).alterUserPassword(eq("address_lookup_owner"), password.capture(), eq("scram-sha-256"));
+        verify(db.pgConnection)
+                .alterUserPassword(
+                        eq("address_lookup_owner"), password.capture(), eq("scram-sha-256"));
         assertTrue(db.executed.stream().noneMatch(sql -> sql.contains("s3cret")));
         assertArrayEquals(new char[6], password.getValue(), "the password copy is wiped after use");
     }
@@ -63,7 +72,8 @@ class DatabaseBootstrapTest {
     void neverUsesTheMasterAsTheSchemaOwner() throws Exception {
         FakeDatabase db = new FakeDatabase();
 
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(
+                IllegalArgumentException.class,
                 () -> DatabaseBootstrap.bootstrap(db.connection, "address_lookup_owner", OWNER));
         verify(db.connection, never()).createStatement();
     }
@@ -85,9 +95,12 @@ class DatabaseBootstrapTest {
         FakeDatabase db = new FakeDatabase();
         String hostile = "owner\"; DROP DATABASE addressdb; --";
 
-        DatabaseBootstrap.bootstrap(db.connection, "master", new DatabaseCredentials(OWNER.jdbcUrl(), hostile, "pw"));
+        DatabaseBootstrap.bootstrap(
+                db.connection, "master", new DatabaseCredentials(OWNER.jdbcUrl(), hostile, "pw"));
 
-        assertTrue(db.prepared.stream().noneMatch(sql -> sql.contains(hostile)), db.prepared.toString());
+        assertTrue(
+                db.prepared.stream().noneMatch(sql -> sql.contains(hostile)),
+                db.prepared.toString());
         assertTrue(db.prepared.stream().anyMatch(sql -> sql.startsWith("SELECT format(")));
     }
 }

@@ -1,10 +1,14 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.os;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+
 import org.junit.jupiter.api.Test;
 
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLParameters;
-import javax.net.ssl.SSLSession;
 import java.io.IOException;
 import java.net.Authenticator;
 import java.net.CookieHandler;
@@ -24,11 +28,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSession;
 
 final class OsClientTest {
     @Test
@@ -37,8 +39,8 @@ final class OsClientTest {
         var os = new OsClient("test-key", Duration.ofSeconds(840), JSON, http);
 
         try (var in =
-                     os.download(
-                             "https://api.os.uk/downloads/v1/dataPackages/12345/versions/159159/downloads?fileName=add_isl_royalmailaddress.zip")) {
+                os.download(
+                        "https://api.os.uk/downloads/v1/dataPackages/12345/versions/159159/downloads?fileName=add_isl_royalmailaddress.zip")) {
             assertArrayEquals("zip-bytes".getBytes(), in.readAllBytes());
         }
 
@@ -53,7 +55,10 @@ final class OsClientTest {
     void publicConstructorBuildsAClientThatOnlyAcceptsApiOsUkUrls() {
         var os = new OsClient("test-key", Duration.ofSeconds(1), Duration.ofSeconds(1));
 
-        var failure = assertThrows(IllegalArgumentException.class, () -> os.download("https://example.com/file.zip"));
+        var failure =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () -> os.download("https://example.com/file.zip"));
 
         assertEquals("Expected OS API URL", failure.getMessage());
     }
@@ -74,7 +79,10 @@ final class OsClientTest {
         var http = new RedirectingHttpClient(request -> new Reply(500, Map.of(), new byte[0]));
         var os = new OsClient("test-key", Duration.ofSeconds(840), JSON, http);
 
-        var failure = assertThrows(IllegalArgumentException.class, () -> os.download("https://api.os.uk/start"));
+        var failure =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () -> os.download("https://api.os.uk/start"));
 
         assertEquals("OS HTTP status 500", failure.getMessage());
         assertEquals(1, http.requests.size());
@@ -82,10 +90,15 @@ final class OsClientTest {
 
     @Test
     void rejectsRedirectToHttp() {
-        var http = new RedirectingHttpClient(request -> redirect(302, "http://os-downloads.example/file.zip"));
+        var http =
+                new RedirectingHttpClient(
+                        request -> redirect(302, "http://os-downloads.example/file.zip"));
         var os = new OsClient("test-key", Duration.ofSeconds(840), JSON, http);
 
-        var failure = assertThrows(IllegalArgumentException.class, () -> os.download("https://api.os.uk/start"));
+        var failure =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () -> os.download("https://api.os.uk/start"));
 
         assertEquals("HTTPS required", failure.getMessage());
         assertEquals(1, http.requests.size());
@@ -113,7 +126,9 @@ final class OsClientTest {
 
     @Test
     void jsonParsesResponseBody() throws Exception {
-        var http = new RedirectingHttpClient(request -> new Reply(200, Map.of(), "{\"a\":1}".getBytes()));
+        var http =
+                new RedirectingHttpClient(
+                        request -> new Reply(200, Map.of(), "{\"a\":1}".getBytes()));
         var os = new OsClient("test-key", Duration.ofSeconds(840), JSON, http);
 
         assertEquals(1, os.json("https://api.os.uk/meta").path("a").asInt());
@@ -121,10 +136,14 @@ final class OsClientTest {
 
     @Test
     void jsonRejectsOversizedResponseBody() {
-        var http = new RedirectingHttpClient(request -> new Reply(200, Map.of(), new byte[4 * 1024 * 1024 + 1]));
+        var http =
+                new RedirectingHttpClient(
+                        request -> new Reply(200, Map.of(), new byte[4 * 1024 * 1024 + 1]));
         var os = new OsClient("test-key", Duration.ofSeconds(840), JSON, http);
 
-        var failure = assertThrows(IllegalArgumentException.class, () -> os.json("https://api.os.uk/meta"));
+        var failure =
+                assertThrows(
+                        IllegalArgumentException.class, () -> os.json("https://api.os.uk/meta"));
 
         assertEquals("OS metadata too large", failure.getMessage());
     }
@@ -133,17 +152,19 @@ final class OsClientTest {
         return new Reply(status, Map.of("location", List.of(location)), new byte[0]);
     }
 
-    private record Reply(int status, Map<String, List<String>> headers, byte[] body) {
-    }
+    private record Reply(int status, Map<String, List<String>> headers, byte[] body) {}
 
     private static final class RedirectingHttpClient extends HttpClient {
         final List<HttpRequest> requests = new ArrayList<>();
         private final Function<HttpRequest, Reply> script;
 
         RedirectingHttpClient() {
-            this(request -> "api.os.uk".equals(request.uri().getHost())
-                    ? redirect(307, "https://os-downloads.example/signed/add_isl_royalmailaddress.zip?token=redacted")
-                    : new Reply(200, Map.of(), "zip-bytes".getBytes()));
+            this(request ->
+                    "api.os.uk".equals(request.uri().getHost())
+                            ? redirect(
+                                    307,
+                                    "https://os-downloads.example/signed/add_isl_royalmailaddress.zip?token=redacted")
+                            : new Reply(200, Map.of(), "zip-bytes".getBytes()));
         }
 
         RedirectingHttpClient(Function<HttpRequest, Reply> script) {
@@ -159,20 +180,26 @@ final class OsClientTest {
 
         @SuppressWarnings("unchecked")
         private static <T> HttpResponse<T> response(
-                int status, Map<String, List<String>> headers, HttpResponse.BodyHandler<T> handler, byte[] body) {
+                int status,
+                Map<String, List<String>> headers,
+                HttpResponse.BodyHandler<T> handler,
+                byte[] body) {
             var info = new ResponseInfo(status, HttpHeaders.of(headers, (k, v) -> true));
             var subscriber = handler.apply(info);
-            subscriber.onSubscribe(new java.util.concurrent.Flow.Subscription() {
-                @Override
-                public void request(long n) {
-                    // Intentionally empty: the body is pushed synchronously below, so demand needs no tracking.
-                }
+            subscriber.onSubscribe(
+                    new java.util.concurrent.Flow.Subscription() {
+                        @Override
+                        public void request(long n) {
+                            // Intentionally empty: the body is pushed synchronously below, so
+                            // demand needs no tracking.
+                        }
 
-                @Override
-                public void cancel() {
-                    // Intentionally empty: the fake response is fully delivered, so there is nothing to cancel.
-                }
-            });
+                        @Override
+                        public void cancel() {
+                            // Intentionally empty: the fake response is fully delivered, so there
+                            // is nothing to cancel.
+                        }
+                    });
             if (body.length == 0) {
                 subscriber.onComplete();
             } else {

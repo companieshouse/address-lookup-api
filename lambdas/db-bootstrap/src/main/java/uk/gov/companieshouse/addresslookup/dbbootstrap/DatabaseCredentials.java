@@ -67,7 +67,9 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
             int eq = pair.indexOf('=');
             String key = eq < 0 ? pair : pair.substring(0, eq);
             String value = eq < 0 ? "" : pair.substring(eq + 1);
-            parameters.put(URLDecoder.decode(key, StandardCharsets.UTF_8), URLDecoder.decode(value, StandardCharsets.UTF_8));
+            parameters.put(
+                    URLDecoder.decode(key, StandardCharsets.UTF_8),
+                    URLDecoder.decode(value, StandardCharsets.UTF_8));
         }
         return parameters;
     }

@@ -1,11 +1,12 @@
 package uk.gov.companieshouse.addresslookup.lambda.importer;
 
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.amazonaws.services.lambda.runtime.Context;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+
 import uk.gov.companieshouse.addresslookup.release.importer.ImportService;
 import uk.gov.companieshouse.addresslookup.release.runtime.ImportApplication;
 
@@ -21,11 +23,9 @@ import java.util.Map;
 @ExtendWith(MockitoExtension.class)
 class HandlerTest {
 
-    @Mock
-    private ImportService service;
+    @Mock private ImportService service;
 
-    @Mock
-    private Context context;
+    @Mock private Context context;
 
     private Handler handler;
 
@@ -34,9 +34,9 @@ class HandlerTest {
 
     @BeforeEach
     void setup() {
-        try (MockedStatic<ImportApplication> mockApp = Mockito.mockStatic(ImportApplication.class)) {
-            mockApp.when(ImportApplication::start)
-                    .thenReturn(service);
+        try (MockedStatic<ImportApplication> mockApp =
+                Mockito.mockStatic(ImportApplication.class)) {
+            mockApp.when(ImportApplication::start).thenReturn(service);
             handler = new Handler();
         }
     }
@@ -44,8 +44,7 @@ class HandlerTest {
     @Test
     void shouldReturnResponseForSuccessfulDownload() throws Exception {
 
-        Mockito.when(service.importCsv(TEST_EVENT, context))
-                .thenReturn(TEST_RESPONSE);
+        Mockito.when(service.importCsv(TEST_EVENT, context)).thenReturn(TEST_RESPONSE);
 
         String response = handler.handleRequest(TEST_EVENT, context);
 

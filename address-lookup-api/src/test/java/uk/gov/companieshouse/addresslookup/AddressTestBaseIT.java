@@ -19,21 +19,20 @@ import org.testcontainers.utility.DockerImageName;
         classes = Application.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
-                "spring.docker.compose.enabled=false",
-                "FLYWAY_ENABLED=false",
-                "spring.flyway.enabled=true",
-                "spring.flyway.locations=classpath:db/migrations,classpath:db/local"
+            "spring.docker.compose.enabled=false",
+            "FLYWAY_ENABLED=false",
+            "spring.flyway.enabled=true",
+            "spring.flyway.locations=classpath:db/migrations,classpath:db/local"
         })
 public abstract class AddressTestBaseIT {
-    
+
     @SuppressWarnings("resource")
     @Container
     private static final PostgreSQLContainer POSTGRES =
             new PostgreSQLContainer(
-                    DockerImageName.parse("postgis/postgis:18-3.6")
-                            .asCompatibleSubstituteFor("postgres"))
-                    .withCreateContainerCmdModifier(
-                            command -> command.withPlatform("linux/amd64"));
+                            DockerImageName.parse("postgis/postgis:18-3.6")
+                                    .asCompatibleSubstituteFor("postgres"))
+                    .withCreateContainerCmdModifier(command -> command.withPlatform("linux/amd64"));
 
     @DynamicPropertySource
     static void registerDataSourceProperties(DynamicPropertyRegistry registry) {
@@ -43,6 +42,5 @@ public abstract class AddressTestBaseIT {
         registry.add("spring.datasource.driver-class-name", POSTGRES::getDriverClassName);
     }
 
-    @Autowired
-    protected MockMvc mockMvc;
+    @Autowired protected MockMvc mockMvc;
 }

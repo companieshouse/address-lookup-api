@@ -1,19 +1,5 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
-import org.junit.jupiter.api.Test;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
-import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.model.S3Exception;
-import software.amazon.awssdk.services.s3.model.S3Object;
-import uk.gov.companieshouse.addresslookup.lambda.shared.testsupport.FakeS3;
-
-import java.nio.charset.StandardCharsets;
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -22,7 +8,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+
+import org.junit.jupiter.api.Test;
+
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.model.S3Object;
+
+import uk.gov.companieshouse.addresslookup.lambda.shared.testsupport.FakeS3;
+
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 final class ReleaseStoreTest {
     private static final String BUCKET = "source-bucket";
@@ -49,7 +52,8 @@ final class ReleaseStoreTest {
     void readRejectsObjectsLargerThanOneMebibyte() {
         s3.objects.put("big.json", new byte[1024 * 1024 + 1]);
 
-        var failure = assertThrows(IllegalArgumentException.class, () -> store.read(BUCKET, "big.json"));
+        var failure =
+                assertThrows(IllegalArgumentException.class, () -> store.read(BUCKET, "big.json"));
 
         assertEquals("Manifest exceeds 1 MiB", failure.getMessage());
     }
@@ -80,7 +84,8 @@ final class ReleaseStoreTest {
         store.immutable(BUCKET, "receipt.json", JSON.readTree("{\"status\":\"FIRST\"}"));
         store.immutable(BUCKET, "receipt.json", JSON.readTree("{\"status\":\"SECOND\"}"));
 
-        assertEquals("FIRST", JSON.readTree(s3.objects.get("receipt.json")).path("status").asText());
+        assertEquals(
+                "FIRST", JSON.readTree(s3.objects.get("receipt.json")).path("status").asText());
     }
 
     @Test
@@ -91,7 +96,8 @@ final class ReleaseStoreTest {
 
         var failingStore = new ReleaseStore(client);
         var value = JSON.createObjectNode();
-        assertThrows(S3Exception.class, () -> failingStore.immutable(BUCKET, "receipt.json", value));
+        assertThrows(
+                S3Exception.class, () -> failingStore.immutable(BUCKET, "receipt.json", value));
     }
 
     @Test
@@ -114,7 +120,8 @@ final class ReleaseStoreTest {
     void versionRejectsUnversionedBuckets() {
         s3.versions.put(KEY, "null");
 
-        var failure = assertThrows(IllegalArgumentException.class, () -> store.version(BUCKET, KEY));
+        var failure =
+                assertThrows(IllegalArgumentException.class, () -> store.version(BUCKET, KEY));
 
         assertEquals("Versioned bucket required", failure.getMessage());
     }
@@ -136,7 +143,8 @@ final class ReleaseStoreTest {
     void isCleanFailsForCompletedUnsuccessfulScan() {
         s3.scanStatus.put(KEY, "THREATS_FOUND");
 
-        var failure = assertThrows(IllegalStateException.class, () -> store.isClean(BUCKET, KEY, "v1"));
+        var failure =
+                assertThrows(IllegalStateException.class, () -> store.isClean(BUCKET, KEY, "v1"));
 
         assertTrue(failure.getMessage().contains("THREATS_FOUND"));
         assertTrue(failure.getMessage().contains(KEY));
@@ -177,7 +185,9 @@ final class ReleaseStoreTest {
 
     @Test
     void objectKeyPrefersS3KeyOverKey() {
-        assertEquals("a", ReleaseStore.objectKey(JSON.createObjectNode().put("s3Key", "a").put("key", "b")));
+        assertEquals(
+                "a",
+                ReleaseStore.objectKey(JSON.createObjectNode().put("s3Key", "a").put("key", "b")));
         assertEquals("b", ReleaseStore.objectKey(JSON.createObjectNode().put("key", "b")));
     }
 
@@ -187,10 +197,14 @@ final class ReleaseStoreTest {
 
         assertEquals(
                 "from-ref",
-                ReleaseStore.objectVersion(store, BUCKET, JSON.createObjectNode().put("s3Key", KEY).put("version", "from-ref")));
+                ReleaseStore.objectVersion(
+                        store,
+                        BUCKET,
+                        JSON.createObjectNode().put("s3Key", KEY).put("version", "from-ref")));
         assertEquals(
                 "looked-up",
-                ReleaseStore.objectVersion(store, BUCKET, JSON.createObjectNode().put("s3Key", KEY)));
+                ReleaseStore.objectVersion(
+                        store, BUCKET, JSON.createObjectNode().put("s3Key", KEY)));
     }
 
     @Test
@@ -202,14 +216,21 @@ final class ReleaseStoreTest {
 
     @Test
     void receiptKeyDiffersForDownloadAndOtherSteps() {
-        assertEquals("Scanned/" + ID + "/" + DATASET + ".receipt.json", ReleaseStore.receiptKey(ID, DATASET, "download"));
-        assertEquals("control/" + ID + "/" + DATASET + "/extract.json", ReleaseStore.receiptKey(ID, DATASET, "extract"));
-        assertThrows(IllegalArgumentException.class, () -> ReleaseStore.receiptKey("not-a-uuid", DATASET, "download"));
+        assertEquals(
+                "Scanned/" + ID + "/" + DATASET + ".receipt.json",
+                ReleaseStore.receiptKey(ID, DATASET, "download"));
+        assertEquals(
+                "control/" + ID + "/" + DATASET + "/extract.json",
+                ReleaseStore.receiptKey(ID, DATASET, "extract"));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ReleaseStore.receiptKey("not-a-uuid", DATASET, "download"));
     }
 
     @Test
     void downloadZipKeyUsesScannedPrefix() {
-        assertEquals("Scanned/" + ID + "/" + DATASET + ".zip", ReleaseStore.downloadZipKey(ID, DATASET));
+        assertEquals(
+                "Scanned/" + ID + "/" + DATASET + ".zip", ReleaseStore.downloadZipKey(ID, DATASET));
     }
 
     @Test
@@ -228,8 +249,10 @@ final class ReleaseStoreTest {
     private static S3Client clientListingKey(String key) {
         var client = mock(S3Client.class);
         when(client.listObjectsV2(any(ListObjectsV2Request.class)))
-                .thenReturn(ListObjectsV2Response.builder().contents(S3Object.builder().key(key).build()).build());
+                .thenReturn(
+                        ListObjectsV2Response.builder()
+                                .contents(S3Object.builder().key(key).build())
+                                .build());
         return client;
     }
 }
-

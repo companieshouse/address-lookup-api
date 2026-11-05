@@ -3,7 +3,9 @@ package uk.gov.companieshouse.addresslookup.dbbootstrap;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import software.amazon.awssdk.services.ssm.SsmClient;
+
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
 
@@ -51,7 +53,10 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
         this(config, credentials, null);
     }
 
-    Handler(BootstrapConfiguration config, Function<String, DatabaseCredentials> credentials, Connector connector) {
+    Handler(
+            BootstrapConfiguration config,
+            Function<String, DatabaseCredentials> credentials,
+            Connector connector) {
         this.config = config;
         this.credentials = credentials;
         this.connector = connector == null ? this::connect : connector;
@@ -59,9 +64,12 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
 
     @Override
     public Map<String, Object> handleRequest(Map<String, Object> event, Context context) {
-        String command = event == null ? BOOTSTRAP_COMMAND
-                : String.valueOf(event.getOrDefault("command", BOOTSTRAP_COMMAND));
-        DatabaseCredentials.require(BOOTSTRAP_COMMAND.equals(command) || "verify".equals(command),
+        String command =
+                event == null
+                        ? BOOTSTRAP_COMMAND
+                        : String.valueOf(event.getOrDefault("command", BOOTSTRAP_COMMAND));
+        DatabaseCredentials.require(
+                BOOTSTRAP_COMMAND.equals(command) || "verify".equals(command),
                 "Unknown command " + command + "; expected bootstrap or verify");
         try {
             DatabaseCredentials master = credentials.apply(config.masterParameter());
@@ -70,9 +78,13 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
                 if (BOOTSTRAP_COMMAND.equals(command)) {
                     DatabaseBootstrap.bootstrap(connection, master.username(), owner);
                 }
-                BootstrapVerifier.Report report = verifier().verify(connection, master, owner.username());
-                Map<String, Object> result = JSON.convertValue(report, JSON.getTypeFactory()
-                        .constructMapType(Map.class, String.class, Object.class));
+                BootstrapVerifier.Report report =
+                        verifier().verify(connection, master, owner.username());
+                Map<String, Object> result =
+                        JSON.convertValue(
+                                report,
+                                JSON.getTypeFactory()
+                                        .constructMapType(Map.class, String.class, Object.class));
                 result.put("command", command);
                 LOGGER.info("Database ready for Flyway: " + JSON.writeValueAsString(result));
                 return result;
@@ -84,26 +96,34 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
             throw e;
         } catch (Exception e) {
             // Surfaces as FunctionError, which fails the Terraform apply.
-            throw new IllegalStateException("Database " + command + " failed: " + e.getMessage(), e);
+            throw new IllegalStateException(
+                    "Database " + command + " failed: " + e.getMessage(), e);
         }
     }
 
     private BootstrapVerifier verifier() {
-        return new BootstrapVerifier(config.verifyTls() ? new TlsProtocolProbe(config.timeout()) : null);
+        return new BootstrapVerifier(
+                config.verifyTls() ? new TlsProtocolProbe(config.timeout()) : null);
     }
 
     private Connection connect(DatabaseCredentials credentials) throws SQLException {
-        Properties urlProperties = org.postgresql.Driver.parseURL(credentials.jdbcUrl(), new Properties());
+        Properties urlProperties =
+                org.postgresql.Driver.parseURL(credentials.jdbcUrl(), new Properties());
         DatabaseCredentials.require(urlProperties != null, "Invalid PostgreSQL JDBC URL");
-        DatabaseCredentials.require("verify-full".equals(urlProperties.getProperty("sslmode")),
+        DatabaseCredentials.require(
+                "verify-full".equals(urlProperties.getProperty("sslmode")),
                 "Master JDBC connection requires sslmode=verify-full");
-        // URL options override connection properties, so validate the driver's parsed options before connecting.
-        String sslFactory = urlProperties.getProperty("sslfactory", "org.postgresql.ssl.LibPQFactory");
-        DatabaseCredentials.require("org.postgresql.ssl.LibPQFactory".equals(sslFactory)
+        // URL options override connection properties, so validate the driver's parsed options
+        // before connecting.
+        String sslFactory =
+                urlProperties.getProperty("sslfactory", "org.postgresql.ssl.LibPQFactory");
+        DatabaseCredentials.require(
+                "org.postgresql.ssl.LibPQFactory".equals(sslFactory)
                         || "org.postgresql.ssl.DefaultJavaSSLFactory".equals(sslFactory),
                 "Master JDBC connection requires a standard certificate-validating SSL factory");
         for (String option : new String[] {"sslfactoryarg", "sslhostnameverifier"}) {
-            DatabaseCredentials.require(!urlProperties.containsKey(option),
+            DatabaseCredentials.require(
+                    !urlProperties.containsKey(option),
                     "Master JDBC connection must not override " + option);
         }
         Properties properties = new Properties();

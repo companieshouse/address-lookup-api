@@ -3,8 +3,10 @@ package uk.gov.companieshouse.addresslookup.lambda.shared.os;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sanitizeUrl;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
 
@@ -17,73 +19,74 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
 
-
 /** API key is sent only to api.os.uk, never forwarded to the signed download host. */
 public final class OsClient {
-  private static final Logger LOG = LoggerFactory.getLogger(OsClient.class.getName());
+    private static final Logger LOG = LoggerFactory.getLogger(OsClient.class.getName());
 
-  private final HttpClient http;
-  private final String key;
-  private final Duration requestTimeout;
-  private final ObjectMapper json;
+    private final HttpClient http;
+    private final String key;
+    private final Duration requestTimeout;
+    private final ObjectMapper json;
 
-  public OsClient(
-      String key,
-      Duration connectTimeout,
-      Duration requestTimeout) {
-    this.key = key;
-    this.requestTimeout = requestTimeout;
-    this.json = JSON;
-    this.http =
-        HttpClient.newBuilder()
-            .connectTimeout(connectTimeout)
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .build();
-  }
-
-  OsClient(
-      String key,
-      Duration requestTimeout,
-      com.fasterxml.jackson.databind.ObjectMapper json,
-      HttpClient http) {
-    this.key = key;
-    this.requestTimeout = requestTimeout;
-    this.json = json;
-    this.http = http;
-  }
-
-  public InputStream download(String url) throws Exception {
-    URI uri = URI.create(url);
-    check(
-        "https".equals(uri.getScheme()) && "api.os.uk".equals(uri.getHost()),
-        "Expected OS API URL");
-    for (int i = 0; i < 5; i++) {
-      check("https".equals(uri.getScheme()), "HTTPS required");
-      var b = HttpRequest.newBuilder(uri).timeout(requestTimeout).GET();
-      if ("api.os.uk".equals(uri.getHost())) b.header("key", key);
-      var r = http.send(b.build(), HttpResponse.BodyHandlers.ofInputStream());
-      if (r.statusCode() == 200) return r.body();
-      r.body().close();
-      check(
-          java.util.Set.of(301, 302, 303, 307, 308).contains(r.statusCode()),
-          "OS HTTP status " + r.statusCode());
-      URI next = uri.resolve(r.headers().firstValue("location").orElseThrow());
-      String sanitizedFromUrl = sanitizeUrl(uri.toString());
-      String sanitizedToUrl = sanitizeUrl(next.toString());
-      LOG.info("OS download redirect followed",
-          Map.of("status", r.statusCode(),
-              "from", sanitizedFromUrl,
-              "to", sanitizedToUrl));
-      uri = next;
+    public OsClient(String key, Duration connectTimeout, Duration requestTimeout) {
+        this.key = key;
+        this.requestTimeout = requestTimeout;
+        this.json = JSON;
+        this.http =
+                HttpClient.newBuilder()
+                        .connectTimeout(connectTimeout)
+                        .followRedirects(HttpClient.Redirect.NEVER)
+                        .build();
     }
-    throw new IOException("Too many redirects");
-  }
 
-  public JsonNode json(String url) throws Exception {
-    try (var in = download(url)) {
-      byte[] b = in.readNBytes(4 * 1024 * 1024 + 1);
-      check(b.length <= 4 * 1024 * 1024, "OS metadata too large");
-      return json.readTree(b);
+    OsClient(
+            String key,
+            Duration requestTimeout,
+            com.fasterxml.jackson.databind.ObjectMapper json,
+            HttpClient http) {
+        this.key = key;
+        this.requestTimeout = requestTimeout;
+        this.json = json;
+        this.http = http;
     }
-  }
+
+    public InputStream download(String url) throws Exception {
+        URI uri = URI.create(url);
+        check(
+                "https".equals(uri.getScheme()) && "api.os.uk".equals(uri.getHost()),
+                "Expected OS API URL");
+        for (int i = 0; i < 5; i++) {
+            check("https".equals(uri.getScheme()), "HTTPS required");
+            var b = HttpRequest.newBuilder(uri).timeout(requestTimeout).GET();
+            if ("api.os.uk".equals(uri.getHost())) b.header("key", key);
+            var r = http.send(b.build(), HttpResponse.BodyHandlers.ofInputStream());
+            if (r.statusCode() == 200) return r.body();
+            r.body().close();
+            check(
+                    java.util.Set.of(301, 302, 303, 307, 308).contains(r.statusCode()),
+                    "OS HTTP status " + r.statusCode());
+            URI next = uri.resolve(r.headers().firstValue("location").orElseThrow());
+            String sanitizedFromUrl = sanitizeUrl(uri.toString());
+            String sanitizedToUrl = sanitizeUrl(next.toString());
+            LOG.info(
+                    "OS download redirect followed",
+                    Map.of(
+                            "status",
+                            r.statusCode(),
+                            "from",
+                            sanitizedFromUrl,
+                            "to",
+                            sanitizedToUrl));
+            uri = next;
+        }
+        throw new IOException("Too many redirects");
+    }
+
+    public JsonNode json(String url) throws Exception {
+        try (var in = download(url)) {
+            byte[] b = in.readNBytes(4 * 1024 * 1024 + 1);
+            check(b.length <= 4 * 1024 * 1024, "OS metadata too large");
+            return json.readTree(b);
+        }
+    }
 }

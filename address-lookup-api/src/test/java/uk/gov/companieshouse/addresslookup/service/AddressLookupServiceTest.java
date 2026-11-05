@@ -8,9 +8,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.sql.SQLException;
-import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -18,26 +15,27 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataAccessResourceFailureException;
+
 import uk.gov.companieshouse.addresslookup.entity.RoyalMailAddressLookup;
 import uk.gov.companieshouse.addresslookup.mapper.LegacyAddressMapper;
 import uk.gov.companieshouse.addresslookup.mapper.RoyalMailAddressMapper;
 import uk.gov.companieshouse.addresslookup.model.LegacyAddress;
 import uk.gov.companieshouse.addresslookup.repository.RoyalMailAddressLookupRepository;
 
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Optional;
+
 @ExtendWith(MockitoExtension.class)
 class AddressLookupServiceTest {
 
-    @Mock
-    private RoyalMailAddressLookupRepository repository;
+    @Mock private RoyalMailAddressLookupRepository repository;
 
-    @Mock
-    private LegacyAddressMapper legacyAddressMapper;
+    @Mock private LegacyAddressMapper legacyAddressMapper;
 
-    @Mock
-    private RoyalMailAddressMapper royalMailAddressMapper;
+    @Mock private RoyalMailAddressMapper royalMailAddressMapper;
 
-    @InjectMocks
-    private AddressLookupService service;
+    @InjectMocks private AddressLookupService service;
 
     @Test
     void lookupByPostcodeMapsTheRepositoryResults() {
@@ -98,9 +96,10 @@ class AddressLookupServiceTest {
                 .thenThrow(firstFailure)
                 .thenThrow(secondFailure);
 
-        DataAccessException thrown = assertThrows(
-                DataAccessException.class,
-                () -> service.lookupLegacyAddressesByPostcode("AB1 2CD"));
+        DataAccessException thrown =
+                assertThrows(
+                        DataAccessException.class,
+                        () -> service.lookupLegacyAddressesByPostcode("AB1 2CD"));
 
         assertSame(secondFailure, thrown);
         verify(repository, times(2)).findByNormalizedPostcode("AB1 2CD");
@@ -111,9 +110,10 @@ class AddressLookupServiceTest {
         DataAccessException failure = dataAccessFailure("23505");
         when(repository.findByNormalizedPostcode("AB1 2CD")).thenThrow(failure);
 
-        DataAccessException thrown = assertThrows(
-                DataAccessException.class,
-                () -> service.lookupLegacyAddressesByPostcode("AB1 2CD"));
+        DataAccessException thrown =
+                assertThrows(
+                        DataAccessException.class,
+                        () -> service.lookupLegacyAddressesByPostcode("AB1 2CD"));
 
         assertSame(failure, thrown);
         verify(repository, times(1)).findByNormalizedPostcode("AB1 2CD");

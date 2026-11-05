@@ -16,16 +16,19 @@ import java.util.Arrays;
  */
 public final class DatabaseBootstrap {
 
-    private DatabaseBootstrap() {
-    }
+    private DatabaseBootstrap() {}
 
-    public static void bootstrap(Connection master, String masterUsername, DatabaseCredentials owner) throws SQLException {
-        DatabaseCredentials.require(!owner.username().equals(masterUsername),
+    public static void bootstrap(
+            Connection master, String masterUsername, DatabaseCredentials owner)
+            throws SQLException {
+        DatabaseCredentials.require(
+                !owner.username().equals(masterUsername),
                 "The schema owner must not be the master user");
         boolean autoCommit = master.getAutoCommit();
         master.setAutoCommit(true);
         try {
-            // Installed as the master (rds_superuser) so the baseline's CREATE EXTENSION IF NOT EXISTS is a no-op.
+            // Installed as the master (rds_superuser) so the baseline's CREATE EXTENSION IF NOT
+            // EXISTS is a no-op.
             execute(master, "CREATE EXTENSION IF NOT EXISTS postgis");
 
             if (roleExists(master, owner.username())) {
@@ -36,22 +39,33 @@ public final class DatabaseBootstrap {
             // Hashed client side (SCRAM), so the plaintext never reaches the server or its logs.
             char[] password = owner.password().toCharArray();
             try {
-                master.unwrap(PGConnection.class).alterUserPassword(owner.username(), password, "scram-sha-256");
+                master.unwrap(PGConnection.class)
+                        .alterUserPassword(owner.username(), password, "scram-sha-256");
             } finally {
                 Arrays.fill(password, '\0');
             }
 
-            execute(master, quoted(master, "GRANT CONNECT, CREATE ON DATABASE %I TO %I", null, owner.username()));
-            // PostgreSQL 15+ no longer lets everyone create in public; Flyway keeps flyway_schema_history there
+            execute(
+                    master,
+                    quoted(
+                            master,
+                            "GRANT CONNECT, CREATE ON DATABASE %I TO %I",
+                            null,
+                            owner.username()));
+            // PostgreSQL 15+ no longer lets everyone create in public; Flyway keeps
+            // flyway_schema_history there
             // unless the migration Lambda sets a default schema.
-            execute(master, quoted(master, "GRANT USAGE, CREATE ON SCHEMA public TO %I", owner.username()));
+            execute(
+                    master,
+                    quoted(master, "GRANT USAGE, CREATE ON SCHEMA public TO %I", owner.username()));
         } finally {
             master.setAutoCommit(autoCommit);
         }
     }
 
     private static boolean roleExists(Connection connection, String role) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("SELECT 1 FROM pg_roles WHERE rolname = ?")) {
+        try (PreparedStatement statement =
+                connection.prepareStatement("SELECT 1 FROM pg_roles WHERE rolname = ?")) {
             statement.setString(1, role);
             try (ResultSet rs = statement.executeQuery()) {
                 return rs.next();
@@ -63,17 +77,22 @@ public final class DatabaseBootstrap {
      * Builds DDL with the server's format(), so identifiers are quoted by PostgreSQL itself (%I) and never
      * concatenated from input. A null database argument means current_database().
      */
-    private static String quoted(Connection connection, String template, String role) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("SELECT format(?, ?::text)")) {
+    private static String quoted(Connection connection, String template, String role)
+            throws SQLException {
+        try (PreparedStatement statement =
+                connection.prepareStatement("SELECT format(?, ?::text)")) {
             statement.setString(1, template);
             statement.setString(2, role);
             return single(statement);
         }
     }
 
-    private static String quoted(Connection connection, String template, String database, String role) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT format(?, coalesce(?::text, current_database()), ?::text)")) {
+    private static String quoted(
+            Connection connection, String template, String database, String role)
+            throws SQLException {
+        try (PreparedStatement statement =
+                connection.prepareStatement(
+                        "SELECT format(?, coalesce(?::text, current_database()), ?::text)")) {
             statement.setString(1, template);
             statement.setString(2, database);
             statement.setString(3, role);

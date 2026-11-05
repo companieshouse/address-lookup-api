@@ -1,5 +1,14 @@
 package uk.gov.companieshouse.addresslookup.dbbootstrap;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.verify;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -11,30 +20,29 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Properties;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mockStatic;
-import static org.mockito.Mockito.verify;
-
 class HandlerTest {
 
-    private static final BootstrapConfiguration CONFIG = new BootstrapConfiguration(
-            "/address-lookup/cidev/db/master", "/address-lookup/cidev/db/schema-owner", false,
-            Duration.ofSeconds(1));
+    private static final BootstrapConfiguration CONFIG =
+            new BootstrapConfiguration(
+                    "/address-lookup/cidev/db/master",
+                    "/address-lookup/cidev/db/schema-owner",
+                    false,
+                    Duration.ofSeconds(1));
     private static final DatabaseCredentials MASTER =
-            new DatabaseCredentials("jdbc:postgresql://writer:5432/addressdb", "master", "master-secret");
+            new DatabaseCredentials(
+                    "jdbc:postgresql://writer:5432/addressdb", "master", "master-secret");
     private static final DatabaseCredentials OWNER =
-            new DatabaseCredentials("jdbc:postgresql://writer:5432/addressdb", "address_lookup_owner", "owner-secret");
+            new DatabaseCredentials(
+                    "jdbc:postgresql://writer:5432/addressdb",
+                    "address_lookup_owner",
+                    "owner-secret");
 
     @Test
     void bootstrapsAndVerifiesAsTheMaster() throws Exception {
         FakeDatabase db = FakeDatabase.ready();
 
-        Map<String, Object> result = handler(db).handleRequest(Map.of("command", "bootstrap"), null);
+        Map<String, Object> result =
+                handler(db).handleRequest(Map.of("command", "bootstrap"), null);
 
         assertEquals("bootstrap", result.get("command"));
         assertEquals("EMPTY", result.get("databaseState"));
@@ -70,18 +78,24 @@ class HandlerTest {
         Handler handler = handler(db);
         Map<String, Object> event = Map.of("command", "verify");
 
-        assertThrows(BootstrapVerifier.VerificationException.class,
+        assertThrows(
+                BootstrapVerifier.VerificationException.class,
                 () -> handler.handleRequest(event, null));
     }
 
     @Test
     void wrapsDatabaseErrorsWithoutCredentials() {
-        Handler handler = new Handler(CONFIG, this::credentials, credentials -> {
-            throw new SQLException("Connection refused");
-        });
+        Handler handler =
+                new Handler(
+                        CONFIG,
+                        this::credentials,
+                        credentials -> {
+                            throw new SQLException("Connection refused");
+                        });
         Map<String, Object> event = Map.of();
 
-        IllegalStateException e = assertThrows(IllegalStateException.class, () -> handler.handleRequest(event, null));
+        IllegalStateException e =
+                assertThrows(IllegalStateException.class, () -> handler.handleRequest(event, null));
 
         assertTrue(e.getMessage().contains("Connection refused"));
         assertFalse(e.getMessage().contains("secret"));
@@ -89,33 +103,50 @@ class HandlerTest {
 
     @Test
     void rejectsUnknownCommandsBeforeReadingCredentials() {
-        Handler handler = new Handler(CONFIG, name -> {
-            throw new AssertionError("credentials must not be read");
-        });
+        Handler handler =
+                new Handler(
+                        CONFIG,
+                        name -> {
+                            throw new AssertionError("credentials must not be read");
+                        });
         Map<String, Object> event = Map.of("command", "drop");
 
         assertThrows(IllegalArgumentException.class, () -> handler.handleRequest(event, null));
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {
-            "", "?sslmode=disable", "?sslmode=allow", "?sslmode=prefer", "?sslmode=require", "?sslmode=verify-ca",
-            "?sslmode=verify-full&sslmode=require",
-            "?sslmode=verify-full&sslfactory=org.postgresql.ssl.NonValidatingFactory",
-            "?sslmode=verify-full&sslfactoryarg=custom",
-            "?sslmode=verify-full&sslhostnameverifier=example.AcceptAll"
-    })
-    void rejectsUnsafeMasterUrlsBeforeOpeningEitherConnectionEvenWhenVerificationIsDisabled(String query) {
-        DatabaseCredentials master = new DatabaseCredentials(
-                "jdbc:postgresql://writer:5432/addressdb" + query, MASTER.username(), MASTER.password());
-        Handler handler = new Handler(CONFIG,
-                parameter -> parameter.equals(CONFIG.masterParameter()) ? master : OWNER);
+    @ValueSource(
+            strings = {
+                "",
+                "?sslmode=disable",
+                "?sslmode=allow",
+                "?sslmode=prefer",
+                "?sslmode=require",
+                "?sslmode=verify-ca",
+                "?sslmode=verify-full&sslmode=require",
+                "?sslmode=verify-full&sslfactory=org.postgresql.ssl.NonValidatingFactory",
+                "?sslmode=verify-full&sslfactoryarg=custom",
+                "?sslmode=verify-full&sslhostnameverifier=example.AcceptAll"
+            })
+    void rejectsUnsafeMasterUrlsBeforeOpeningEitherConnectionEvenWhenVerificationIsDisabled(
+            String query) {
+        DatabaseCredentials master =
+                new DatabaseCredentials(
+                        "jdbc:postgresql://writer:5432/addressdb" + query,
+                        MASTER.username(),
+                        MASTER.password());
+        Handler handler =
+                new Handler(
+                        CONFIG,
+                        parameter -> parameter.equals(CONFIG.masterParameter()) ? master : OWNER);
 
         try (MockedStatic<DriverManager> driver = mockStatic(DriverManager.class)) {
             for (String command : new String[] {"bootstrap", "verify"}) {
                 Map<String, Object> event = Map.of("command", command);
-                IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
-                        () -> handler.handleRequest(event, null));
+                IllegalArgumentException error =
+                        assertThrows(
+                                IllegalArgumentException.class,
+                                () -> handler.handleRequest(event, null));
                 assertFalse(error.getMessage().contains(MASTER.password()));
                 assertFalse(error.getMessage().contains(master.jdbcUrl()));
             }
@@ -124,35 +155,49 @@ class HandlerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {
-            "&sslrootcert=/opt/certs/approved-rds.pem",
-            "&sslfactory=org.postgresql.ssl.LibPQFactory&sslrootcert=/opt/certs/approved-rds.pem",
-            "&sslfactory=org.postgresql.ssl.DefaultJavaSSLFactory"
-    })
-    void opensVerifiedMasterConnectionUsingStandardTrustConfiguration(String trustConfiguration) throws Exception {
+    @ValueSource(
+            strings = {
+                "&sslrootcert=/opt/certs/approved-rds.pem",
+                "&sslfactory=org.postgresql.ssl.LibPQFactory&sslrootcert=/opt/certs/approved-rds.pem",
+                "&sslfactory=org.postgresql.ssl.DefaultJavaSSLFactory"
+            })
+    void opensVerifiedMasterConnectionUsingStandardTrustConfiguration(String trustConfiguration)
+            throws Exception {
         FakeDatabase db = FakeDatabase.ready();
-        DatabaseCredentials master = new DatabaseCredentials(
-                MASTER.jdbcUrl() + "?sslmode=verify-full" + trustConfiguration,
-                MASTER.username(), MASTER.password());
-        Handler handler = new Handler(CONFIG,
-                parameter -> parameter.equals(CONFIG.masterParameter()) ? master : OWNER);
+        DatabaseCredentials master =
+                new DatabaseCredentials(
+                        MASTER.jdbcUrl() + "?sslmode=verify-full" + trustConfiguration,
+                        MASTER.username(),
+                        MASTER.password());
+        Handler handler =
+                new Handler(
+                        CONFIG,
+                        parameter -> parameter.equals(CONFIG.masterParameter()) ? master : OWNER);
 
         try (MockedStatic<DriverManager> driver = mockStatic(DriverManager.class)) {
-            driver.when(() -> DriverManager.getConnection(eq(master.jdbcUrl()), any(Properties.class)))
+            driver.when(() ->
+                            DriverManager.getConnection(
+                                    eq(master.jdbcUrl()), any(Properties.class)))
                     .thenReturn(db.connection);
 
-            assertEquals("verify", handler.handleRequest(Map.of("command", "verify"), null).get("command"));
+            assertEquals(
+                    "verify",
+                    handler.handleRequest(Map.of("command", "verify"), null).get("command"));
 
-            driver.verify(() -> DriverManager.getConnection(eq(master.jdbcUrl()), any(Properties.class)));
+            driver.verify(
+                    () -> DriverManager.getConnection(eq(master.jdbcUrl()), any(Properties.class)));
             verify(db.connection).close();
         }
     }
 
     private Handler handler(FakeDatabase db) {
-        return new Handler(CONFIG, this::credentials, credentials -> {
-            assertEquals(MASTER, credentials, "connects as the master");
-            return db.connection;
-        });
+        return new Handler(
+                CONFIG,
+                this::credentials,
+                credentials -> {
+                    assertEquals(MASTER, credentials, "connects as the master");
+                    return db.connection;
+                });
     }
 
     private DatabaseCredentials credentials(String parameter) {

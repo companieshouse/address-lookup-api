@@ -1,7 +1,7 @@
 package uk.gov.companieshouse.addresslookup;
 
-import static org.mockito.Mockito.mockStatic;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.Mockito.mockStatic;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
@@ -17,7 +17,8 @@ class ApplicationTest {
     @Test
     void mainStartsSpringApplication() {
         String[] arguments = {};
-        try (MockedStatic<SpringApplication> springApplication = mockStatic(SpringApplication.class)) {
+        try (MockedStatic<SpringApplication> springApplication =
+                mockStatic(SpringApplication.class)) {
             Application.main(arguments);
 
             springApplication.verify(() -> SpringApplication.run(Application.class, arguments));

@@ -1,11 +1,12 @@
 package uk.gov.companieshouse.addresslookup.lambda.download;
 
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.amazonaws.services.lambda.runtime.Context;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+
 import uk.gov.companieshouse.addresslookup.lambda.download.service.DownloadService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
 
@@ -21,21 +23,24 @@ import java.util.Map;
 @ExtendWith(MockitoExtension.class)
 class HandlerTest {
 
-    @Mock
-    private DownloadService service;
+    @Mock private DownloadService service;
 
-    @Mock
-    private Context context;
+    @Mock private Context context;
 
     private Handler handler;
 
-    private static final Map<String, Object> TEST_EVENT = Map.of("dataset", "add_gb_royalmailaddress",
-            "planKey", "acquisitions/2026-10-06/12345678-1234-1234-1234-123456789abc.json");
+    private static final Map<String, Object> TEST_EVENT =
+            Map.of(
+                    "dataset",
+                    "add_gb_royalmailaddress",
+                    "planKey",
+                    "acquisitions/2026-10-06/12345678-1234-1234-1234-123456789abc.json");
     private static final String TEST_RESPONSE = "ZIP_SCAN";
 
     @BeforeEach
     void setup() {
-        try (MockedStatic<AcquisitionApplication> mockApp = Mockito.mockStatic(AcquisitionApplication.class)) {
+        try (MockedStatic<AcquisitionApplication> mockApp =
+                Mockito.mockStatic(AcquisitionApplication.class)) {
             mockApp.when(() -> AcquisitionApplication.start(DownloadService.class))
                     .thenReturn(service);
             handler = new Handler();
@@ -45,8 +50,7 @@ class HandlerTest {
     @Test
     void shouldReturnResponseForSuccessfulDownload() throws Exception {
 
-        Mockito.when(service.download(TEST_EVENT, context))
-                .thenReturn(TEST_RESPONSE);
+        Mockito.when(service.download(TEST_EVENT, context)).thenReturn(TEST_RESPONSE);
 
         String response = handler.handleRequest(TEST_EVENT, context);
 

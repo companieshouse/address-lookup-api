@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+
 import uk.gov.companieshouse.addresslookup.model.AddressLookupResponse;
 import uk.gov.companieshouse.addresslookup.model.LegacyAddress;
 import uk.gov.companieshouse.addresslookup.model.RoyalMailAddressDto;
@@ -40,8 +41,9 @@ public class AddressLookupController {
 
     @GetMapping("/postcode")
     public LegacyAddress lookupPostcode(@RequestParam("postcode") String postcode) {
-        return addressLookupService.lookupLegacyAddressByPostcode(postcode)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Address not found"));
+        return addressLookupService
+                .lookupLegacyAddressByPostcode(postcode)
+                .orElseThrow(() ->
+                        new ResponseStatusException(HttpStatus.NOT_FOUND, "Address not found"));
     }
-
 }

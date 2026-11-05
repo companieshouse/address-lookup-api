@@ -50,6 +50,8 @@
         <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
         <maven-failsafe-plugin.version>3.5.2</maven-failsafe-plugin.version>
         <jacoco.version>0.8.13</jacoco.version>
+        <spotless.version>3.11.0</spotless.version>
+        <google-java-format.version>2.0.0</google-java-format.version>
         <jackson-databind.version>2.22.3</jackson-databind.version>
         <commons-lang-version>3.21.0</commons-lang-version>
         <skip.unit.tests>false</skip.unit.tests>
@@ -232,6 +234,37 @@
             </plugins>
         </pluginManagement>
         <plugins>
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>${spotless.version}</version>
+                <inherited>false</inherited>
+                <configuration>
+                    <encoding>UTF-8</encoding>
+                    <lineEndings>UNIX</lineEndings>
+                    <java>
+                        <includes>
+                            <include>**/*.java</include>
+                        </includes>
+                        <excludes>
+                            <exclude>**/target/**</exclude>
+                            <exclude>**/.git/**</exclude>
+                            <exclude>**/.local-run/**</exclude>
+                            <exclude>**/build-*/**</exclude>
+                        </excludes>
+                        <googleJavaFormat>
+                            <version>${google-java-format.version}</version>
+                            <style>AOSP</style>
+                            <cleanup>false</cleanup>
+                            <reflowLongStrings>false</reflowLongStrings>
+                            <formatJavadoc>false</formatJavadoc>
+                            <reorderImports>true</reorderImports>
+                        </googleJavaFormat>
+                        <trimTrailingWhitespace/>
+                        <endWithNewline/>
+                    </java>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>

@@ -1,16 +1,27 @@
 package uk.gov.companieshouse.addresslookup.lambda.unzip.service;
 
+import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.*;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
+
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
+
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
+
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
 import uk.gov.companieshouse.release.model.DatasetCatalog;
 
 import java.io.*;
@@ -22,15 +33,6 @@ import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipInputStream;
-
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
-import software.amazon.awssdk.services.s3.model.S3Exception;
-import uk.gov.companieshouse.logging.Logger;
-import uk.gov.companieshouse.logging.LoggerFactory;
-
-import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.*;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 /**
  * Red-zone extraction reads only the exact clean ZIP version.
@@ -52,9 +54,13 @@ public final class ExtractionService {
     private static final String STATUS = "status";
     private static final Logger LOG = LoggerFactory.getLogger(ExtractionService.class.getName());
 
-    private record ReceiptIdentity(String releaseId, String dataset, String zipKey,
-                                   String zipVersion, String csvKey, String schemaVersion) {
-    }
+    private record ReceiptIdentity(
+            String releaseId,
+            String dataset,
+            String zipKey,
+            String zipVersion,
+            String csvKey,
+            String schemaVersion) {}
 
     static class CsvHeaderException extends Exception {
         CsvHeaderException(String msg) {
@@ -90,17 +96,23 @@ public final class ExtractionService {
         var table = table(dataset);
 
         String releaseId = required(input, RELEASE_ID_FIELD);
-        LOG.info("Extraction started",
-                Map.of("request_id", requestId(context),
-                        RELEASE_ID_FIELD, releaseId,
-                        DATASET_FIELD, dataset));
+        LOG.info(
+                "Extraction started",
+                Map.of(
+                        "request_id",
+                        requestId(context),
+                        RELEASE_ID_FIELD,
+                        releaseId,
+                        DATASET_FIELD,
+                        dataset));
         JsonNode scanObject = input.path("object");
         String scanBucket = required(scanObject, "bucket");
         String s3Key = required(scanObject, "key");
         String zipVersion = required(scanObject, "versionId");
 
         check(scanBucket.equals(properties.sourceBucket()), "Unexpected ZIP bucket");
-        check(s3Key.equals("Scanned/" + releaseId + "/" + table.name() + ".zip"),
+        check(
+                s3Key.equals("Scanned/" + releaseId + "/" + table.name() + ".zip"),
                 "Unexpected ZIP key");
 
         var store = new ReleaseStore(s3);
@@ -110,16 +122,20 @@ public final class ExtractionService {
         if (!store.isClean(scanBucket, s3Key, zipVersion)) {
             return "WAITING_FOR_ZIP_SCAN";
         }
-        check(zipVersion.equals(store.version(scanBucket, s3Key)), "ZIP version changed after scan");
+        check(
+                zipVersion.equals(store.version(scanBucket, s3Key)),
+                "ZIP version changed after scan");
 
         // Check schema version
-        check(input.path(SCHEMA_VERSION_FIELD).isInt()
+        check(
+                input.path(SCHEMA_VERSION_FIELD).isInt()
                         && input.path(SCHEMA_VERSION_FIELD).intValue() == 1,
                 "Unsupported ExtractRequested event version");
 
         String schemaVersion = table.version();
-        var expectedReceipt = new ReceiptIdentity(
-                releaseId, table.name(), s3Key, zipVersion, extractedCsvKey, schemaVersion);
+        var expectedReceipt =
+                new ReceiptIdentity(
+                        releaseId, table.name(), s3Key, zipVersion, extractedCsvKey, schemaVersion);
 
         // Check for existing extract receipt
         var extractReceipt = store.receipt(scanBucket, releaseId, table.name(), EXTRACT_FIELD);
@@ -129,11 +145,12 @@ public final class ExtractionService {
             return CSV_SCAN_STATUS;
         }
 
-        GetObjectRequest request = GetObjectRequest.builder()
-                .bucket(scanBucket)
-                .key(s3Key)
-                .versionId(zipVersion)
-                .build();
+        GetObjectRequest request =
+                GetObjectRequest.builder()
+                        .bucket(scanBucket)
+                        .key(s3Key)
+                        .versionId(zipVersion)
+                        .build();
 
         try (var zip = new ZipInputStream(s3.getObject(request))) {
             return extractZip(zip, table, expectedReceipt, store, scanBucket, checked, context);
@@ -152,8 +169,15 @@ public final class ExtractionService {
         }
     }
 
-    private String extractZip(ZipInputStream zip, DatasetCatalog.Table table, ReceiptIdentity expected,
-                              ReleaseStore store, String scanBucket, String checked, Context context) throws Exception {
+    private String extractZip(
+            ZipInputStream zip,
+            DatasetCatalog.Table table,
+            ReceiptIdentity expected,
+            ReleaseStore store,
+            String scanBucket,
+            String checked,
+            Context context)
+            throws Exception {
         var names = new HashSet<String>();
         long[] expandedBytes = {0};
         var csvInput = new PushbackInputStream(zip, MAX_CSV_HEADER_BYTES);
@@ -162,9 +186,11 @@ public final class ExtractionService {
 
         while ((zipEntry = zip.getNextEntry()) != null) {
             String name = zipEntry.getName();
-            check(names.size() < 100 && names.add(name),
+            check(
+                    names.size() < 100 && names.add(name),
                     () -> new ArchiveValidationException("Too many or duplicate ZIP entries"));
-            check(!name.contains("/") && !name.contains("\\") && !name.contains(".."),
+            check(
+                    !name.contains("/") && !name.contains("\\") && !name.contains(".."),
                     () -> new ArchiveValidationException("Unexpected ZIP member path"));
 
             if (name.equals(table.name() + ".csv")) {
@@ -173,25 +199,37 @@ public final class ExtractionService {
                 csvInput.unread(header);
 
                 var csv = new CountingInputStream(csvInput, expandedBytes, max);
-                StreamingS3.Uploaded result = new StreamingS3(s3, context::getRemainingTimeInMillis)
-                        .putIdempotent(csv, checked, expected.csvKey(), max);
+                StreamingS3.Uploaded result =
+                        new StreamingS3(s3, context::getRemainingTimeInMillis)
+                                .putIdempotent(csv, checked, expected.csvKey(), max);
 
                 var receiptData = buildUnzipReceiptData(expected, result, names.size());
                 var headers = receiptData.putArray("csvHeaders");
                 extractionHeaders.forEach(headers::add);
-                LOG.info("Extraction receipt prepared",
-                        Map.of(RELEASE_ID_FIELD, expected.releaseId(),
-                                DATASET_FIELD, expected.dataset(),
-                                "csv_key", result.key()));
+                LOG.info(
+                        "Extraction receipt prepared",
+                        Map.of(
+                                RELEASE_ID_FIELD,
+                                expected.releaseId(),
+                                DATASET_FIELD,
+                                expected.dataset(),
+                                "csv_key",
+                                result.key()));
 
                 saveExtractReceipt(store, scanBucket, checked, receiptData, result, expected);
                 commands.send(CSV_SCAN_STATUS, table.name());
 
-                LOG.info("Extraction completed",
-                        Map.of(RELEASE_ID_FIELD, expected.releaseId(), DATASET_FIELD, expected.dataset()));
+                LOG.info(
+                        "Extraction completed",
+                        Map.of(
+                                RELEASE_ID_FIELD,
+                                expected.releaseId(),
+                                DATASET_FIELD,
+                                expected.dataset()));
                 return CSV_SCAN_STATUS;
             } else {
-                check(name.startsWith(table.name() + "_") && name.endsWith(".csv"),
+                check(
+                        name.startsWith(table.name() + "_") && name.endsWith(".csv"),
                         () -> new ArchiveValidationException("Unexpected ZIP member"));
                 cleanUp(zip, expandedBytes, max, context);
             }
@@ -204,7 +242,8 @@ public final class ExtractionService {
 
     private static void logExtractionFailure(
             String status, Exception failure, String releaseId, String dataset) {
-        LOG.error("ZIP extraction failed",
+        LOG.error(
+                "ZIP extraction failed",
                 failure,
                 Map.of(STATUS, status, RELEASE_ID_FIELD, releaseId, DATASET_FIELD, dataset));
     }
@@ -214,41 +253,56 @@ public final class ExtractionService {
         return requestId == null ? "unknown" : requestId;
     }
 
-    private void saveExtractReceipt(ReleaseStore store, String scanBucket, String checked,
-                                    ObjectNode receiptData, StreamingS3.Uploaded result,
-                                    ReceiptIdentity expected) throws Exception {
+    private void saveExtractReceipt(
+            ReleaseStore store,
+            String scanBucket,
+            String checked,
+            ObjectNode receiptData,
+            StreamingS3.Uploaded result,
+            ReceiptIdentity expected)
+            throws Exception {
         try {
-            store.receiptOnce(scanBucket, expected.releaseId(), expected.dataset(), EXTRACT_FIELD, receiptData);
+            store.receiptOnce(
+                    scanBucket,
+                    expected.releaseId(),
+                    expected.dataset(),
+                    EXTRACT_FIELD,
+                    receiptData);
         } catch (S3Exception e) {
             if (!ReleaseStore.isPreconditionFailed(e)) throw e;
-            var existingReceipt = store.receipt(scanBucket, expected.releaseId(), expected.dataset(), EXTRACT_FIELD);
+            var existingReceipt =
+                    store.receipt(
+                            scanBucket, expected.releaseId(), expected.dataset(), EXTRACT_FIELD);
             check(existingReceipt != null, "Extract receipt conflicted but is not readable");
             verifyReceipt(store, checked, existingReceipt, expected);
-            check(required(existingReceipt, VERSION_FIELD).equals(result.version())
+            check(
+                    required(existingReceipt, VERSION_FIELD).equals(result.version())
                             && required(existingReceipt, SHA256_FIELD).equals(result.sha256()),
                     "Existing extract receipt differs from uploaded CSV");
         }
     }
 
-  private static ObjectNode buildUnzipReceiptData(ReceiptIdentity expected,
-                                                  StreamingS3.Uploaded result, int zipFileCount) {
-      return JSON.createObjectNode()
-              .put(RELEASE_ID_FIELD, expected.releaseId())
-              .put(DATASET_FIELD, expected.dataset())
-              .put("zipS3Key", expected.zipKey())
-              .put("zipVersion", expected.zipVersion())
-              .put("zipFileCount", zipFileCount)
-              .put(SCHEMA_VERSION_FIELD, expected.schemaVersion())
-              .put(STATUS, "EXTRACTED")
-              .put(VERSION_FIELD, result.version())
-              .put("key", result.key())
-              .put(SHA256_FIELD, result.sha256())
-              .put("extractedAt", Instant.now().toString());
-  }
+    private static ObjectNode buildUnzipReceiptData(
+            ReceiptIdentity expected, StreamingS3.Uploaded result, int zipFileCount) {
+        return JSON.createObjectNode()
+                .put(RELEASE_ID_FIELD, expected.releaseId())
+                .put(DATASET_FIELD, expected.dataset())
+                .put("zipS3Key", expected.zipKey())
+                .put("zipVersion", expected.zipVersion())
+                .put("zipFileCount", zipFileCount)
+                .put(SCHEMA_VERSION_FIELD, expected.schemaVersion())
+                .put(STATUS, "EXTRACTED")
+                .put(VERSION_FIELD, result.version())
+                .put("key", result.key())
+                .put(SHA256_FIELD, result.sha256())
+                .put("extractedAt", Instant.now().toString());
+    }
 
-  private void verifyReceipt(ReleaseStore store, String bucket, JsonNode receipt,
-                             ReceiptIdentity expected) throws Exception {
-        check(expected.releaseId().equals(required(receipt, RELEASE_ID_FIELD))
+    private void verifyReceipt(
+            ReleaseStore store, String bucket, JsonNode receipt, ReceiptIdentity expected)
+            throws Exception {
+        check(
+                expected.releaseId().equals(required(receipt, RELEASE_ID_FIELD))
                         && expected.dataset().equals(required(receipt, DATASET_FIELD))
                         && expected.zipKey().equals(required(receipt, "zipS3Key"))
                         && expected.zipVersion().equals(required(receipt, "zipVersion"))
@@ -258,10 +312,12 @@ public final class ExtractionService {
                 "Existing extract receipt does not match the scanned ZIP");
         String version = required(receipt, VERSION_FIELD);
         String checksum = required(receipt, SHA256_FIELD);
-        check(version.equals(store.version(bucket, expected.csvKey())),
+        check(
+                version.equals(store.version(bucket, expected.csvKey())),
                 "Extracted CSV version differs from its receipt");
         var evidence = store.read(bucket, StreamingS3.checksumKey(expected.csvKey()));
-        check(evidence != null
+        check(
+                evidence != null
                         && bucket.equals(required(evidence, "bucket"))
                         && expected.csvKey().equals(required(evidence, "key"))
                         && version.equals(required(evidence, "versionId"))
@@ -271,13 +327,20 @@ public final class ExtractionService {
 
     private List<String> validateHeaders(byte[] header, String expectedHeader)
             throws IOException, CsvHeaderException {
-        try (CSVParser parser = CSVParser.parse(
-                new String(header, StandardCharsets.UTF_8),
-                CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).setIgnoreEmptyLines(false)
-                        .setTrim(false).get())) {
+        try (CSVParser parser =
+                CSVParser.parse(
+                        new String(header, StandardCharsets.UTF_8),
+                        CSVFormat.DEFAULT
+                                .builder()
+                                .setHeader()
+                                .setSkipHeaderRecord(true)
+                                .setIgnoreEmptyLines(false)
+                                .setTrim(false)
+                                .get())) {
             List<String> headers = parser.getHeaderNames();
             List<String> expectedFields = parseExpectedHeader(expectedHeader);
-            check(headers.size() == expectedFields.size(),
+            check(
+                    headers.size() == expectedFields.size(),
                     () -> new CsvHeaderException("Header size mismatch"));
             check(headers.equals(expectedFields), () -> new CsvHeaderException("Header mismatch"));
 
@@ -298,12 +361,15 @@ public final class ExtractionService {
         return header.toByteArray();
     }
 
-    private void cleanUp(InputStream in, long[] total, long limit, Context context) throws IOException {
+    private void cleanUp(InputStream in, long[] total, long limit, Context context)
+            throws IOException {
         byte[] buffer = new byte[64 * 1024];
         int bytesRead;
         while ((bytesRead = in.read(buffer)) != -1) {
             total[0] += bytesRead;
-            check(total[0] <= limit, () -> new ZipException("Expanded archive exceeds maximum allowed size"));
+            check(
+                    total[0] <= limit,
+                    () -> new ZipException("Expanded archive exceeds maximum allowed size"));
             check(context.getRemainingTimeInMillis() > 30000, "Unzip deadline");
         }
     }
@@ -312,8 +378,11 @@ public final class ExtractionService {
             throws IOException, CsvHeaderException {
         try (CSVParser parser = CSVParser.parse(expectedHeader, CSVFormat.DEFAULT)) {
             var records = parser.getRecords();
-            check(records.size() == 1,
-                    () -> new CsvHeaderException("Expected schema header must contain one CSV record"));
+            check(
+                    records.size() == 1,
+                    () ->
+                            new CsvHeaderException(
+                                    "Expected schema header must contain one CSV record"));
             return records.getFirst().toList();
         }
     }
@@ -344,7 +413,8 @@ public final class ExtractionService {
 
         private void add(int bytes) throws IOException {
             total[0] += bytes;
-            if (total[0] > limit) throw new ZipException("Expanded archive exceeds maximum allowed size");
+            if (total[0] > limit)
+                throw new ZipException("Expanded archive exceeds maximum allowed size");
         }
     }
 }

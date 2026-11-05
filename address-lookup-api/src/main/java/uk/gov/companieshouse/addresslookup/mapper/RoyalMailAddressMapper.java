@@ -1,6 +1,7 @@
 package uk.gov.companieshouse.addresslookup.mapper;
 
 import org.mapstruct.Mapper;
+
 import uk.gov.companieshouse.addresslookup.entity.RoyalMailAddressLookup;
 import uk.gov.companieshouse.addresslookup.model.RoyalMailAddressDto;
 

@@ -9,19 +9,24 @@ import java.util.Objects;
 
 public class TestUtils {
 
-    public static JsonNode jsonFileToJsonNode(String path, ObjectMapper objectMapper) throws Exception {
-        return objectMapper.readTree(TestUtils.
-                class.getClassLoader().getResourceAsStream(path));
+    public static JsonNode jsonFileToJsonNode(String path, ObjectMapper objectMapper)
+            throws Exception {
+        return objectMapper.readTree(TestUtils.class.getClassLoader().getResourceAsStream(path));
     }
 
-    public static <T> T jsonFileToObject(String path, Class<T> clazz, ObjectMapper objectMapper) throws Exception {
+    public static <T> T jsonFileToObject(String path, Class<T> clazz, ObjectMapper objectMapper)
+            throws Exception {
         return objectMapper.readValue(
-                TestUtils.class.getClassLoader().getResourceAsStream(path),
-                clazz);
+                TestUtils.class.getClassLoader().getResourceAsStream(path), clazz);
     }
 
     public static String readFileFromClasspath(String path) throws IOException {
-        return new String((new BufferedInputStream(Objects.requireNonNull(TestUtils.class.
-                getClassLoader().getResourceAsStream(path)))).readAllBytes());
+        return new String(
+                (new BufferedInputStream(
+                                Objects.requireNonNull(
+                                        TestUtils.class
+                                                .getClassLoader()
+                                                .getResourceAsStream(path))))
+                        .readAllBytes());
     }
 }

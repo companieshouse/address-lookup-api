@@ -7,13 +7,12 @@ import jakarta.persistence.Table;
 @Entity
 @Table(name = "schema_contract", schema = "os_control")
 public class SchemaContract {
-  @Id
-  private String dataset;
-  private String version;
+    @Id private String dataset;
+    private String version;
 
-  protected SchemaContract() {}
+    protected SchemaContract() {}
 
-  public String getVersion() {
-    return version;
-  }
+    public String getVersion() {
+        return version;
+    }
 }

@@ -1,13 +1,14 @@
 package uk.gov.companieshouse.addresslookup.mapper;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
+
 import uk.gov.companieshouse.addresslookup.entity.RoyalMailAddressLookup;
 
 class LegacyAddressMapperTest {

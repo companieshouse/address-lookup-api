@@ -1,12 +1,13 @@
 package uk.gov.companieshouse.addresslookup.lambda.discovery;
 
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.events.ScheduledEvent;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,6 +15,7 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+
 import uk.gov.companieshouse.addresslookup.lambda.discovery.service.DiscoveryService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
 
@@ -22,21 +24,19 @@ import java.util.Map;
 @ExtendWith(MockitoExtension.class)
 class HandlerTest {
 
-    @Mock
-    private DiscoveryService discoveryService;
+    @Mock private DiscoveryService discoveryService;
 
-    @Mock
-    private Context context;
+    @Mock private Context context;
 
     private Handler handler;
 
     private static final Map<String, Object> TEST_DETAILS = Map.of("mode", "COU");
     private static final String TEST_RESPONSE_ID = "12345678-1234-1234-1234-123456789abc";
 
-
     @BeforeEach
     void setup() {
-        try (MockedStatic<AcquisitionApplication> mockApp = Mockito.mockStatic(AcquisitionApplication.class)) {
+        try (MockedStatic<AcquisitionApplication> mockApp =
+                Mockito.mockStatic(AcquisitionApplication.class)) {
             mockApp.when(() -> AcquisitionApplication.start(DiscoveryService.class))
                     .thenReturn(discoveryService);
             handler = new Handler();
@@ -47,8 +47,7 @@ class HandlerTest {
     void shouldReturnReleaseIdForSuccessfulDiscovery() throws Exception {
 
         Mockito.when(context.getAwsRequestId()).thenReturn("request-id");
-        Mockito.when(discoveryService.discover(TEST_DETAILS))
-                .thenReturn(TEST_RESPONSE_ID);
+        Mockito.when(discoveryService.discover(TEST_DETAILS)).thenReturn(TEST_RESPONSE_ID);
 
         ScheduledEvent testEvent = new ScheduledEvent();
         testEvent.setDetail(TEST_DETAILS);
@@ -62,8 +61,7 @@ class HandlerTest {
     void shouldReturnNoCommonContiguousReleaseResponse() throws Exception {
         String expectedResponse = "NO_COMMON_CONTIGUOUS_RELEASE";
 
-        Mockito.when(discoveryService.discover(TEST_DETAILS))
-                .thenReturn(expectedResponse);
+        Mockito.when(discoveryService.discover(TEST_DETAILS)).thenReturn(expectedResponse);
 
         ScheduledEvent testEvent = new ScheduledEvent();
         testEvent.setDetail(TEST_DETAILS);

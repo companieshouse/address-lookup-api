@@ -1,21 +1,31 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import org.junit.jupiter.api.Test;
+
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.AbortMultipartUploadResponse;
+import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadResponse;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
-import software.amazon.awssdk.services.s3.model.AbortMultipartUploadResponse;
-import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
-import software.amazon.awssdk.services.s3.model.S3Object;
 import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.model.S3Object;
 import software.amazon.awssdk.services.s3.model.UploadPartResponse;
 
 import java.io.ByteArrayInputStream;
@@ -25,15 +35,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.function.Consumer;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 final class StreamingS3Test {
     private static final String BUCKET = "bucket";
@@ -127,8 +128,7 @@ final class StreamingS3Test {
         when(s3.putObject(any(Consumer.class), any(RequestBody.class)))
                 .thenThrow(S3Exception.builder().statusCode(412).build());
         byte[] csv = "csv".getBytes(StandardCharsets.UTF_8);
-        String sha256 =
-                HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(csv));
+        String sha256 = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(csv));
         String md5 = HexFormat.of().formatHex(MessageDigest.getInstance("MD5").digest(csv));
         String checksumKey = StreamingS3.checksumKey(KEY);
         String evidence =
@@ -140,7 +140,8 @@ final class StreamingS3Test {
                         + "\",\"bytes\":3}";
         when(s3.getObject(any(GetObjectRequest.class)))
                 .thenReturn(response(csv), response(evidence.getBytes(StandardCharsets.UTF_8)));
-        when(s3.listObjectsV2(any(software.amazon.awssdk.services.s3.model.ListObjectsV2Request.class)))
+        when(s3.listObjectsV2(
+                        any(software.amazon.awssdk.services.s3.model.ListObjectsV2Request.class)))
                 .thenReturn(
                         ListObjectsV2Response.builder()
                                 .contents(S3Object.builder().key(checksumKey).build())
@@ -167,20 +168,25 @@ final class StreamingS3Test {
         when(s3.headObject(any(HeadObjectRequest.class)))
                 .thenReturn(HeadObjectResponse.builder().versionId("existing-version").build());
         var readFailure = new IOException("read failed");
-        InputStream failingStream = new InputStream() {
-            @Override
-            public int read() throws IOException {
-                throw readFailure;
-            }
-        };
+        InputStream failingStream =
+                new InputStream() {
+                    @Override
+                    public int read() throws IOException {
+                        throw readFailure;
+                    }
+                };
         when(s3.getObject(any(GetObjectRequest.class)))
-                .thenReturn(new ResponseInputStream<>(
-                        GetObjectResponse.builder().build(), AbortableInputStream.create(failingStream)));
+                .thenReturn(
+                        new ResponseInputStream<>(
+                                GetObjectResponse.builder().build(),
+                                AbortableInputStream.create(failingStream)));
         var upload = new StreamingS3(s3, () -> 900_000);
         var source = new ByteArrayInputStream("csv".getBytes(StandardCharsets.UTF_8));
 
-        var failure = assertThrows(StreamingS3.ExistingObjectVerificationException.class,
-                () -> upload.putIdempotent(source, "bucket", "key", 100));
+        var failure =
+                assertThrows(
+                        StreamingS3.ExistingObjectVerificationException.class,
+                        () -> upload.putIdempotent(source, "bucket", "key", 100));
 
         assertEquals("Could not verify existing extracted CSV", failure.getMessage());
         assertInstanceOf(IOException.class, failure.getCause());

@@ -9,25 +9,13 @@ import static org.mockito.Mockito.*;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
-import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.function.Consumer;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
 
-import org.junit.jupiter.api.BeforeEach;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.AbortableInputStream;
@@ -45,11 +33,26 @@ import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
-import software.amazon.awssdk.services.s3.model.S3Object;
 import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.model.S3Object;
 import software.amazon.awssdk.services.s3.model.Tag;
 import software.amazon.awssdk.services.s3.model.UploadPartResponse;
+
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
+import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.release.model.DatasetCatalog;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Consumer;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @ExtendWith(MockitoExtension.class)
 final class ExtractionServiceTest {
@@ -60,15 +63,11 @@ final class ExtractionServiceTest {
     private static final String SOURCE = "source";
     private static final String CHECKED = "checked";
 
-    private record StoredObject(String bucket, String key) {
-    }
+    private record StoredObject(String bucket, String key) {}
 
-    @Mock
-    private S3Client s3;
-    @Mock
-    private Commands commands;
-    @Mock
-    private Context context;
+    @Mock private S3Client s3;
+    @Mock private Commands commands;
+    @Mock private Context context;
     private final Map<StoredObject, byte[]> objects = new HashMap<>();
     private byte[] uploaded;
     private boolean failReceiptOnce;
@@ -79,49 +78,62 @@ final class ExtractionServiceTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        service = new ExtractionService(
-                s3,
-                commands,
-                new AcquisitionProperties(
-                        SOURCE, CHECKED, "ingest", "events", "key", "packages",
-                        1024 * 1024, null, null, 1024 * 1024, 20,
-                        Duration.ofSeconds(20), Duration.ofSeconds(60)));
+        service =
+                new ExtractionService(
+                        s3,
+                        commands,
+                        new AcquisitionProperties(
+                                SOURCE,
+                                CHECKED,
+                                "ingest",
+                                "events",
+                                "key",
+                                "packages",
+                                1024 * 1024,
+                                null,
+                                null,
+                                1024 * 1024,
+                                20,
+                                Duration.ofSeconds(20),
+                                Duration.ofSeconds(60)));
 
         lenient().when(context.getRemainingTimeInMillis()).thenReturn(900_000);
-        lenient().when(s3.listObjectsV2(any(ListObjectsV2Request.class)))
-                .thenAnswer(
-                        call -> {
-                            var request = call.getArgument(0, ListObjectsV2Request.class);
-                            return objects.containsKey(stored(request.bucket(), request.prefix()))
-                                    ? ListObjectsV2Response.builder()
+        lenient()
+                .when(s3.listObjectsV2(any(ListObjectsV2Request.class)))
+                .thenAnswer(call -> {
+                    var request = call.getArgument(0, ListObjectsV2Request.class);
+                    return objects.containsKey(stored(request.bucket(), request.prefix()))
+                            ? ListObjectsV2Response.builder()
                                     .contents(S3Object.builder().key(request.prefix()).build())
                                     .build()
-                                    : ListObjectsV2Response.builder().build();
-                        });
-        lenient().when(s3.getObject(any(GetObjectRequest.class)))
-                .thenAnswer(
-                        call -> {
-                            var request = call.getArgument(0, GetObjectRequest.class);
-                            byte[] content = objects.get(stored(request.bucket(), request.key()));
-                            if (content == null)
-                                throw new IllegalStateException("Missing fixture: " + request.bucket() + "/" + request.key());
-                            return new ResponseInputStream<>(
-                                    GetObjectResponse.builder().build(),
-                                    AbortableInputStream.create(new ByteArrayInputStream(content)));
-                        });
-        lenient().when(s3.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
-                .thenAnswer(
-                        call -> recordObject(
+                            : ListObjectsV2Response.builder().build();
+                });
+        lenient()
+                .when(s3.getObject(any(GetObjectRequest.class)))
+                .thenAnswer(call -> {
+                    var request = call.getArgument(0, GetObjectRequest.class);
+                    byte[] content = objects.get(stored(request.bucket(), request.key()));
+                    if (content == null)
+                        throw new IllegalStateException(
+                                "Missing fixture: " + request.bucket() + "/" + request.key());
+                    return new ResponseInputStream<>(
+                            GetObjectResponse.builder().build(),
+                            AbortableInputStream.create(new ByteArrayInputStream(content)));
+                });
+        lenient()
+                .when(s3.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenAnswer(call ->
+                        recordObject(
                                 call.getArgument(0, PutObjectRequest.class),
                                 call.getArgument(1, RequestBody.class)));
-        lenient().when(s3.putObject(any(Consumer.class), any(RequestBody.class)))
-                .thenAnswer(
-                        call -> {
-                            var builder = PutObjectRequest.builder();
-                            Consumer<PutObjectRequest.Builder> request = call.getArgument(0);
-                            request.accept(builder);
-                            return recordObject(builder.build(), call.getArgument(1, RequestBody.class));
-                        });
+        lenient()
+                .when(s3.putObject(any(Consumer.class), any(RequestBody.class)))
+                .thenAnswer(call -> {
+                    var builder = PutObjectRequest.builder();
+                    Consumer<PutObjectRequest.Builder> request = call.getArgument(0);
+                    request.accept(builder);
+                    return recordObject(builder.build(), call.getArgument(1, RequestBody.class));
+                });
     }
 
     @Test
@@ -131,7 +143,8 @@ final class ExtractionServiceTest {
         var unzipEvent = event();
 
         assertThrows(S3Exception.class, () -> service.unzip(unzipEvent, context));
-        verify(s3, never()).getObject(argThat((GetObjectRequest request) -> ZIP_KEY.equals(request.key())));
+        verify(s3, never())
+                .getObject(argThat((GetObjectRequest request) -> ZIP_KEY.equals(request.key())));
         verifyNoInteractions(commands);
     }
 
@@ -143,7 +156,8 @@ final class ExtractionServiceTest {
                 .thenReturn(GetObjectTaggingResponse.builder().build());
 
         assertEquals("WAITING_FOR_ZIP_SCAN", service.unzip(event(), context));
-        verify(s3, never()).getObject(argThat((GetObjectRequest request) -> ZIP_KEY.equals(request.key())));
+        verify(s3, never())
+                .getObject(argThat((GetObjectRequest request) -> ZIP_KEY.equals(request.key())));
         verifyNoInteractions(commands);
     }
 
@@ -166,7 +180,7 @@ final class ExtractionServiceTest {
 
     @Test
     void rejectsZipMembersWithPaths() throws Exception {
-        for (String name : new String[]{"nested/" + DATASET + ".csv", "..", "dir\\file.csv"}) {
+        for (String name : new String[] {"nested/" + DATASET + ".csv", "..", "dir\\file.csv"}) {
             cleanZip(zip(Map.of(name, "data\n")));
 
             assertEquals("ARCHIVE_INVALID", service.unzip(event(), context), name);
@@ -198,19 +212,34 @@ final class ExtractionServiceTest {
         when(context.getRemainingTimeInMillis()).thenReturn(1_000);
         var request = event();
 
-        var failure = assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));
+        var failure =
+                assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));
 
         assertEquals("Unzip deadline", failure.getMessage());
     }
 
     @Test
     void constructorRequiresScannedBucket() {
-        var properties = new AcquisitionProperties(
-                SOURCE, " ", "ingest", "events", "key", "packages", 1024, null, null,1024, 20,
-                Duration.ofSeconds(20), Duration.ofSeconds(60));
+        var properties =
+                new AcquisitionProperties(
+                        SOURCE,
+                        " ",
+                        "ingest",
+                        "events",
+                        "key",
+                        "packages",
+                        1024,
+                        null,
+                        null,
+                        1024,
+                        20,
+                        Duration.ofSeconds(20),
+                        Duration.ofSeconds(60));
 
-        var failure = assertThrows(IllegalArgumentException.class,
-                () -> new ExtractionService(s3, commands, properties));
+        var failure =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () -> new ExtractionService(s3, commands, properties));
 
         assertEquals("Missing SCANNED_BUCKET", failure.getMessage());
     }
@@ -285,12 +314,18 @@ final class ExtractionServiceTest {
         assertTrue(receipt.path("sha256").asText().matches("[a-f0-9]{64}"));
         assertEquals("zip-version", receipt.path("zipVersion").asText());
         assertEquals(csvKey(), receipt.path("key").asText());
-        verify(s3).getObjectTagging(argThat((GetObjectTaggingRequest request) ->
-                SOURCE.equals(request.bucket()) && ZIP_KEY.equals(request.key())
-                        && "zip-version".equals(request.versionId())));
-        verify(s3).getObject(argThat((GetObjectRequest request) ->
-                SOURCE.equals(request.bucket()) && ZIP_KEY.equals(request.key())
-                        && "zip-version".equals(request.versionId())));
+        verify(s3)
+                .getObjectTagging(
+                        argThat((GetObjectTaggingRequest request) ->
+                                SOURCE.equals(request.bucket())
+                                        && ZIP_KEY.equals(request.key())
+                                        && "zip-version".equals(request.versionId())));
+        verify(s3)
+                .getObject(
+                        argThat((GetObjectRequest request) ->
+                                SOURCE.equals(request.bucket())
+                                        && ZIP_KEY.equals(request.key())
+                                        && "zip-version".equals(request.versionId())));
         verify(commands).send("CSV_SCAN", DATASET);
     }
 
@@ -299,7 +334,8 @@ final class ExtractionServiceTest {
         cleanZip(validZip());
         stubUpload();
         doThrow(new IllegalStateException("EventBridge unavailable"))
-                .when(commands).send("CSV_SCAN", DATASET);
+                .when(commands)
+                .send("CSV_SCAN", DATASET);
         var request = event();
         assertThrows(IllegalStateException.class, () -> service.unzip(request, context));
         JsonNode receipt = capturedReceipt();
@@ -325,7 +361,8 @@ final class ExtractionServiceTest {
         cleanZip(validZip());
         stubUpload();
         doThrow(new IllegalStateException("EventBridge unavailable"))
-                .when(commands).send("CSV_SCAN", DATASET);
+                .when(commands)
+                .send("CSV_SCAN", DATASET);
         var request = event();
 
         assertThrows(IllegalStateException.class, () -> service.unzip(request, context));
@@ -363,9 +400,12 @@ final class ExtractionServiceTest {
         assertTrue(objects.containsKey(stored(CHECKED, csvKey())));
         assertEquals("CSV_SCAN", service.unzip(request, context));
 
-        assertTrue(objects.containsKey(stored(CHECKED,
-                uk.gov.companieshouse.addresslookup.lambda.shared.storage
-                        .StreamingS3.checksumKey(csvKey()))));
+        assertTrue(
+                objects.containsKey(
+                        stored(
+                                CHECKED,
+                                uk.gov.companieshouse.addresslookup.lambda.shared.storage
+                                        .StreamingS3.checksumKey(csvKey()))));
         verify(commands).send("CSV_SCAN", DATASET);
     }
 
@@ -407,7 +447,8 @@ final class ExtractionServiceTest {
     @Test
     void rejectsReceiptForDifferentZipVersion() throws Exception {
         cleanZip(validZip());
-        var receipt = """
+        var receipt =
+                """
                 {
                   "releaseId": "%s",
                   "dataset": "%s",
@@ -418,7 +459,8 @@ final class ExtractionServiceTest {
                   "version": "csv-version",
                   "sha256": "abc"
                 }
-                """.formatted(ID, DATASET, ZIP_KEY, csvKey());
+                """
+                        .formatted(ID, DATASET, ZIP_KEY, csvKey());
         objects.put(stored(SOURCE, RECEIPT_KEY), receipt.getBytes(StandardCharsets.UTF_8));
         var request = event();
 
@@ -430,24 +472,46 @@ final class ExtractionServiceTest {
     // Helper methods
     private ExtractionService serviceWithLimit(long maxExtractedBytes) {
         return new ExtractionService(
-                s3, commands,
+                s3,
+                commands,
                 new AcquisitionProperties(
-                        SOURCE, CHECKED, "ingest", "events", "key", "packages", 1024 * 1024,
-                        null, null, maxExtractedBytes, 20, Duration.ofSeconds(20), Duration.ofSeconds(60)));
+                        SOURCE,
+                        CHECKED,
+                        "ingest",
+                        "events",
+                        "key",
+                        "packages",
+                        1024 * 1024,
+                        null,
+                        null,
+                        maxExtractedBytes,
+                        20,
+                        Duration.ofSeconds(20),
+                        Duration.ofSeconds(60)));
     }
 
     private void cleanZip(byte[] content) throws Exception {
         objects.put(stored(SOURCE, ZIP_KEY), content);
-        lenient().when(s3.getObjectTagging(any(GetObjectTaggingRequest.class)))
+        lenient()
+                .when(s3.getObjectTagging(any(GetObjectTaggingRequest.class)))
                 .thenReturn(
                         GetObjectTaggingResponse.builder()
-                                .tagSet(Tag.builder().key("GuardDutyMalwareScanStatus").value("NO_THREATS_FOUND").build())
+                                .tagSet(
+                                        Tag.builder()
+                                                .key("GuardDutyMalwareScanStatus")
+                                                .value("NO_THREATS_FOUND")
+                                                .build())
                                 .build());
-        lenient().when(s3.headObject(any(HeadObjectRequest.class)))
-                .thenAnswer(
-                        call -> HeadObjectResponse.builder()
-                                .versionId(CHECKED.equals(call.getArgument(0, HeadObjectRequest.class).bucket())
-                                        ? "csv-version" : "zip-version")
+        lenient()
+                .when(s3.headObject(any(HeadObjectRequest.class)))
+                .thenAnswer(call ->
+                        HeadObjectResponse.builder()
+                                .versionId(
+                                        CHECKED.equals(
+                                                        call.getArgument(0, HeadObjectRequest.class)
+                                                                .bucket())
+                                                ? "csv-version"
+                                                : "zip-version")
                                 .build());
     }
 
@@ -477,32 +541,35 @@ final class ExtractionServiceTest {
 
     private void stubUpload() throws Exception {
         when(s3.createMultipartUpload(any(Consumer.class)))
-                .thenAnswer(
-                        call -> {
-                            Consumer<CreateMultipartUploadRequest.Builder> request = call.getArgument(0);
-                            var builder = CreateMultipartUploadRequest.builder();
-                            request.accept(builder);
-                            assertEquals(CHECKED, builder.build().bucket());
-                            assertEquals(csvKey(), builder.build().key());
-                            return CreateMultipartUploadResponse.builder().uploadId("upload-id").build();
-                        });
-        lenient().when(s3.uploadPart(any(Consumer.class), any(RequestBody.class)))
-                .thenAnswer(
-                        call -> {
-                            try (var in = call.getArgument(1, RequestBody.class)
-                                    .contentStreamProvider().newStream()) {
-                                uploaded = in.readAllBytes();
-                            }
-                            return UploadPartResponse.builder().eTag("etag").build();
-                        });
-        lenient().when(s3.completeMultipartUpload(any(Consumer.class)))
-                .thenAnswer(
-                        call -> {
-                            if (objects.containsKey(stored(CHECKED, csvKey())))
-                                throw S3Exception.builder().statusCode(412).build();
-                            objects.put(stored(CHECKED, csvKey()), uploaded);
-                            return CompleteMultipartUploadResponse.builder().versionId("csv-version").build();
-                        });
+                .thenAnswer(call -> {
+                    Consumer<CreateMultipartUploadRequest.Builder> request = call.getArgument(0);
+                    var builder = CreateMultipartUploadRequest.builder();
+                    request.accept(builder);
+                    assertEquals(CHECKED, builder.build().bucket());
+                    assertEquals(csvKey(), builder.build().key());
+                    return CreateMultipartUploadResponse.builder().uploadId("upload-id").build();
+                });
+        lenient()
+                .when(s3.uploadPart(any(Consumer.class), any(RequestBody.class)))
+                .thenAnswer(call -> {
+                    try (var in =
+                            call.getArgument(1, RequestBody.class)
+                                    .contentStreamProvider()
+                                    .newStream()) {
+                        uploaded = in.readAllBytes();
+                    }
+                    return UploadPartResponse.builder().eTag("etag").build();
+                });
+        lenient()
+                .when(s3.completeMultipartUpload(any(Consumer.class)))
+                .thenAnswer(call -> {
+                    if (objects.containsKey(stored(CHECKED, csvKey())))
+                        throw S3Exception.builder().statusCode(412).build();
+                    objects.put(stored(CHECKED, csvKey()), uploaded);
+                    return CompleteMultipartUploadResponse.builder()
+                            .versionId("csv-version")
+                            .build();
+                });
     }
 
     private JsonNode capturedReceipt() throws Exception {
@@ -511,7 +578,8 @@ final class ExtractionServiceTest {
                 .readTree(objects.get(stored(SOURCE, RECEIPT_KEY)));
     }
 
-    private PutObjectResponse recordObject(PutObjectRequest request, RequestBody body) throws Exception {
+    private PutObjectResponse recordObject(PutObjectRequest request, RequestBody body)
+            throws Exception {
         if (failReceiptOnce && RECEIPT_KEY.equals(request.key())) {
             failReceiptOnce = false;
             throw S3Exception.builder().statusCode(503).message("S3 unavailable").build();
@@ -526,10 +594,15 @@ final class ExtractionServiceTest {
             byte[] contents = in.readAllBytes();
             if (conflictingReceiptOnce && RECEIPT_KEY.equals(request.key())) {
                 conflictingReceiptOnce = false;
-                var conflicting = uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON
-                        .readTree(contents).deepCopy();
-                ((com.fasterxml.jackson.databind.node.ObjectNode) conflicting).put("zipVersion", "other-version");
-                objects.put(stored(request.bucket(), request.key()),
+                var conflicting =
+                        uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport
+                                .JSON
+                                .readTree(contents)
+                                .deepCopy();
+                ((com.fasterxml.jackson.databind.node.ObjectNode) conflicting)
+                        .put("zipVersion", "other-version");
+                objects.put(
+                        stored(request.bucket(), request.key()),
                         conflicting.toString().getBytes(StandardCharsets.UTF_8));
                 throw S3Exception.builder().statusCode(412).build();
             }
@@ -555,10 +628,19 @@ final class ExtractionServiceTest {
     }
 
     private static Map<String, Object> event(int schemaVersion) {
-        return Map.of("detail", Map.of(
-                "schemaVersion", schemaVersion,
-                "releaseId", ID,
-                "dataset", DATASET,
-                "object", Map.of("bucket", SOURCE, "key", ZIP_KEY, "versionId", "zip-version")));
+        return Map.of(
+                "detail",
+                Map.of(
+                        "schemaVersion", schemaVersion,
+                        "releaseId", ID,
+                        "dataset", DATASET,
+                        "object",
+                                Map.of(
+                                        "bucket",
+                                        SOURCE,
+                                        "key",
+                                        ZIP_KEY,
+                                        "versionId",
+                                        "zip-version")));
     }
 }

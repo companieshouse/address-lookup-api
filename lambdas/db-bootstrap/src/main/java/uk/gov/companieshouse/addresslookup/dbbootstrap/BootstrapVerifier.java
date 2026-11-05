@@ -26,18 +26,27 @@ public final class BootstrapVerifier {
         NOT_EMPTY
     }
 
-    public record Report(String postgisVersion, String schemaOwner, DatabaseState databaseState, List<String> objects,
-                         String forceSsl, String sslMinProtocolVersion, String connectionTls,
-                         String tls12, String tls13, List<String> failures) {
-    }
+    public record Report(
+            String postgisVersion,
+            String schemaOwner,
+            DatabaseState databaseState,
+            List<String> objects,
+            String forceSsl,
+            String sslMinProtocolVersion,
+            String connectionTls,
+            String tls12,
+            String tls13,
+            List<String> failures) {}
 
-    private static final String HISTORY_SQL = """
+    private static final String HISTORY_SQL =
+            """
             SELECT n.nspname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE n.nspname = 'public' AND c.relname = 'flyway_schema_history' AND c.relkind IN ('r', 'p')
             """;
 
     /** Relations and schemas that are neither system nor owned by an extension (PostGIS's spatial_ref_sys is). */
-    private static final String OBJECTS_SQL = """
+    private static final String OBJECTS_SQL =
+            """
             SELECT name FROM (
                 SELECT n.nspname || '.' || c.relname AS name
                 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -54,7 +63,8 @@ public final class BootstrapVerifier {
             ) objects ORDER BY name LIMIT 20
             """;
 
-    private static final String OWNER_SQL = """
+    private static final String OWNER_SQL =
+            """
             SELECT r.rolsuper, r.rolcanlogin,
                    CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'rds_superuser')
                         THEN pg_has_role(r.oid, 'rds_superuser', 'MEMBER') ELSE false END,
@@ -71,11 +81,16 @@ public final class BootstrapVerifier {
         this.probe = probe;
     }
 
-    public Report verify(Connection master, DatabaseCredentials masterCredentials, String schemaOwner)
+    public Report verify(
+            Connection master, DatabaseCredentials masterCredentials, String schemaOwner)
             throws SQLException, IOException, GeneralSecurityException {
         List<String> failures = new ArrayList<>();
 
-        String postgis = string(master, "SELECT extversion FROM pg_extension WHERE extname = 'postgis'", null);
+        String postgis =
+                string(
+                        master,
+                        "SELECT extversion FROM pg_extension WHERE extname = 'postgis'",
+                        null);
         if (postgis == null) {
             failures.add("postgis is not in pg_extension");
         }
@@ -90,8 +105,10 @@ public final class BootstrapVerifier {
             objects = strings(master, OBJECTS_SQL);
             state = objects.isEmpty() ? DatabaseState.EMPTY : DatabaseState.NOT_EMPTY;
             if (!objects.isEmpty()) {
-                failures.add("database has application objects but no flyway_schema_history, so Flyway would "
-                        + "refuse to migrate it: " + objects);
+                failures.add(
+                        "database has application objects but no flyway_schema_history, so Flyway would "
+                                + "refuse to migrate it: "
+                                + objects);
             }
         }
 
@@ -102,11 +119,21 @@ public final class BootstrapVerifier {
         String tls13 = null;
         if (probe != null) {
             forceSsl = string(master, "SELECT current_setting('rds.force_ssl', true)", null);
-            minProtocol = string(master, "SELECT current_setting('ssl_min_protocol_version', true)", null);
-            connectionTls = string(master, "SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()", null);
+            minProtocol =
+                    string(
+                            master,
+                            "SELECT current_setting('ssl_min_protocol_version', true)",
+                            null);
+            connectionTls =
+                    string(
+                            master,
+                            "SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()",
+                            null);
             checkTlsSettings(forceSsl, minProtocol, connectionTls, failures);
-            TlsProtocolProbe.Outcome old = probe.probe(masterCredentials.host(), masterCredentials.port(), "TLSv1.2");
-            TlsProtocolProbe.Outcome current = probe.probe(masterCredentials.host(), masterCredentials.port(), TLS_1_3);
+            TlsProtocolProbe.Outcome old =
+                    probe.probe(masterCredentials.host(), masterCredentials.port(), "TLSv1.2");
+            TlsProtocolProbe.Outcome current =
+                    probe.probe(masterCredentials.host(), masterCredentials.port(), TLS_1_3);
             tls12 = old.result().name();
             tls13 = current.result().name();
             if (old.result() != TlsProtocolProbe.Result.REFUSED) {
@@ -117,16 +144,26 @@ public final class BootstrapVerifier {
             }
         }
 
-        Report report = new Report(postgis, schemaOwner, state, objects, forceSsl, minProtocol, connectionTls,
-                tls12, tls13, List.copyOf(failures));
+        Report report =
+                new Report(
+                        postgis,
+                        schemaOwner,
+                        state,
+                        objects,
+                        forceSsl,
+                        minProtocol,
+                        connectionTls,
+                        tls12,
+                        tls13,
+                        List.copyOf(failures));
         if (!failures.isEmpty()) {
             throw new VerificationException(report);
         }
         return report;
     }
 
-    private static void checkTlsSettings(String forceSsl, String minProtocol, String connectionTls,
-            List<String> failures) {
+    private static void checkTlsSettings(
+            String forceSsl, String minProtocol, String connectionTls, List<String> failures) {
         if (!"1".equals(forceSsl) && !"on".equals(forceSsl)) {
             failures.add("rds.force_ssl is " + forceSsl + ", expected 1 (on)");
         }
@@ -138,7 +175,8 @@ public final class BootstrapVerifier {
         }
     }
 
-    private static void checkOwner(Connection master, String masterUsername, String owner, List<String> failures)
+    private static void checkOwner(
+            Connection master, String masterUsername, String owner, List<String> failures)
             throws SQLException {
         if (owner.equals(masterUsername)) {
             failures.add("the schema owner is the master user");
@@ -169,7 +207,8 @@ public final class BootstrapVerifier {
         }
     }
 
-    private static String string(Connection connection, String sql, String parameter) throws SQLException {
+    private static String string(Connection connection, String sql, String parameter)
+            throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             if (parameter != null) {
                 statement.setString(1, parameter);
@@ -182,7 +221,8 @@ public final class BootstrapVerifier {
 
     private static List<String> strings(Connection connection, String sql) throws SQLException {
         List<String> values = new ArrayList<>();
-        try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet rs = statement.executeQuery()) {
+        try (PreparedStatement statement = connection.prepareStatement(sql);
+                ResultSet rs = statement.executeQuery()) {
             while (rs.next()) {
                 values.add(rs.getString(1));
             }

@@ -1,5 +1,11 @@
 package uk.gov.companieshouse.addresslookup.dbbootstrap;
 
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import org.postgresql.PGConnection;
 
 import java.sql.Connection;
@@ -13,12 +19,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 /**
  * A mocked JDBC connection that answers queries by SQL fragment and records executed DDL, so the bootstrap and
@@ -38,8 +38,10 @@ final class FakeDatabase {
         when(connection.unwrap(PGConnection.class)).thenReturn(pgConnection);
         Statement statement = mock(Statement.class);
         when(connection.createStatement()).thenReturn(statement);
-        when(statement.execute(anyString())).thenAnswer(call -> executed.add(call.getArgument(0)) && false);
-        when(connection.prepareStatement(anyString())).thenAnswer(call -> prepare(call.getArgument(0)));
+        when(statement.execute(anyString()))
+                .thenAnswer(call -> executed.add(call.getArgument(0)) && false);
+        when(connection.prepareStatement(anyString()))
+                .thenAnswer(call -> prepare(call.getArgument(0)));
     }
 
     /** Rows returned by any query containing {@code fragment}; no rows means an empty result. */
@@ -67,10 +69,14 @@ final class FakeDatabase {
         PreparedStatement statement = mock(PreparedStatement.class);
         Map<Integer, String> parameters = new HashMap<>();
         doAnswer(call -> parameters.put(call.getArgument(0), call.getArgument(1)))
-                .when(statement).setString(anyInt(), org.mockito.ArgumentMatchers.any());
-        when(statement.executeQuery()).thenAnswer(call -> resultSet(sql.startsWith("SELECT format(")
-                ? List.<Object[]>of(row(format(sql, parameters)))
-                : rows(sql)));
+                .when(statement)
+                .setString(anyInt(), org.mockito.ArgumentMatchers.any());
+        when(statement.executeQuery())
+                .thenAnswer(call ->
+                        resultSet(
+                                sql.startsWith("SELECT format(")
+                                        ? List.<Object[]>of(row(format(sql, parameters)))
+                                        : rows(sql)));
         return statement;
     }
 
@@ -100,11 +106,14 @@ final class FakeDatabase {
         ResultSet rs = mock(ResultSet.class);
         AtomicInteger cursor = new AtomicInteger(-1);
         when(rs.next()).thenAnswer(call -> cursor.incrementAndGet() < rows.size());
-        when(rs.getString(anyInt())).thenAnswer(call -> {
-            Object value = rows.get(cursor.get())[(int) call.getArgument(0) - 1];
-            return value == null ? null : value.toString();
-        });
-        when(rs.getBoolean(anyInt())).thenAnswer(call -> (Boolean) rows.get(cursor.get())[(int) call.getArgument(0) - 1]);
+        when(rs.getString(anyInt()))
+                .thenAnswer(call -> {
+                    Object value = rows.get(cursor.get())[(int) call.getArgument(0) - 1];
+                    return value == null ? null : value.toString();
+                });
+        when(rs.getBoolean(anyInt()))
+                .thenAnswer(
+                        call -> (Boolean) rows.get(cursor.get())[(int) call.getArgument(0) - 1]);
         return rs;
     }
 }

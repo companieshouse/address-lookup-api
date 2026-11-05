@@ -1,8 +1,8 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.runtime;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import org.junit.jupiter.api.Test;
 
 final class RuntimeSupportTest {
     @Test

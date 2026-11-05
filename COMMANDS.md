@@ -20,7 +20,9 @@ current Makefile and its maintained scripts.
 | Stop everything local | `make stop` | Stops this helper's API, then this repository's Compose Postgres. Does not stop shared ingress, other containers, or processes started by other runners. |
 | Reset and reseed DB | `make db-reset CONFIRM=address_lookup` | Stops the managed API, verifies its port is free, starts Postgres, drops/recreates only the local Compose `address_lookup` DB, starts the API with Flyway/local fixtures, and verifies the lookup relation contains rows. Leaves both services running. |
 | Unit tests | `make test-unit` | Maven reactor Java unit tests with integration tests skipped and automatic Make JDK selection. Does not require local-service tools such as `jq`. |
-| Command-helper regressions | `make test-commands` | Runs lifecycle/Sonar, smoke, postcode and Maven-selector helper checks using stubs; requires `jq` and `ps`. |
+| Command-helper regressions and formatting | `make test-commands` | Runs helper regressions and the real full Java formatting scan; requires Maven, JDK 21+, `jq` and `ps`. |
+| Format Java | `make tidy FILE=path/File.java` | Formats one file in place. Use `FILE=.` for all Java files, or pipe Java source to `make tidy` for formatted stdout. |
+| Check Java formatting | `make spotless-check` | Read-only scan of all Java files; prints only unformatted paths and fails, or exits zero silently when clean. |
 | Smoke test | `make test-smoke` | Creates a temporary database, starts a separate API on an OS-assigned port, checks health and applied migrations, then stops its API and drops only its temporary database. |
 | Test seeded regional postcodes | `make test-postcodes` | Starts/waits for the local DB and API, then sequentially curls the 17 regional/border postcodes; prints each command, GET URL, response headers and formatted JSON. Stops at the first failure. |
 | Generate coverage | `make coverage` | Fresh Maven reactor `clean verify` under the `coverage` profile; integration tests skipped. Produces per-module HTML/XML reports without a percentage gate. |
@@ -45,6 +47,8 @@ tests. Images running this target need `jq` and `ps` (`procps` on Linux),
 even though service/network commands
 are stubbed. Missing prerequisites fail explicitly before the helper checks.
 Assertion failures print the last captured command output for diagnosis.
+The formatting regressions and final scan use real Maven/Spotless, so this
+target also requires a JDK 21+ and access to the configured Maven repositories.
 
 Sonar report retrieval requires `curl` and `jq`; analysis requires Maven,
 server access, project permissions, and a valid token. PR analysis requires
@@ -172,6 +176,60 @@ LOCAL_API_HEALTH_POLL_INTERVAL_SECONDS=2 make test-smoke
 The smoke helper's settings are distinct from `LOCAL_API_TIMEOUT`.
 `make test-commands` uses stubs;
 they are not live smoke tests.
+
+## Java formatting and PR quality checks
+
+The project uses the [Spotless Maven plugin](https://github.com/diffplug/spotless/tree/main/plugin-maven),
+`com.diffplug.spotless:spotless-maven-plugin:3.11.0`, with pinned
+`google-java-format:2.0.0` in AOSP style (four-space indentation). Configuration
+lives in the root `pom.xml`; formatting does not run implicitly during ordinary
+Maven builds. Imports use AOSP ordering and unused imports are removed.
+Javadoc formatting, long-string reflow and optional syntax cleanups are disabled.
+
+```bash
+make tidy FILE=address-lookup-api/src/main/java/uk/gov/companieshouse/addresslookup/Application.java
+make tidy FILE=.
+cat foobar.java | make tidy > foobar-formatted.java
+make spotless-check
+```
+
+`FILE` names one Java file, including paths with spaces when quoted, and is
+formatted in place. `FILE=.` formats all Java files across the checkout.
+Without `FILE`, stdin is Java source content, not a list of filenames; only
+formatted Java is written to stdout. Empty input fails with usage guidance.
+Do not redirect piped output to the input file: the shell would truncate it.
+Use `FILE=...` for safe in-place formatting. A nonempty `FILE` takes precedence
+over stdin. Run these commands from the repository root.
+
+`scripts/spotless.sh check` scans the whole Java codebase, including tests and
+untracked Java files. Generated/build/runtime directories named `target`,
+`build-*`, `.git` and `.local-run` are excluded. Other languages, SQL migrations,
+POMs and documentation are not reformatted by these commands.
+The helper formats a temporary snapshot using the same POM configuration and
+compares every Java file. This avoids Spotless's truncated standard violation
+list and never modifies source files during checks. Temporary files are cleaned
+on exit; formatter or dependency errors are reported explicitly without
+overwriting inputs.
+
+On a clean tree, the helper and `make spotless-check` return 0 without listing
+files. On formatting violations, the helper prints every offending path
+relative to the repository root and exits **255**. Standard GNU Make converts
+any recipe failure to its own exit **2**, while showing `Error 255`; this is
+Make's behavior, not a different formatting result. For the exact script status:
+
+```bash
+bash scripts/spotless.sh check
+```
+
+Maven, parser or other operational failures are errors, not clean results.
+`tests/test_commands.sh` runs focused formatting regressions and invokes this
+real scan, so the existing PR check fails for unformatted Java. No additional
+GitHub workflow is needed. Before committing, run `make tidy FILE=.` (or tidy
+each changed file), then `make spotless-check` and review the diff.
+
+Direct Maven equivalents from the root are `mvn -N spotless:apply` and
+`mvn -N spotless:check`. The latter uses Maven's usual failure status and
+truncated diagnostics, not the helper's complete path list or 255 contract.
 
 ## Coverage
 

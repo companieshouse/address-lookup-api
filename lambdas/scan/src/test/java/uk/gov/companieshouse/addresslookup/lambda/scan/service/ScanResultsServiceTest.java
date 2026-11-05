@@ -7,9 +7,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,8 +23,9 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
+
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.EventPublicationException;
 
 import java.io.InputStream;
@@ -46,25 +50,33 @@ class ScanResultsServiceTest {
     private static final String CSV_KEY = "csv/20780-131061/add_gb_royalmailaddress.csv";
     private static final String VERSION = "3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY";
 
-    private record PublishedEvent(String type, JsonNode detail) {
-    }
+    private record PublishedEvent(String type, JsonNode detail) {}
 
     private final List<PublishedEvent> sent = new ArrayList<>();
     private boolean failPublish;
     private boolean rejectEntries;
     private ScanResultsService service;
 
-    @Mock
-    private Commands commands;
+    @Mock private Commands commands;
 
     @BeforeEach
     void setUp() {
-        doAnswer(this::invocationOfCommand)
-            .when(commands).sendIngestion(anyString(), anyMap());
-        var properties = new AcquisitionProperties(
-                null, CLEAN_BUCKET, BUCKET, "event-bus", null, null,
-                1024L, null, null, 1024L, 20,
-                Duration.ofSeconds(20), Duration.ofSeconds(840));
+        doAnswer(this::invocationOfCommand).when(commands).sendIngestion(anyString(), anyMap());
+        var properties =
+                new AcquisitionProperties(
+                        null,
+                        CLEAN_BUCKET,
+                        BUCKET,
+                        "event-bus",
+                        null,
+                        null,
+                        1024L,
+                        null,
+                        null,
+                        1024L,
+                        20,
+                        Duration.ofSeconds(20),
+                        Duration.ofSeconds(840));
         service = new ScanResultsService(commands, properties);
     }
 
@@ -73,21 +85,33 @@ class ScanResultsServiceTest {
         if (rejectEntries) {
             throw new EventPublicationException("EventBridge rejected event");
         }
-        sent.add(new PublishedEvent(
-                invocation.getArgument(0),
-                JSON.valueToTree(invocation.getArgument(1))));
+        sent.add(
+                new PublishedEvent(
+                        invocation.getArgument(0), JSON.valueToTree(invocation.getArgument(1))));
         return null;
     }
 
     @Test
     void cleanManifestPublishesOnlyManifestReadyWithExactObjectAndNoDataset() throws Exception {
-        assertEquals("ManifestReady",
+        assertEquals(
+                "ManifestReady",
                 service.scan(event(BUCKET, MANIFEST_KEY, VERSION, "NO_THREATS_FOUND")));
         assertEquals(List.of("ManifestReady"), types());
-        assertEquals(JSON.valueToTree(Map.of(
-                        "schemaVersion", 1,
-                        "releaseId", MANIFEST_RELEASE,
-                        "object", Map.of("bucket", BUCKET, "key", MANIFEST_KEY, "versionId", VERSION))),
+        assertEquals(
+                JSON.valueToTree(
+                        Map.of(
+                                "schemaVersion",
+                                1,
+                                "releaseId",
+                                MANIFEST_RELEASE,
+                                "object",
+                                Map.of(
+                                        "bucket",
+                                        BUCKET,
+                                        "key",
+                                        MANIFEST_KEY,
+                                        "versionId",
+                                        VERSION))),
                 detail(0));
         assertTrue(detail(0).path("schemaVersion").isInt());
         assertFalse(detail(0).has("dataset"));
@@ -112,15 +136,16 @@ class ScanResultsServiceTest {
         assertEquals(List.of("StepRejected"), types());
         assertEquals("SCAN_INCONCLUSIVE", detail(0).path("code").asText());
         assertEquals("manifest-scan", detail(0).path("step").asText());
-        assertEquals(result.isEmpty() ? "Missing scan result" : result,
+        assertEquals(
+                result.isEmpty() ? "Missing scan result" : result,
                 detail(0).path("message").asText());
         assertFalse(detail(0).has("dataset"));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("invalidManifestEvents")
-    void manifestsRequireIngestBucketVersionAndValidKey(
-            String scenario, Map<String, Object> input) throws Exception {
+    void manifestsRequireIngestBucketVersionAndValidKey(String scenario, Map<String, Object> input)
+            throws Exception {
         service.scan(input);
         assertEquals(List.of("StepRejected"), types());
         assertEquals("INVALID_INPUT", detail(0).path("code").asText());
@@ -151,14 +176,27 @@ class ScanResultsServiceTest {
 
     @Test
     void cleanReceiptPublishesOnlyReceiptReadyWithExactObject() throws Exception {
-        assertEquals("ReceiptReady",
+        assertEquals(
+                "ReceiptReady",
                 service.scan(event(BUCKET, RECEIPT_KEY, VERSION, "NO_THREATS_FOUND")));
         assertEquals(List.of("ReceiptReady"), types());
-        assertEquals(JSON.valueToTree(Map.of(
-                        "schemaVersion", 1,
-                        "releaseId", RECEIPT_RELEASE,
-                        "dataset", "add_gb_royalmailaddress",
-                        "object", Map.of("bucket", BUCKET, "key", RECEIPT_KEY, "versionId", VERSION))),
+        assertEquals(
+                JSON.valueToTree(
+                        Map.of(
+                                "schemaVersion",
+                                1,
+                                "releaseId",
+                                RECEIPT_RELEASE,
+                                "dataset",
+                                "add_gb_royalmailaddress",
+                                "object",
+                                Map.of(
+                                        "bucket",
+                                        BUCKET,
+                                        "key",
+                                        RECEIPT_KEY,
+                                        "versionId",
+                                        VERSION))),
                 detail(0));
     }
 
@@ -185,8 +223,8 @@ class ScanResultsServiceTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("invalidReceiptEvents")
-    void receiptRequiresIngestBucketAndVersion(
-            String scenario, Map<String, Object> input) throws Exception {
+    void receiptRequiresIngestBucketAndVersion(String scenario, Map<String, Object> input)
+            throws Exception {
         service.scan(input);
         assertEquals(List.of("StepRejected"), types());
         assertEquals("INVALID_INPUT", detail(0).path("code").asText());
@@ -225,7 +263,8 @@ class ScanResultsServiceTest {
 
     @Test
     void cleanZipPublishesExtractRequestedWithExactVersion() throws Exception {
-        assertEquals("ExtractRequested", service.scan(event(BUCKET, KEY, VERSION, "NO_THREATS_FOUND")));
+        assertEquals(
+                "ExtractRequested", service.scan(event(BUCKET, KEY, VERSION, "NO_THREATS_FOUND")));
 
         assertEquals(List.of("ExtractRequested"), types());
         JsonNode d = detail(0);
@@ -241,7 +280,8 @@ class ScanResultsServiceTest {
     @Test
     void cleanCsvPublishesDatasetReadyWithExactObjectVersion() throws Exception {
         assertEquals(
-                "DatasetReady", service.scan(event(CLEAN_BUCKET, CSV_KEY, VERSION, "NO_THREATS_FOUND")));
+                "DatasetReady",
+                service.scan(event(CLEAN_BUCKET, CSV_KEY, VERSION, "NO_THREATS_FOUND")));
 
         assertEquals(List.of("DatasetReady"), types());
         JsonNode d = detail(0);
@@ -298,9 +338,8 @@ class ScanResultsServiceTest {
     @Test
     void capturedGuardDutyFixtureParses() throws Exception {
         try (InputStream in =
-                     getClass().getResourceAsStream("/fixtures/guardduty-scan-result-cidev.json")) {
-            Map<String, Object> event = JSON.readValue(in, new TypeReference<>() {
-            });
+                getClass().getResourceAsStream("/fixtures/guardduty-scan-result-cidev.json")) {
+            Map<String, Object> event = JSON.readValue(in, new TypeReference<>() {});
             assertEquals("ExtractRequested", service.scan(event));
         }
     }
@@ -326,8 +365,8 @@ class ScanResultsServiceTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("invalidEvents")
-    void invalidInputPublishesInvalidInput(
-            String scenario, Map<String, Object> input) throws Exception {
+    void invalidInputPublishesInvalidInput(String scenario, Map<String, Object> input)
+            throws Exception {
         service.scan(input);
         assertEquals(List.of("StepRejected"), types());
         assertEquals("INVALID_INPUT", detail(0).get("code").asText());
@@ -338,13 +377,22 @@ class ScanResultsServiceTest {
         String key = "Scanned/not-a-uuid/unknown file.zip";
         service.scan(event(BUCKET, key, VERSION, "NO_THREATS_FOUND"));
 
-        assertEquals(JSON.valueToTree(Map.of(
-                "schemaVersion", 1,
-                "step", "scan",
-                "code", "INVALID_INPUT",
-                "message", "invalid object key",
-                "object", Map.of("bucket", BUCKET, "key", key, "versionId", VERSION),
-                "objectUri", "s3://" + BUCKET + "/" + key)), detail(0));
+        assertEquals(
+                JSON.valueToTree(
+                        Map.of(
+                                "schemaVersion",
+                                1,
+                                "step",
+                                "scan",
+                                "code",
+                                "INVALID_INPUT",
+                                "message",
+                                "invalid object key",
+                                "object",
+                                Map.of("bucket", BUCKET, "key", key, "versionId", VERSION),
+                                "objectUri",
+                                "s3://" + BUCKET + "/" + key)),
+                detail(0));
     }
 
     @ParameterizedTest
@@ -361,7 +409,8 @@ class ScanResultsServiceTest {
 
     @ParameterizedTest
     @MethodSource("incompleteObjectReferences")
-    void incompleteReferencesPreserveAvailableFieldsWithoutUri(String bucket, String key) throws Exception {
+    void incompleteReferencesPreserveAvailableFieldsWithoutUri(String bucket, String key)
+            throws Exception {
         service.scan(event(bucket, key, null, "NO_THREATS_FOUND"));
 
         assertEquals("INVALID_INPUT", detail(0).path("code").asText());
@@ -375,9 +424,7 @@ class ScanResultsServiceTest {
 
     private static Stream<Arguments> incompleteObjectReferences() {
         return Stream.of(
-                Arguments.of(BUCKET, null),
-                Arguments.of(null, KEY),
-                Arguments.of(null, null));
+                Arguments.of(BUCKET, null), Arguments.of(null, KEY), Arguments.of(null, null));
     }
 
     @Test
@@ -392,22 +439,18 @@ class ScanResultsServiceTest {
     void publishFailurePropagates() {
         failPublish = true;
         var input = event(BUCKET, KEY, VERSION, "NO_THREATS_FOUND");
-        assertThrows(
-                IllegalStateException.class, () -> service.scan(input));
+        assertThrows(IllegalStateException.class, () -> service.scan(input));
     }
 
     @Test
     void rejectedEntryFromEventBridgeFailsInvocation() {
         rejectEntries = true;
         var input = event(BUCKET, KEY, VERSION, "NO_THREATS_FOUND");
-        assertThrows(
-                EventPublicationException.class, () -> service.scan(input));
+        assertThrows(EventPublicationException.class, () -> service.scan(input));
     }
 
     @ParameterizedTest(name = "dataset: {0}")
-    @ValueSource(strings = {
-            "add_gb_royalmailaddress", "add_isl_royalmailaddress"
-    })
+    @ValueSource(strings = {"add_gb_royalmailaddress", "add_isl_royalmailaddress"})
     void eachDatasetIsRoutedIndependently(String dataset) throws Exception {
         service.scan(event(BUCKET, "zips/r-1/" + dataset + ".zip", VERSION, "NO_THREATS_FOUND"));
         assertEquals(List.of("ExtractRequested"), types());
@@ -416,8 +459,8 @@ class ScanResultsServiceTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("rejectedEvents")
-    void rejectedEventsNeverCarryExtractRequested(
-            String scenario, Map<String, Object> input) throws Exception {
+    void rejectedEventsNeverCarryExtractRequested(String scenario, Map<String, Object> input)
+            throws Exception {
         service.scan(input);
         assertEquals(List.of("StepRejected"), types());
     }
@@ -437,38 +480,62 @@ class ScanResultsServiceTest {
 
     private static Stream<Arguments> invalidManifestEvents() {
         return Stream.of(
-                Arguments.of("manifest in wrong bucket",
+                Arguments.of(
+                        "manifest in wrong bucket",
                         event(CLEAN_BUCKET, MANIFEST_KEY, VERSION, "NO_THREATS_FOUND")),
-                Arguments.of("manifest missing version",
+                Arguments.of(
+                        "manifest missing version",
                         event(BUCKET, MANIFEST_KEY, null, "NO_THREATS_FOUND")),
-                Arguments.of("manifest blank version",
+                Arguments.of(
+                        "manifest blank version",
                         event(BUCKET, MANIFEST_KEY, " ", "NO_THREATS_FOUND")),
-                Arguments.of("manifest invalid date",
-                        event(BUCKET, "acquisitions/2026-02-30/" + MANIFEST_RELEASE + ".json",
-                                VERSION, "NO_THREATS_FOUND")));
+                Arguments.of(
+                        "manifest invalid date",
+                        event(
+                                BUCKET,
+                                "acquisitions/2026-02-30/" + MANIFEST_RELEASE + ".json",
+                                VERSION,
+                                "NO_THREATS_FOUND")));
     }
 
     private static Stream<Arguments> invalidReceiptEvents() {
         return Stream.of(
-                Arguments.of("receipt in wrong bucket",
+                Arguments.of(
+                        "receipt in wrong bucket",
                         event(CLEAN_BUCKET, RECEIPT_KEY, VERSION, "NO_THREATS_FOUND")),
-                Arguments.of("receipt missing version",
+                Arguments.of(
+                        "receipt missing version",
                         event(BUCKET, RECEIPT_KEY, null, "NO_THREATS_FOUND")));
     }
 
     private static Stream<Arguments> invalidEvents() {
         return Stream.of(
-                Arguments.of("unknown bucket",
-                        event("other-bucket", KEY, VERSION, "NO_THREATS_FOUND")),
-                Arguments.of("unknown dataset",
-                        event(BUCKET, "zips/20780-131061/unknown.zip", VERSION, "NO_THREATS_FOUND")),
-                Arguments.of("unsafe path",
-                        event(BUCKET, "zips/../add_gb_builtaddress.zip", VERSION, "NO_THREATS_FOUND")),
-                Arguments.of("incorrect extension for prefix",
-                        event(BUCKET, "zips/20780-131061/add_gb_royalmailaddress.csv", VERSION, "NO_THREATS_FOUND")),
-                Arguments.of("missing version",
-                        event(BUCKET, KEY, null, "NO_THREATS_FOUND")),
-                Arguments.of("unexpected source",
+                Arguments.of(
+                        "unknown bucket", event("other-bucket", KEY, VERSION, "NO_THREATS_FOUND")),
+                Arguments.of(
+                        "unknown dataset",
+                        event(
+                                BUCKET,
+                                "zips/20780-131061/unknown.zip",
+                                VERSION,
+                                "NO_THREATS_FOUND")),
+                Arguments.of(
+                        "unsafe path",
+                        event(
+                                BUCKET,
+                                "zips/../add_gb_builtaddress.zip",
+                                VERSION,
+                                "NO_THREATS_FOUND")),
+                Arguments.of(
+                        "incorrect extension for prefix",
+                        event(
+                                BUCKET,
+                                "zips/20780-131061/add_gb_royalmailaddress.csv",
+                                VERSION,
+                                "NO_THREATS_FOUND")),
+                Arguments.of("missing version", event(BUCKET, KEY, null, "NO_THREATS_FOUND")),
+                Arguments.of(
+                        "unexpected source",
                         Map.<String, Object>of("source", "aws.s3", "detail", Map.of())));
     }
 
@@ -520,13 +587,19 @@ class ScanResultsServiceTest {
         object.put("objectKey", key);
         if (version != null) object.put("versionId", version);
         return Map.of(
-                "id", "evt-1",
-                "source", "aws.guardduty",
-                "detail-type", "GuardDuty Malware Protection Object Scan Result",
+                "id",
+                "evt-1",
+                "source",
+                "aws.guardduty",
+                "detail-type",
+                "GuardDuty Malware Protection Object Scan Result",
                 "detail",
                 Map.of(
-                        "s3ObjectDetails", object,
-                        "scanStatus", "COMPLETED",
-                        "scanResultDetails", Map.of("scanResultStatus", result)));
+                        "s3ObjectDetails",
+                        object,
+                        "scanStatus",
+                        "COMPLETED",
+                        "scanResultDetails",
+                        Map.of("scanResultStatus", result)));
     }
 }

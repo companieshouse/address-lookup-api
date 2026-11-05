@@ -24,6 +24,7 @@ LOCAL_API_PORT ?= 8080
 LOCAL_API_TIMEOUT ?= 180
 CONFIRM ?=
 SQL ?=
+FILE ?=
 MIN_COVERAGE ?= 0.80
 PR ?=
 PR_BRANCH ?=
@@ -36,7 +37,7 @@ SONAR_PROJECT_KEY = uk.gov.companieshouse:address-lookup-api
 endif
 export LOCAL_API_PORT LOCAL_API_TIMEOUT CONFIRM MIN_COVERAGE PR PR_BRANCH PR_BASE
 export SONAR_HOST_URL SONAR_PROJECT_KEY
-export SQL
+export SQL FILE
 export MAKE_JACOCO_AUTO := true
 MVN := bash scripts/maven.sh
 
@@ -68,6 +69,13 @@ test: test-integration test-unit
 test-unit:
 	@# Help: Run unit tests
 	$(MVN) test -Dskip.integration.tests=true
+
+.PHONY: tidy spotless-check
+tidy:
+	@bash scripts/spotless.sh tidy
+
+spotless-check:
+	@bash scripts/spotless.sh check
 
 .PHONY: api-start api-stop api-restart db-start db-stop start stop db-reset
 api-start api-stop api-restart db-start db-stop start stop db-reset:

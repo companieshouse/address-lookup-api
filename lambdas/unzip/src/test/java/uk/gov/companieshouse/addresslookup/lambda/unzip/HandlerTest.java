@@ -1,11 +1,12 @@
 package uk.gov.companieshouse.addresslookup.lambda.unzip;
 
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.amazonaws.services.lambda.runtime.Context;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,37 +14,43 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
-import uk.gov.companieshouse.addresslookup.lambda.unzip.service.ExtractionService;
+
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
+import uk.gov.companieshouse.addresslookup.lambda.unzip.service.ExtractionService;
 
 import java.util.Map;
 
 @ExtendWith(MockitoExtension.class)
 class HandlerTest {
 
-    @Mock
-    private ExtractionService service;
+    @Mock private ExtractionService service;
 
-    @Mock
-    private Context context;
+    @Mock private Context context;
 
     private Handler handler;
 
-    private static final Map<String, Object> TEST_EVENT = Map.of("detail",
-            Map.of("schemaVersion", "1.0",
-            "releaseId", "12345678-1234-1234-1234-123456789abc",
-            "dataset", "add_gb_royalmailaddress",
-            "object", Map.of(
-                    "bucket", "source",
-                    "key", "Scanned/12345678-1234-1234-1234-123456789abc/add_gb_royalmailaddress.zip",
-                    "versionId", "zip-version")
-    )
-    );
+    private static final Map<String, Object> TEST_EVENT =
+            Map.of(
+                    "detail",
+                    Map.of(
+                            "schemaVersion",
+                            "1.0",
+                            "releaseId",
+                            "12345678-1234-1234-1234-123456789abc",
+                            "dataset",
+                            "add_gb_royalmailaddress",
+                            "object",
+                            Map.of(
+                                    "bucket", "source",
+                                    "key",
+                                            "Scanned/12345678-1234-1234-1234-123456789abc/add_gb_royalmailaddress.zip",
+                                    "versionId", "zip-version")));
     private static final String TEST_RESPONSE = "RECONCILED";
 
     @BeforeEach
     void setup() {
-        try (MockedStatic<AcquisitionApplication> mockApp = Mockito.mockStatic(AcquisitionApplication.class)) {
+        try (MockedStatic<AcquisitionApplication> mockApp =
+                Mockito.mockStatic(AcquisitionApplication.class)) {
             mockApp.when(() -> AcquisitionApplication.start(ExtractionService.class))
                     .thenReturn(service);
             handler = new Handler();
@@ -53,8 +60,7 @@ class HandlerTest {
     @Test
     void shouldReturnResponseForSuccessfulDownload() throws Exception {
 
-        Mockito.when(service.unzip(TEST_EVENT, context))
-                .thenReturn(TEST_RESPONSE);
+        Mockito.when(service.unzip(TEST_EVENT, context)).thenReturn(TEST_RESPONSE);
 
         String response = handler.handleRequest(TEST_EVENT, context);
 
@@ -66,8 +72,7 @@ class HandlerTest {
 
         final String EXCEPTION_TEXT = "Something went wrong!!";
 
-        Mockito.when(service.unzip(TEST_EVENT, context))
-                .thenThrow(new Exception(EXCEPTION_TEXT));
+        Mockito.when(service.unzip(TEST_EVENT, context)).thenThrow(new Exception(EXCEPTION_TEXT));
 
         String response = null;
 

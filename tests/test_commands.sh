@@ -8,6 +8,7 @@ for tool in jq ps; do
     fi
 done
 root="$(cd "$(dirname "$0")/.." && pwd)"
+original_path="$PATH"
 temp="$(mktemp -d)"
 mkdir -p "$temp/scripts" "$temp/bin"
 cp "$root/scripts/local-services.sh" "$root/scripts/sonar.sh" "$root/scripts/db-exec.sh" "$root/scripts/maven.sh" "$temp/scripts/"
@@ -195,3 +196,64 @@ success env SONAR_HOST_URL=https://sonar.override.invalid SONAR_PROJECT_KEY=othe
 check grep -q 'https://sonar.override.invalid/api/measures/component' "$CALL_LOG"
 check grep -q 'component=other-project' "$CALL_LOG"
 printf 'PASS: %s local lifecycle and Sonar command checks\n' "$pass"
+
+mkdir -p "$temp/formatting/scripts" "$temp/formatting/nested path" \
+    "$temp/formatting/module/target/generated-sources"
+cp "$root/pom.xml" "$root/Makefile" "$temp/formatting/"
+cp "$root/scripts/spotless.sh" "$temp/formatting/scripts/"
+dirty_java='import java.util.List; class Example{void run(){System.out.println("hello");}}'
+printf '%s\n' "$dirty_java" >"$temp/formatting/nested path/Example.java"
+printf 'not Java\n' >"$temp/formatting/module/target/generated-sources/Ignored.java"
+for number in {1..12}; do
+    printf 'class Example%s{void run(){}}\n' "$number" >"$temp/formatting/Example$number.java"
+done
+format_command() {
+    PATH="$original_path" bash "$temp/formatting/scripts/spotless.sh" "$@"
+}
+status=0
+format_command check >"$temp/violations" || status=$?
+check test "$status" -eq 255
+check test "$(wc -l <"$temp/violations" | tr -d ' ')" -eq 13
+check grep -Fxq 'nested path/Example.java' "$temp/violations"
+check test "$(cat "$temp/formatting/nested path/Example.java")" = "$dirty_java"
+success env PATH="$original_path" make --no-print-directory -C "$temp/formatting" \
+    tidy 'FILE=nested path/Example.java'
+check grep -Fq '    void run() {' "$temp/formatting/nested path/Example.java"
+check test "$(grep -c 'java.util.List' "$temp/formatting/nested path/Example.java" || true)" -eq 0
+check test "$(cat "$temp/formatting/Example1.java")" = 'class Example1{void run(){}}'
+printf '%s\n' "$dirty_java" >"$temp/input.java"
+success env FILE= PATH="$original_path" bash "$temp/formatting/scripts/spotless.sh" tidy <"$temp/input.java"
+check test "$(cat "$temp/output"; printf .)" = \
+    "$(cat "$temp/formatting/nested path/Example.java"; printf .)"
+success env FILE= PATH="$original_path" make --no-print-directory -C "$temp/formatting" tidy <"$temp/input.java"
+check test "$(cat "$temp/output"; printf .)" = \
+    "$(cat "$temp/formatting/nested path/Example.java"; printf .)"
+failure env FILE= PATH="$original_path" bash "$temp/formatting/scripts/spotless.sh" tidy </dev/null
+failure env FILE=missing.java PATH="$original_path" bash "$temp/formatting/scripts/spotless.sh" tidy
+success env PATH="$original_path" make --no-print-directory -C "$temp/formatting" tidy FILE=.
+success format_command check
+check test ! -s "$temp/output"
+success env PATH="$original_path" make --no-print-directory -C "$temp/formatting" spotless-check
+check test ! -s "$temp/output"
+printf '%s\n' "$dirty_java" >"$temp/formatting/Example1.java"
+status=0
+PATH="$original_path" make --no-print-directory -C "$temp/formatting" spotless-check \
+    >"$temp/output" 2>"$temp/error" || status=$?
+check test "$status" -eq 2
+check grep -Fxq Example1.java "$temp/output"
+failure env FILE="$temp/formatting/Example1.java" FAIL_MAVEN=1 \
+    bash "$temp/formatting/scripts/spotless.sh" tidy
+check grep -q 'no source files were changed' "$temp/output"
+check test "$(cat "$temp/formatting/Example1.java")" = "$dirty_java"
+printf 'class Invalid {\n' >"$temp/formatting/Invalid.java"
+failure env FILE="$temp/formatting/Invalid.java" PATH="$original_path" \
+    bash "$temp/formatting/scripts/spotless.sh" tidy
+check grep -q 'no source files were changed' "$temp/output"
+status=0
+format_command check >"$temp/output" 2>&1 || status=$?
+check test "$status" -eq 1
+check grep -q 'no source files were changed' "$temp/output"
+printf 'PASS: %s command checks including Spotless regressions\n' "$pass"
+
+# This is the existing PR quality-check entry point, not just a stub test.
+PATH="$original_path" bash "$root/scripts/spotless.sh" check

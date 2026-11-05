@@ -1,10 +1,7 @@
 package uk.gov.companieshouse.addresslookup;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Properties;
+import static org.junit.jupiter.api.Assertions.*;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
@@ -12,7 +9,11 @@ import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.util.ClassUtils;
 
-import static org.junit.jupiter.api.Assertions.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Properties;
 
 class FlywayConfigurationTest {
 
@@ -68,16 +69,18 @@ class FlywayConfigurationTest {
 
     @Test
     void packagesFlywayAndPostgresqlSupportWithoutLiquibase() throws IOException {
-        Properties flywayProperties = loadProperties(
-                "/META-INF/maven/org.flywaydb/flyway-core/pom.properties");
+        Properties flywayProperties =
+                loadProperties("/META-INF/maven/org.flywaydb/flyway-core/pom.properties");
 
         assertEquals("13.10.0", flywayProperties.getProperty("version"));
-        assertTrue(ClassUtils.isPresent(
-                "org.flywaydb.database.postgresql.PostgreSQLDatabaseType",
-                getClass().getClassLoader()));
-        assertFalse(ClassUtils.isPresent(
-                "liquibase.integration.spring.SpringLiquibase",
-                getClass().getClassLoader()));
+        assertTrue(
+                ClassUtils.isPresent(
+                        "org.flywaydb.database.postgresql.PostgreSQLDatabaseType",
+                        getClass().getClassLoader()));
+        assertFalse(
+                ClassUtils.isPresent(
+                        "liquibase.integration.spring.SpringLiquibase",
+                        getClass().getClassLoader()));
     }
 
     @Test
@@ -103,7 +106,9 @@ class FlywayConfigurationTest {
         List<String> properties = Arrays.asList(springBootTest.properties());
         assertTrue(properties.contains("FLYWAY_ENABLED=false"), properties.toString());
         assertTrue(properties.contains("spring.flyway.enabled=true"), properties.toString());
-        assertTrue(properties.contains("spring.flyway.locations=" + LOCAL_LOCATIONS), properties.toString());
+        assertTrue(
+                properties.contains("spring.flyway.locations=" + LOCAL_LOCATIONS),
+                properties.toString());
     }
 
     /**
@@ -116,10 +121,12 @@ class FlywayConfigurationTest {
         List<String> properties = Arrays.asList(springBootTest.properties());
         assertFalse(properties.contains("FLYWAY_ENABLED=false"), properties.toString());
         assertFalse(
-                properties.stream().anyMatch(property -> property.startsWith("spring.flyway.enabled=")),
+                properties.stream()
+                        .anyMatch(property -> property.startsWith("spring.flyway.enabled=")),
                 properties.toString());
         assertFalse(
-                properties.stream().anyMatch(property -> property.startsWith("spring.flyway.locations=")),
+                properties.stream()
+                        .anyMatch(property -> property.startsWith("spring.flyway.locations=")),
                 properties.toString());
     }
 }

@@ -12,6 +12,28 @@ Provides address lookup and validation to be used by CHIPS and frontend CH servi
 mvn -pl address-lookup-api -am package -Dskip.unit.tests=true -Dskip.integration.tests=true jib:dockerBuild
 ```
 
+## Code formatting before committing
+
+Use Spotless to keep Java formatting consistent before every commit. From the
+repository root:
+
+```bash
+make tidy FILE=path/to/YourFile.java
+# Or format all Java files:
+make tidy FILE=.
+make spotless-check
+```
+
+You can also pipe Java source with `cat foobar.java | make tidy` to print the
+formatted source without editing the original. Java 21+ and Maven are required.
+See [COMMANDS.md](COMMANDS.md#java-formatting-and-pr-quality-checks) for details.
+
+Spotless checks are part of code quality: the existing PR check runs
+`tests/test_commands.sh`, which scans all Java sources and fails if any are
+not formatted. A clean `make spotless-check` is silent; otherwise it lists
+offending files. Tidy those files, review the formatting diff, and commit the
+result. No new workflow is required.
+
 ## Running locally
 
 The API uses Flyway migrations from `classpath:db/migrations` when

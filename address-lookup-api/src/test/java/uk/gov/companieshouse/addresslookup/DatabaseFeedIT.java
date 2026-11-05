@@ -190,10 +190,6 @@ class DatabaseFeedIT {
                     "JE27NA"),
             BorderPostcodeFixtures.compactPostcodes().stream())
             .collect(Collectors.toUnmodifiableSet());
-    private static final Map<String, Integer> NULL_COUNTRY_FIXTURES = Map.of(
-            "add_gb_royalmailaddress_v2", 19,
-            "add_isl_royalmailaddress_v2", 10403188);
-
     @SuppressWarnings("resource")
     @Container
     private static final PostgreSQLContainer POSTGRES =
@@ -470,20 +466,19 @@ class DatabaseFeedIT {
             assertEquals(0, countInvalidSourceIds(connection));
             assertRegionGeometry(connection, TABLES.get(0), 27700, true);
             assertRegionGeometry(connection, TABLES.get(1), 4258, false);
-            for (Map.Entry<String, Integer> fixture : NULL_COUNTRY_FIXTURES.entrySet()) {
-                assertNullCountryFixture(connection, fixture.getKey(), fixture.getValue());
-            }
+            assertCountryFixture(connection, TABLES.get(0), 19, "Scotland");
+            assertCountryFixture(connection, TABLES.get(1), 10403188, "Channel Islands");
         }
     }
 
-    private static void assertNullCountryFixture(
-            Connection connection, String table, int udprn) throws SQLException {
+    private static void assertCountryFixture(
+            Connection connection, String table, int udprn, String country) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
                 "SELECT country, release_id FROM os_data." + table + " WHERE udprn = ?")) {
             statement.setInt(1, udprn);
             try (ResultSet result = statement.executeQuery()) {
-                assertTrue(result.next(), "Missing approved NULL-country fixture " + udprn);
-                assertNull(result.getString("country"));
+                assertTrue(result.next(), "Missing country fixture " + udprn);
+                assertEquals(country, result.getString("country"), "Country for fixture " + udprn);
                 assertEquals("local", result.getString("release_id"));
                 assertFalse(result.next(), "Duplicate fixture " + udprn);
             }

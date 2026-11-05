@@ -43,8 +43,9 @@ runner is managed outside this feed and checkout. Do not treat the presence of
 SQL here as proof that an external database release was deployed.
 
 The two local repeatable seeds cover all ten current happy-path API postcode
-fixtures. They deliberately retain `country = NULL` for GB UDPRN 19 and ISL
-UDPRN 10403188, the two examples approved for this feed.
+fixtures. The source-accurate seeds retain `country = 'Scotland'` for GB UDPRN
+19 and `country = 'Channel Islands'` for ISL UDPRN 10403188. These replace the
+earlier synthetic NULL-country examples; the schema still permits NULL countries.
 
 The `os_ingest.promote_full` procedure is not part of this initial feed phase.
 Ian Mclaughlin clarified on 2026-10-13 that it is intended to promote a FULL

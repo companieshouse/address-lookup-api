@@ -7,11 +7,12 @@ db_password="${SPRING_DATASOURCE_PASSWORD:-postgres}"
 startup_timeout="${LOCAL_API_STARTUP_TIMEOUT_SECONDS:-90}"
 poll_interval="${LOCAL_API_HEALTH_POLL_INTERVAL_SECONDS:-2}"
 db_name="address_lookup_tkt012_$(date +%Y%m%d%H%M%S)_$$"
-health_url="http://localhost:8080/address-lookup-api/healthcheck"
+health_url=""
+api_log=""
 api_pid=""
 database_created=false
 
-for command_name in d2 mvn curl; do
+for command_name in docker mvn java curl; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
         printf 'Required command is unavailable: %s\n' "$command_name" >&2
         exit 1
@@ -62,9 +63,9 @@ cleanup() {
             printf 'Refusing to remove unexpected database name: %s\n' \
                 "$db_name" >&2
             exit_status=1
-        elif d2 als.docker.compose exec -T postgres dropdb -U "$db_user" "$db_name"; then
+        elif docker compose -f compose.yaml exec -T postgres dropdb -U "$db_user" "$db_name"; then
             if remaining_databases="$(
-                d2 als.docker.compose exec -T postgres psql -U "$db_user" \
+                docker compose -f compose.yaml exec -T postgres psql -U "$db_user" \
                     -d postgres -qAt -c \
                     "SELECT 1 FROM pg_database WHERE datname = '$db_name'"
             )"; then
@@ -86,6 +87,7 @@ cleanup() {
         fi
     fi
 
+    [[ -z "$api_log" ]] || rm -f "$api_log"
     exit "$exit_status"
 }
 
@@ -93,17 +95,21 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+api_log="$(mktemp)"
 cd "$repo_root"
-if curl --silent --output /dev/null --max-time 2 "$health_url"; then
-    printf 'Health endpoint already responds at %s; refusing to run a concurrent smoke test.\n' \
-        "$health_url" >&2
-    exit 1
-fi
-
-d2 als.docker.compose up -d postgres
-d2 als.docker.compose exec -T postgres createdb -U "$db_user" "$db_name"
+docker compose -f compose.yaml up -d --wait postgres
+docker compose -f compose.yaml exec -T postgres createdb -U "$db_user" "$db_name"
 database_created=true
 printf 'Created temporary database %s.\n' "$db_name"
+
+bash "$repo_root/scripts/maven.sh" -pl address-lookup-api -am package \
+    -DskipTests=true -Dskip.unit.tests=true -Dskip.integration.tests=true
+shopt -s nullglob
+jars=("$repo_root"/address-lookup-api/target/address-lookup-api-*.jar)
+if [[ ${#jars[@]} != 1 ]]; then
+    printf 'Expected exactly one API JAR; clean stale build outputs first.\n' >&2
+    exit 1
+fi
 
 (
     cd "$repo_root"
@@ -112,8 +118,9 @@ printf 'Created temporary database %s.\n' "$db_name"
     export SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:5433/$db_name"
     export SPRING_DATASOURCE_USERNAME="$db_user"
     export SPRING_DATASOURCE_PASSWORD="$db_password"
-    exec mvn -pl address-lookup-api spring-boot:run \
-        -Dspring-boot.run.profiles=local
+    export SERVER_PORT=0
+    export LOGGING_FILE_NAME="$api_log"
+    exec java -jar "${jars[0]}" --spring.profiles.active=local
 ) &
 api_pid=$!
 
@@ -132,6 +139,12 @@ while (( SECONDS < deadline )); do
         exit 1
     fi
 
+    api_port="$(sed -nE 's/.*Tomcat started on port ([0-9]+).*/\1/p' "$api_log" | tail -1)"
+    if [[ -z "$api_port" ]]; then
+        sleep "$poll_interval"
+        continue
+    fi
+    health_url="http://127.0.0.1:$api_port/address-lookup-api/healthcheck"
     http_status=""
     if http_status="$(
         curl --silent --output /dev/null --write-out '%{http_code}' \
@@ -139,7 +152,7 @@ while (( SECONDS < deadline )); do
     )" && [[ "$http_status" == 200 ]]; then
         migration_count=""
         if ! migration_count="$(
-            d2 als.docker.compose exec -T postgres psql -U "$db_user" \
+            docker compose -f compose.yaml exec -T postgres psql -U "$db_user" \
                 -d "$db_name" -qAt \
                 -c 'SELECT COUNT(*) FROM public.flyway_schema_history'
         )"; then
@@ -159,5 +172,5 @@ while (( SECONDS < deadline )); do
     sleep "$poll_interval"
 done
 
-printf 'Timed out waiting for healthcheck at %s.\n' "$health_url" >&2
+printf 'Timed out waiting for healthcheck%s.\n' "${health_url:+ at $health_url}" >&2
 exit 1

@@ -13,6 +13,10 @@ GET http://localhost:8080/address-lookup-api/postcode?postcode=NE119NU
 ### Lookup multiple addresses by postcode using Postcode API
 GET https://postcode.cidev.aws.chdev.org/multiple-addresses/AB124NY
 
+### Lookup multiple legacy addresses by postcode
+### ALS-121 Fix returning empty for premises whereas within the postcode lookup api it returns the complete premise name
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=LU49PJ
+
 # Ordnance Survey API
 
 ###

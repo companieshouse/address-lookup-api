@@ -187,7 +187,11 @@ class DatabaseFeedIT {
                     "GY79AD",
                     "IM11BD",
                     "JE27ND",
-                    "JE27NA"),
+                    "JE27NA",
+                    "CF143AT", "CF146RP", "CF239XN", "CF243DJ",
+                    "CF102BY", "CF245HB", "CF101FG", "CF102EF",
+                    "CF101GA", "CF102HQ", "CF101PX", "CF102DP",
+                    "CF118TA", "CF145XW", "KT138GL"),
             BorderPostcodeFixtures.compactPostcodes().stream())
             .collect(Collectors.toUnmodifiableSet());
     @SuppressWarnings("resource")
@@ -217,7 +221,11 @@ class DatabaseFeedIT {
 
         Flyway localFlyway = flyway(databaseRoot.resolve("migrations"),
                 databaseRoot.resolve("local"));
-        assertEquals(2, localFlyway.migrate().migrationsExecuted);
+        long seedCount;
+        try (Stream<Path> files = Files.list(databaseRoot.resolve("local"))) {
+            seedCount = files.filter(path -> path.getFileName().toString().endsWith(".sql")).count();
+        }
+        assertEquals(seedCount, localFlyway.migrate().migrationsExecuted);
         assertLocalFixtures();
 
         Map<String, Long> localRowCounts = new HashMap<>();
@@ -228,7 +236,7 @@ class DatabaseFeedIT {
 
         copySeedsWithChangedChecksums(databaseRoot.resolve("local"), tempSeeds);
         Flyway changedSeedFlyway = flyway(databaseRoot.resolve("migrations"), tempSeeds);
-        assertEquals(2, changedSeedFlyway.migrate().migrationsExecuted);
+        assertEquals(seedCount, changedSeedFlyway.migrate().migrationsExecuted);
         changedSeedFlyway.validate();
 
         for (String table : TABLES) {
@@ -447,6 +455,7 @@ class DatabaseFeedIT {
     }
 
     private static void assertLocalFixtures() throws SQLException {
+        assertEquals(15, rowCount(TABLES.get(0), "local-synthetic-cardiff"));
         try (Connection connection = connection()) {
             for (String postcode : HAPPY_PATH_POSTCODES) {
                 try (PreparedStatement statement = connection.prepareStatement(
@@ -672,7 +681,7 @@ class DatabaseFeedIT {
             List<Path> seeds = files
                     .filter(path -> path.getFileName().toString().endsWith(".sql"))
                     .toList();
-            assertEquals(2, seeds.size(), "Expected one local repeatable seed per dataset");
+            assertTrue(seeds.size() >= 3, "Expected dataset seeds and synthetic fixtures");
             for (Path seed : seeds) {
                 Path copy = target.resolve(seed.getFileName());
                 Files.copy(seed, copy);

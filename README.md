@@ -14,6 +14,14 @@ mvn -pl address-lookup-api -am package -Dskip.unit.tests=true -Dskip.integration
 
 ## Running locally
 
+Local seeds include one synthetic Cardiff address for each of the 14 supplied
+test postcodes, plus `KT13 8GL` in Weybridge, in
+`database/local/R__seed_synthetic_cardiff_addresses.sql`.
+These are labelled test fixtures, not real OS addresses; their coordinates are
+postcode centroids from Postcodes.io. `CF10 1PX` uses historical metadata
+(terminated January 2023). The source-accurate GB and ISL seeds remain unchanged,
+and synthetic fixtures are excluded from the production migration package.
+
 The API uses Flyway migrations from `classpath:db/migrations` when
 `FLYWAY_ENABLED=true`; the base configuration defaults to disabled when the
 variable is unset. The `local` profile explicitly enables Flyway and adds local

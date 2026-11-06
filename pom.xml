@@ -257,7 +257,7 @@
                         </excludes>
                         <googleJavaFormat>
                             <version>${google-java-format.version}</version>
-                            <style>GOOGLE</style>
+                            <style>AOSP</style>
                             <cleanup>false</cleanup>
                             <reflowLongStrings>false</reflowLongStrings>
                             <formatJavadoc>false</formatJavadoc>

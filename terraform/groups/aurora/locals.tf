@@ -54,9 +54,8 @@ locals {
   # CA file in the repo or the Lambda zips; the cluster enforces TLS (rds.force_ssl=1, TLS 1.3 minimum).
   jdbc_url = "jdbc:postgresql://${module.aurora_postgres.cluster_endpoint}:${local.database_port}/${local.database_name}?sslmode=require"
 
-  # Authenticate the writer before sending master credentials. The bootstrap Lambda must have the
-  # approved RDS CA bundle at the driver's default ~/.postgresql/root.crt location.
-  master_jdbc_url = "jdbc:postgresql://${module.aurora_postgres.cluster_endpoint}:${local.database_port}/${local.database_name}?sslmode=verify-full"
+  # Same as jdbc_url: encrypted with sslmode=require and no CA file (no RDS CA bundle in the Lambda zip).
+  master_jdbc_url = "jdbc:postgresql://${module.aurora_postgres.cluster_endpoint}:${local.database_port}/${local.database_name}?sslmode=require"
 
   credentials = {
     "master" = jsonencode({

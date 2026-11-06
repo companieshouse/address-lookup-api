@@ -99,8 +99,7 @@ class HandlerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "", "?sslmode=disable", "?sslmode=allow", "?sslmode=prefer", "?sslmode=require", "?sslmode=verify-ca",
-            "?sslmode=verify-full&sslmode=require",
+            "", "?sslmode=disable", "?sslmode=allow", "?sslmode=prefer", "?sslmode=require&sslmode=disable",
             "?sslmode=verify-full&sslfactory=org.postgresql.ssl.NonValidatingFactory",
             "?sslmode=verify-full&sslfactoryarg=custom",
             "?sslmode=verify-full&sslhostnameverifier=example.AcceptAll"
@@ -125,14 +124,16 @@ class HandlerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "&sslrootcert=/opt/certs/approved-rds.pem",
-            "&sslfactory=org.postgresql.ssl.LibPQFactory&sslrootcert=/opt/certs/approved-rds.pem",
-            "&sslfactory=org.postgresql.ssl.DefaultJavaSSLFactory"
+            "?sslmode=require",
+            "?sslmode=verify-ca",
+            "?sslmode=verify-full&sslrootcert=/opt/certs/approved-rds.pem",
+            "?sslmode=verify-full&sslfactory=org.postgresql.ssl.LibPQFactory&sslrootcert=/opt/certs/approved-rds.pem",
+            "?sslmode=verify-full&sslfactory=org.postgresql.ssl.DefaultJavaSSLFactory"
     })
-    void opensVerifiedMasterConnectionUsingStandardTrustConfiguration(String trustConfiguration) throws Exception {
+    void opensEncryptedMasterConnection(String query) throws Exception {
         FakeDatabase db = FakeDatabase.ready();
         DatabaseCredentials master = new DatabaseCredentials(
-                MASTER.jdbcUrl() + "?sslmode=verify-full" + trustConfiguration,
+                MASTER.jdbcUrl() + query,
                 MASTER.username(), MASTER.password());
         Handler handler = new Handler(CONFIG,
                 parameter -> parameter.equals(CONFIG.masterParameter()) ? master : OWNER);

@@ -27,8 +27,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * nothing (no startup message, no credentials) is ever sent to the server.
  *
  * <p>This is a protocol-only check, not endpoint authentication. An {@link Result#ACCEPTED} result does not mean
- * the certificate is trusted or matches the hostname. Credential-bearing JDBC connections must independently
- * verify both the certificate chain and hostname before authenticating.
+ * the certificate is trusted or matches the hostname. Credential-bearing JDBC connections enforce encryption
+ * separately through their {@code sslmode}.
  */
 public final class TlsProtocolProbe {
 

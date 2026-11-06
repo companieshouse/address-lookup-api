@@ -20,11 +20,13 @@ current Makefile and its maintained scripts.
 | Stop everything local | `make stop` | Stops this helper's API, then this repository's Compose Postgres. Does not stop shared ingress, other containers, or processes started by other runners. |
 | Reset and reseed DB | `make db-reset CONFIRM=address_lookup` | Stops the managed API, verifies its port is free, starts Postgres, drops/recreates only the local Compose `address_lookup` DB, starts the API with Flyway/local fixtures, and verifies the lookup relation contains rows. Leaves both services running. |
 | Unit tests | `make test-unit` | Maven reactor Java unit tests with integration tests skipped and automatic Make JDK selection. Does not require local-service tools such as `jq`. |
-| Command-helper regressions | `make test-commands` | Runs lifecycle/Sonar, smoke, postcode and Maven-selector helper checks using stubs; requires `jq` and `ps`. |
+| Command-helper regressions | `make test-commands` | Runs lifecycle/Sonar, smoke, postcode lookup/generation and Maven-selector helper checks using stubs; requires `jq` and `ps`. |
 | Format Java | `make tidy FILE=path/File.java` | Formats one file in place. Use `FILE=.` for all Java files, or pipe Java source to `make tidy` for formatted stdout. |
 | Check Java formatting | `make spotless-check` | Read-only scan of all Java files; prints only unformatted paths and fails, or exits zero silently when clean. |
 | Smoke test | `make test-smoke` | Creates a temporary database, starts a separate API on an OS-assigned port, checks health and applied migrations, then stops its API and drops only its temporary database. |
-| Test seeded regional postcodes | `make test-postcodes` | Starts/waits for the local DB and API, then sequentially curls the 17 regional/border postcodes; prints each command, GET URL, response headers and formatted JSON. Stops at the first failure. |
+| Test selected postcodes | `make test-postcode POSTCODE=CF143AT` | Validates selected postcodes, starts the DB, rebuilds/restarts the managed API to apply local seeds, then prints and executes each curl command. |
+| Test database postcodes | `make test-postcodes` | Starts the DB, rebuilds/restarts the managed API, reads distinct postcodes from the lookup view, then prints and executes each curl command. Stops at the first failure. |
+| Add local postcode fixtures | `make add-postcode POSTCODE=KT138GL` | Fetches public postcode metadata and creates a new local repeatable SQL file containing labelled synthetic addresses. Accepts comma-separated or JSON selections; does not apply SQL. |
 | Generate coverage | `make coverage` | Fresh Maven reactor `clean verify` under the `coverage` profile; integration tests skipped. Produces per-module HTML/XML reports without a percentage gate. |
 | Check coverage | `make coverage-check MIN_COVERAGE=0.80` | Fresh unit coverage run, enforcing at least 80% LINE coverage for each JaCoCo module bundle with execution data. |
 | Get SonarQube coverage | `make sonar-report` | Prints latest server-computed coverage measures as JSON to stdout; does not save files or run analysis. |
@@ -56,8 +58,55 @@ uses `mktemp`. `m2-check` requires Perl; `deps` requires Homebrew;
 
 ## Local API and database
 
-Run `make test-postcodes` to start/wait for the local DB and API and exercise
-all 17 regional/border seed postcodes, one request at a time. Use
+### Add synthetic local postcode fixtures
+
+```bash
+make add-postcode POSTCODE=KT138GL
+make add-postcode POSTCODES='["CF14 3AT", "KT13 8GL"]'
+make add-postcode POSTCODES=CF143AT,KT138GL
+```
+
+Requires Bash, curl, jq and internet access to Postcodes.io. This fetches postcode
+centroids and district/country metadata, not actual postal address records.
+It generates one labelled synthetic address with a negative test UDPRN and
+no UPRN per new postcode. District names are not authoritative postal towns.
+Terminated postcodes use historical metadata with a printed warning.
+Historical metadata without a district uses the explicit synthetic town
+`SYNTHETIC LOCALITY`, not an inferred real postal town; an unavailable country
+is left NULL. Invalid or out-of-range
+coordinates fail before file creation.
+Northern Ireland (`BT`) fixtures use the ISL table and longitude/latitude
+geometry with SRID 4258; GB fixtures use British National Grid SRID 27700.
+
+The command creates a new file such as `database/local/R__seed_KT138GL.sql`
+or `database/local/R__seed_CF143AT,KT138GL.sql`. Names use sorted, uppercase
+postcodes without spaces. Already seeded postcodes are skipped by inspecting
+all local repeatable SQL files, and only new postcodes appear in the filename.
+If all are already seeded, no file is created. Existing files are never
+overwritten. Each file has its own release marker so rerunning it does not
+delete another file's fixtures. The command validates
+the whole input and fetches all metadata before writing; failures leave the
+seed file unchanged. Review and commit the generated diff yourself.
+Generation holds a shared `database/local/.add-postcode.lock` directory lock.
+Concurrent invocations fail explicitly rather than creating overlapping seeds.
+Normal exits release it; after an abrupt termination, verify no generator is
+running before removing a stale lock with `rmdir database/local/.add-postcode.lock`.
+It does not start services or apply SQL. Run `make test-postcode` with the same
+selection afterward to rebuild/restart and query the new fixtures.
+After seeds are applied, `make test-postcodes` discovers them automatically
+from the database. Do not supply both POSTCODE and POSTCODES.
+Dates in generated fixtures use the UTC generation date. Large selections
+whose filenames exceed the filesystem limit must be split into smaller
+commands; the helper reports this without creating a file.
+
+Run `bash tests/test_add_postcode.sh` for isolated generator regressions.
+
+Run `make test-postcodes` to start/wait for the local DB, rebuild/restart the API and exercise
+every distinct postcode in `address_lookup.address_lookup`, one request at a time.
+The list is read through local Compose `psql`, normalized to uppercase without
+spaces, deduplicated and sorted. An empty database or database query error fails
+the command before any HTTP lookup. Newly added seeds are discovered without
+editing the script. Use
 `make test-postcodes LOCAL_API_PORT=8081` if your API runs on port 8081.
 It leaves both services running and does not reset existing data. Normal
 local API startup applies pending Flyway migrations and local seeds.
@@ -67,6 +116,38 @@ response headers and pretty-printed JSON. It stops immediately on a curl
 error, non-200 HTTP status, invalid JSON, mismatched echoed postcode, empty
 address list, or result-count mismatch. Each request has a 5-second connect
 timeout and a 30-second total timeout.
+
+For selected lookups:
+
+```bash
+make test-postcode POSTCODE=CF143AT
+make test-postcode POSTCODE=CF143AT,CF146RP,CF239XN
+make test-postcode POSTCODES='["CF14 3AT", "CF14 6RP"]'
+make test-postcode POSTCODES=CF143AT,CF146RP
+```
+
+Do not repeat `POSTCODE=` on the same command line: GNU Make keeps only the
+last assignment, so `POSTCODE=CF143AT POSTCODE=CF146RP` queries only `CF146RP`.
+Use the comma-separated value or JSON array to query both. Do not combine
+`POSTCODE` and `POSTCODES`. Empty lists, non-string JSON entries and invalid
+postcodes fail before services start or any lookup runs.
+
+Spaced and
+lowercase inputs are accepted, for example `make test-postcode POSTCODE="cf14 3at"`;
+each query uses the uppercase postcode without spaces. Missing or malformed
+input fails before services start. The command runs `make db-start` followed
+by `make api-restart`, then prints
+each curl command, executes it and prints headers and JSON using the same
+checks and timeouts as `test-postcodes`. Use `LOCAL_API_PORT=8081` to select
+another port. Both commands leave services running.
+
+Both commands rebuild and restart the managed API on every invocation, so
+new or changed local seed files are packaged and applied by Flyway before
+lookups. They do not reset the database. Startup or build failures prevent
+the queries. Unlike `make start`, they do not reuse an already healthy API.
+
+The 14 Cardiff lookups use synthetic local fixtures, including historical
+`CF10 1PX`; they do not assert that these are real or current postal addresses.
 
 ```bash
 make start
@@ -78,7 +159,7 @@ make stop
 ```
 
 `LOCAL_API_PORT` defaults to `8080`, accepts 1024-65535, and is used only by
-the lifecycle helper and `test-postcodes`. `LOCAL_API_TIMEOUT` defaults to `180` seconds for API
+the lifecycle helper and postcode commands. `LOCAL_API_TIMEOUT` defaults to `180` seconds for API
 readiness, excluding build time. An occupied port is an error, not permission
 to stop its owner. A healthy managed `api-start` is idempotent. To change
 ports, stop the managed API first or use `api-restart`.
@@ -383,19 +464,18 @@ Command-line `name=value` overrides Make variables, not Maven properties.
 |---|---|
 | `make all version=1.2.3` | Same as `build`. |
 | `make build version=1.2.3` | `versions:set` without backup POMs, API/required-module package with tests skipped, copy API JAR to root `address-lookup-api.jar`. Changes POM versions. |
-| `make clean` | Maven clean, remove generated API/Liquibase/DB-bootstrap/schema ZIPs, root API JAR, `./build-*`, and `./build.log`. Does not stop services or remove `.local-run/`. |
-| `make test` | Runs `test-integration` then `test-unit` in a serial invocation; not every `test-*` target. Currently blocked by integration selection's absent Liquibase module. |
-| `make test-integration` | Selects API and `lambdas/liquibase-schema-migrator` plus dependencies, requests `integration-test verify`, `-Dskip.unit.tests=true`, and `failsafe:verify`. The Liquibase module is absent in this checkout. |
+| `make clean` | Maven clean, remove generated API/DB-bootstrap/DB-migrate/schema ZIPs, root API JAR, `./build-*`, and `./build.log`. Does not stop services or remove `.local-run/`. |
+| `make test` | Runs `test-integration` then `test-unit` in a serial invocation; not every `test-*` target. |
+| `make test-integration` | Selects API plus dependencies, requests `integration-test verify`, `-Dskip.unit.tests=true`, and `failsafe:verify`. Docker required for Testcontainers. |
 | `make test-flyway` | Feed-layout shell checks then API/required-module `DatabaseFeedIT` via Failsafe. Requires Docker/PostGIS Testcontainers. |
 | `make test-db-bootstrap` | DB-bootstrap/required-module unit tests, integration tests skipped. |
 | `make test-db-bootstrap-integration` | DB-bootstrap/required-module `verify` selecting `DatabaseBootstrapIT`; also runs unit tests. Docker required. |
-| `make test-liquibase` | Prints that validation is disabled. A successful exit is not test evidence. |
 | `make m2-check` | Runs Perl helper; may prompt for a JFrog token/create `~/.m2/settings.xml`, sets permissions to `0600`, validates Git identity, then runs the API dependency-tree goal. Not read-only. |
 | `make build-container version=1.2.3` | Runs `build`, then `docker build .`; currently lacks a root Dockerfile. No explicit image tag. |
 | `make docker-image` | Cleans first, then Maven package/Jib `dockerBuild` with test-skip properties. Uses configured private ECR base image and local daemon output tag `address-lookup-api:latest` under its configured registry name. Does not push/deploy or set POM versions. |
 | `make package version=1.2.3` | Sets POM versions, builds API, ZIPs `address-lookup-api.jar` at archive root into `address-lookup-api-1.2.3.zip`; removes temporary build directory. |
-| `make package-liquibase-lambda version=1.2.3` | Intended Lambda package; sets POM versions and copies expected `-lambda.jar` to `.zip`. Blocked by absent Liquibase module. |
 | `make package-db-bootstrap-lambda version=1.2.3` | Sets POM versions, packages DB-bootstrap and dependencies, copies `-lambda.jar` to `address-lookup-db-bootstrap-1.2.3.zip`. |
+| `make package-db-migrate-lambda version=1.2.3` | Sets POM versions, packages DB-migrate and dependencies, copies `-lambda.jar` to `address-lookup-db-migrate-1.2.3.zip`. |
 | `make package-db-schema version=1.2.3` | Replaces same-version `address-lookup-db-schema-1.2.3.zip` with production `migrations/` only, using `zip -X`; no Java build, SQL version rewriting, migration application, or deployment. Excludes local fixtures. |
 | `make deps` | `brew install kafka` only; not a full development setup. |
 | `make dependency-check version=1.2.3` | Runs `build` and `package`, Maven install with tests/integration tests skipped, then external dependency checker. Changes versions/local Maven repository. |
@@ -409,10 +489,11 @@ Command-line `name=value` overrides Make variables, not Maven properties.
 | `version` | `"unversioned"` | Build and package targets, including their dependents; not Jib image tagging. |
 | `api_module` | `address-lookup-api` | API Maven selections and artifact copy paths, not reactor-wide `test-unit`. |
 | `artifact_name` | `address-lookup-api` | API artifact paths and cleanup; override must match Maven filenames. |
-| `liquibase_lambda_module` | `lambdas/liquibase-schema-migrator` | Integration selection and Liquibase packaging; absent by default. |
-| `liquibase_lambda_artifact` | `address-lookup-liquibase-lambda` | Liquibase artifact paths/cleanup. |
 | `db_bootstrap_lambda_module` | `lambdas/db-bootstrap` | DB-bootstrap tests and packaging. |
 | `db_bootstrap_lambda_artifact` | `address-lookup-db-bootstrap` | Bootstrap artifact paths/cleanup. |
+| `db_migrate_lambda_module` | `lambdas/db-migrate` | DB-migrate packaging. |
+| `db_migrate_lambda_jar` | `address-lookup-lambda-db-migrate` | DB-migrate Maven JAR name. |
+| `db_migrate_lambda_artifact` | `address-lookup-db-migrate` | DB-migrate artifact paths/cleanup. |
 | `db_schema_artifact` | `address-lookup-db-schema` | Schema archive name/cleanup. |
 | `db_schema_root` | `database` | Schema packaging source directory. |
 | `db_schema_contents` | `migrations` | Paths inside schema archive. Keep production default; adding `local` would ship fixtures. |
@@ -524,12 +605,10 @@ The disposable container/network and smoke-test database were removed.
 | `m2-check` | Passed with existing Maven settings; no interactive credential creation was exercised. |
 | `lint`, `lint/docker-compose` | Passed actual Compose configuration validation. |
 | `deps` | Passed; Homebrew installed Kafka 4.4.0 and installed/upgraded its dependencies. The Kafka service was not started. |
-| `test-integration`, `test`, `package-liquibase-lambda` | Failed because `lambdas/liquibase-schema-migrator` is absent. `test` stopped before its unit-test prerequisite; unit tests passed separately. |
 | `test-flyway` | Layout checks passed, but `DatabaseFeedIT` failed at `assertNullCountryFixture` (line 486): expected `null`, received `Scotland`. This is a real test failure, not a Docker availability error. |
 | `build-container` | API build passed; Docker build failed because the root `Dockerfile` is absent. |
 | `docker-image` | Failed before image construction: Maven could not resolve the `jib` plugin prefix in the selected reactor/configured repositories. Private ECR access was therefore not exercised. |
 | `dependency-check` | Build, package, and Maven install passed; the scan failed because `dependency-check-runner` is unavailable. No vulnerability-scan result was produced. |
-| `test-liquibase` | Exited zero after printing the disabled/TODO message; no validation ran. |
 | `db-reset` | Confirmation refusal verified against real tooling. The destructive confirmed path remains stub-tested only; the existing local database was not dropped. |
 | `sonar-pr` | Real branch-identity guard rejected PR 83's different source branch before submission. No open PR for the commands branch was found; successful remote PR analysis remains unverified. |
 | `sonar` | Not submitted: feature-branch analysis could replace the project's default-branch results. |

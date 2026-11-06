@@ -9,10 +9,10 @@ migration Lambdas read from Parameter Store.
 | What | Details |
 |------|---------|
 | Aurora cluster | `<env>-address-rds`, database `addressdb`, terraform-modules `aws/aurora`. |
-| TLS | Cluster parameter group: `rds.force_ssl=1`, `ssl_min_protocol_version=TLSv1.3` (the agreed post-quantum readiness step). The master jdbcUrl uses `sslmode=verify-full` to verify the server certificate and hostname before authentication. The schema-owner jdbcUrl remains `sslmode=require`. The cluster refuses non-TLS and pre-1.3 connections. |
+| TLS | Cluster parameter group: `rds.force_ssl=1`, `ssl_min_protocol_version=TLSv1.3` (the agreed post-quantum readiness step). Both the master and schema-owner jdbcUrls use `sslmode=require`: always encrypted, with no CA file in the repo or the Lambda zips. The cluster refuses non-TLS and pre-1.3 connections. |
 | Credentials | SecureStrings `/address-lookup/<env>/db/master` and `/address-lookup/<env>/db/schema-owner` = `{"username","password","jdbcUrl"}` (writer endpoint), written from Vault by `module.credentials` and encrypted with `alias/<aws_profile>/environment-services-kms`. |
 | SSM endpoint | Interface endpoint `address-lookup-<env>-ssm` (private DNS off) and its security group `address-lookup-<env>-ssm-endpoint`. Its policy lets the bootstrap Lambda read both parameters and the db-migrate Lambda's role read only the schema owner's. `terraform/groups/db-migrate` looks both up by Name tag. |
-| db-bootstrap Lambda | `address-lookup-db-bootstrap-<env>` (code: `lambdas/db-bootstrap`). No CIDR egress: only Aurora (5432) and the SSM endpoint (443). No event sources or invoke permissions. |
+| db-bootstrap Lambda | `address-lookup-db-bootstrap-<env>` (code: `lambdas/db-bootstrap`). No CIDR egress to the internet: only Aurora (5432), the SSM endpoint (443) and DNS (53 udp/tcp) to the VPC's DHCP resolvers (/32 each). No event sources or invoke permissions. |
 | Bootstrap run | `aws_lambda_invocation.db_bootstrap` runs `{"command":"bootstrap"}` on the first apply and whenever the release, the cluster, the schema owner's credentials or the TLS settings change. A failure fails the apply. |
 
 ### What the bootstrap does
@@ -32,10 +32,13 @@ Connected as the master user (the only code that uses it):
    * the database is **EMPTY** (no schemas or relations except PostGIS's own) or **MIGRATED**
      (`flyway_schema_history` exists). **NOT_EMPTY** fails with the offending objects listed, because Flyway
      would stop with a "non-empty schema" error
-   * `rds.force_ssl` is `1`, `ssl_min_protocol_version` is `TLSv1.3`, and its own connection uses TLS 1.3
+   * `ssl_min_protocol_version` is `TLSv1.3`, and its own connection uses TLS 1.3
+   * a client without TLS is refused. Aurora applies `rds.force_ssl` through pg_hba.conf and doesn't expose it as a
+     setting, so the probe sends a startup message for the role `address_lookup_tls_probe` (it need not exist)
+     and expects SQLSTATE 28000 ("no pg_hba.conf entry ..., SSL off" or "..., no encryption"). It never sends a password.
    * a client limited to TLS 1.2 is refused and one limited to TLS 1.3 is accepted (PostgreSQL SSLRequest
      then a handshake pinned to one version, stopped at the server certificate so it needs no CA file; no credentials are sent).
-     These probes check protocol support only, not endpoint identity; JDBC independently verifies the certificate and hostname.
+     These probes check protocol support only, not endpoint identity.
 
 It never creates application schemas or tables: those all come from Flyway, starting at V2026.001.
 
@@ -58,15 +61,9 @@ integration test, which requires Docker.
 
 * **The db-bootstrap release** `address-lookup-db-bootstrap-<version>.zip` in the release bucket
   (Concourse `db-bootstrap-lambda-release` job, from a `db-bootstrap-lambda-X.Y.Z` tag).
-* **An approved RDS CA bundle available inside the bootstrap Lambda.** PostgreSQL JDBC defaults to
-  `${user.home}/.postgresql/root.crt`; alternatively, the master jdbcUrl can specify
-  `sslrootcert=/absolute/path/to/approved-bundle.pem`. To use an existing JVM truststore instead,
-  add `sslfactory=org.postgresql.ssl.DefaultJavaSSLFactory` to the master jdbcUrl and configure the
-  JVM's truststore through `JAVA_TOOL_OPTIONS`. The deployment must provision the chosen trust
-  material before invoking the Lambda. It is not downloaded at runtime. Missing or untrusted certificates fail the
-  connection, including when `VERIFY_TLS=false`; that flag skips only the later verification checks.
-  Only the standard `LibPQFactory` and `DefaultJavaSSLFactory` implementations are allowed;
-  `sslfactoryarg` and `sslhostnameverifier` URL options are rejected.
+* **No CA bundle.** The master jdbcUrl uses `sslmode=require` (the bootstrap Lambda also accepts
+  `verify-ca` and `verify-full`). Only the standard `LibPQFactory` and `DefaultJavaSSLFactory`
+  implementations are allowed; `sslfactoryarg` and `sslhostnameverifier` URL options are rejected.
 * **An empty database.** Only `postgis` may be installed beforehand. If the bootstrap reports
   NOT_EMPTY, remove the listed objects (no environment holds address lookup objects yet) and apply again.
 
@@ -97,7 +94,7 @@ terraform output -json db_bootstrap_result
 aws lambda invoke --function-name "$FN" --cli-binary-format raw-in-base64-out \
   --payload '{"command":"verify"}' /dev/stdout
 #   databaseState EMPTY before the first Flyway run, MIGRATED after; postgisVersion set;
-#   schemaOwner != master; forceSsl "1"; sslMinProtocolVersion "TLSv1.3"; tls12 REFUSED; tls13 ACCEPTED
+#   schemaOwner != master; plaintext REFUSED; sslMinProtocolVersion "TLSv1.3"; tls12 REFUSED; tls13 ACCEPTED
 
 # Parameters are SecureStrings with the customer-managed key:
 aws ssm describe-parameters --parameter-filters "Key=Name,Option=BeginsWith,Values=/address-lookup/$ENV/db/" \
@@ -152,6 +149,7 @@ After the first `<env>-db-schema-migrate`, Flyway's `info` shows V2026.001 to V2
 | [aws_lambda_invocation.db_bootstrap](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_invocation) | resource |
 | [aws_security_group.ssm_endpoint](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group) | resource |
 | [aws_vpc_endpoint.ssm](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_endpoint) | resource |
+| [aws_vpc_security_group_egress_rule.db_bootstrap_dns](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_egress_rule) | resource |
 | [aws_vpc_security_group_egress_rule.db_bootstrap_to_aurora](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_egress_rule) | resource |
 | [aws_vpc_security_group_egress_rule.db_bootstrap_to_ssm_endpoint](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_egress_rule) | resource |
 | [aws_vpc_security_group_ingress_rule.aurora_from_db_bootstrap](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
@@ -162,6 +160,7 @@ After the first `<env>-db-schema-migrate`, Flyway's `info` shows V2026.001 to V2
 | [aws_kms_key.parameters](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/kms_key) | data source |
 | [aws_subnets.data](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/subnets) | data source |
 | [aws_vpc.vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/vpc) | data source |
+| [aws_vpc_dhcp_options.vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/vpc_dhcp_options) | data source |
 | [vault_generic_secret.aurora](https://registry.terraform.io/providers/hashicorp/vault/latest/docs/data-sources/generic_secret) | data source |
 | [vault_generic_secret.stack_secrets](https://registry.terraform.io/providers/hashicorp/vault/latest/docs/data-sources/generic_secret) | data source |
 

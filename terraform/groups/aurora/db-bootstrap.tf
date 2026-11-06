@@ -3,7 +3,7 @@
 #   * creates (or updates) the schema-owner role: LOGIN, password from Vault, CONNECT and CREATE on the
 #     database and CREATE on schema public (flyway_schema_history). Not a superuser, not rds_superuser.
 #   * verifies: postgis installed, owner is not the master, the database has no application objects
-#     unless flyway_schema_history exists, rds.force_ssl=1, ssl_min_protocol_version=TLSv1.3, and a
+#     unless flyway_schema_history exists, a client without TLS is refused, ssl_min_protocol_version=TLSv1.3, and a
 #     TLS 1.2 handshake is refused while TLS 1.3 succeeds.
 # Any failure fails the invocation and so this apply. Only Terraform invokes it: there are no event
 # sources and no invoke permissions. Code: lambdas/db-bootstrap in this repository.
@@ -33,7 +33,8 @@ module "db_bootstrap" {
 
   additional_policies = [data.aws_iam_policy_document.db_bootstrap.json]
 
-  # No CIDR egress, so no route to the internet; the egress rules are in network.tf.
+  # No CIDR egress, so no route to the internet; the egress rules (Aurora, SSM endpoint, VPC DNS
+  # resolvers) are in network.tf.
   lambda_sg_egress_rule = {
     from_port   = 443
     to_port     = 443
@@ -68,6 +69,7 @@ resource "aws_lambda_invocation" "db_bootstrap" {
     aws_vpc_endpoint.ssm,
     aws_vpc_security_group_ingress_rule.ssm_endpoint_from_db_bootstrap,
     aws_vpc_security_group_egress_rule.db_bootstrap_to_ssm_endpoint,
+    aws_vpc_security_group_egress_rule.db_bootstrap_dns,
     aws_vpc_security_group_egress_rule.db_bootstrap_to_aurora,
     aws_vpc_security_group_ingress_rule.aurora_from_db_bootstrap,
   ]

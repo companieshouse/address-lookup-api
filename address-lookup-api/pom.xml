@@ -115,6 +115,12 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <version>${spring.boot.version}</version>
+                <configuration>
+                    <!-- spring-boot:run inherits the launch directory as cwd, so use an absolute path to the repo-root compose.yaml -->
+                    <systemPropertyVariables>
+                        <spring.docker.compose.file>${maven.multiModuleProjectDirectory}/compose.yaml</spring.docker.compose.file>
+                    </systemPropertyVariables>
+                </configuration>
                 <executions>
                     <execution>
                         <goals>

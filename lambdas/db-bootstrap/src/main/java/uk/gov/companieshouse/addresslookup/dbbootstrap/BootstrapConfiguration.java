@@ -8,7 +8,7 @@ import java.util.Map;
  *
  * @param masterParameter      Parameter Store name of the master credentials (MASTER_CREDENTIALS_PARAMETER)
  * @param schemaOwnerParameter Parameter Store name of the schema-owner credentials (SCHEMA_OWNER_CREDENTIALS_PARAMETER)
- * @param verifyTls            whether verify checks rds.force_ssl, ssl_min_protocol_version and probes TLS 1.2/1.3 (VERIFY_TLS)
+ * @param verifyTls            whether verify checks ssl_min_protocol_version and probes no TLS, TLS 1.2 and TLS 1.3 (VERIFY_TLS)
  * @param timeout              connect and TLS probe timeout (CONNECT_TIMEOUT_SECONDS)
  */
 public record BootstrapConfiguration(String masterParameter, String schemaOwnerParameter, boolean verifyTls,

@@ -54,9 +54,8 @@ locals {
   # CA file in the repo or the Lambda zips; the cluster enforces TLS (rds.force_ssl=1, TLS 1.3 minimum).
   jdbc_url = "jdbc:postgresql://${module.aurora_postgres.cluster_endpoint}:${local.database_port}/${local.database_name}?sslmode=require"
 
-  # Authenticate the writer before sending master credentials. The bootstrap Lambda must have the
-  # approved RDS CA bundle at the driver's default ~/.postgresql/root.crt location.
-  master_jdbc_url = "jdbc:postgresql://${module.aurora_postgres.cluster_endpoint}:${local.database_port}/${local.database_name}?sslmode=verify-full"
+  # Same as jdbc_url: encrypted with sslmode=require and no CA file (no RDS CA bundle in the Lambda zip).
+  master_jdbc_url = "jdbc:postgresql://${module.aurora_postgres.cluster_endpoint}:${local.database_port}/${local.database_name}?sslmode=require"
 
   credentials = {
     "master" = jsonencode({
@@ -73,4 +72,11 @@ locals {
 
   ssm_endpoint_name = "address-lookup-${var.environment}-ssm"
   ssm_endpoint_url  = "https://${aws_vpc_endpoint.ssm.dns_entry[0].dns_name}"
+
+  # UDP and TCP 53 to each of the VPC's DHCP resolvers (network.tf). AmazonProvidedDNS needs no rule.
+  dns_servers = [for server in data.aws_vpc_dhcp_options.vpc.domain_name_servers : server if server != "AmazonProvidedDNS"]
+  dns_egress = {
+    for pair in setproduct(local.dns_servers, ["udp", "tcp"]) :
+    "${pair[1]}-${pair[0]}" => { cidr_ipv4 = "${pair[0]}/32", ip_protocol = pair[1] }
+  }
 }

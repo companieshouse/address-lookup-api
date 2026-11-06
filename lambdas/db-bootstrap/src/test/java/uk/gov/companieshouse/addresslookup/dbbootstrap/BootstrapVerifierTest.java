@@ -64,6 +64,34 @@ class BootstrapVerifierTest {
     }
 
     @Test
+    void acceptsAnUnavailableForceSslSettingOnlyWhenPlaintextIsExplicitlyRefused() throws Exception {
+        FakeDatabase db = FakeDatabase.ready().returns("rds.force_ssl", row((Object) null))
+                .returns("SELECT current_database()", row("addressdb"));
+        when(probe.probePlaintext("writer.example", 5432, "master", "addressdb"))
+                .thenReturn(new TlsProtocolProbe.Outcome(REFUSED, "non-SSL connection rejected"));
+
+        BootstrapVerifier.Report report = new BootstrapVerifier(probe).verify(db.connection, MASTER, OWNER);
+
+        assertNull(report.forceSsl());
+        assertEquals("REFUSED", report.plaintext());
+        assertTrue(report.failures().isEmpty());
+    }
+
+    @Test
+    void failsWhenForceSslIsUnavailableAndPlaintextReachesAuthentication() throws Exception {
+        FakeDatabase db = FakeDatabase.ready().returns("rds.force_ssl", row((Object) null))
+                .returns("SELECT current_database()", row("addressdb"));
+        when(probe.probePlaintext("writer.example", 5432, "master", "addressdb"))
+                .thenReturn(new TlsProtocolProbe.Outcome(ACCEPTED, "authentication requested"));
+
+        BootstrapVerifier.VerificationException e = assertThrows(BootstrapVerifier.VerificationException.class,
+                () -> new BootstrapVerifier(probe).verify(db.connection, MASTER, OWNER));
+
+        assertEquals("ACCEPTED", e.report().plaintext());
+        assertTrue(e.getMessage().contains("plaintext client was not refused"));
+    }
+
+    @Test
     void failsWhenApplicationObjectsExistWithoutFlywayHistory() throws Exception {
         FakeDatabase db = FakeDatabase.ready().returns("UNION ALL", row("public.address"), row("schema os_data"));
 

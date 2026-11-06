@@ -28,7 +28,7 @@ public final class BootstrapVerifier {
 
     public record Report(String postgisVersion, String schemaOwner, DatabaseState databaseState, List<String> objects,
                          String forceSsl, String sslMinProtocolVersion, String connectionTls,
-                         String tls12, String tls13, List<String> failures) {
+                         String plaintext, String tls12, String tls13, List<String> failures) {
     }
 
     private static final String HISTORY_SQL = """
@@ -98,12 +98,23 @@ public final class BootstrapVerifier {
         String forceSsl = null;
         String minProtocol = null;
         String connectionTls = null;
+        String plaintext = null;
         String tls12 = null;
         String tls13 = null;
         if (probe != null) {
             forceSsl = string(master, "SELECT current_setting('rds.force_ssl', true)", null);
             minProtocol = string(master, "SELECT current_setting('ssl_min_protocol_version', true)", null);
             connectionTls = string(master, "SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()", null);
+            // Aurora may enforce this cluster parameter without exposing it through current_setting.
+            if (forceSsl == null) {
+                TlsProtocolProbe.Outcome unencrypted = probe.probePlaintext(masterCredentials.host(),
+                        masterCredentials.port(), masterCredentials.username(),
+                        string(master, "SELECT current_database()", null));
+                plaintext = unencrypted.result().name();
+                if (unencrypted.result() != TlsProtocolProbe.Result.REFUSED) {
+                    failures.add("rds.force_ssl is unavailable and a plaintext client was not refused: " + unencrypted);
+                }
+            }
             checkTlsSettings(forceSsl, minProtocol, connectionTls, failures);
             TlsProtocolProbe.Outcome old = probe.probe(masterCredentials.host(), masterCredentials.port(), "TLSv1.2");
             TlsProtocolProbe.Outcome current = probe.probe(masterCredentials.host(), masterCredentials.port(), TLS_1_3);
@@ -118,7 +129,7 @@ public final class BootstrapVerifier {
         }
 
         Report report = new Report(postgis, schemaOwner, state, objects, forceSsl, minProtocol, connectionTls,
-                tls12, tls13, List.copyOf(failures));
+                plaintext, tls12, tls13, List.copyOf(failures));
         if (!failures.isEmpty()) {
             throw new VerificationException(report);
         }
@@ -127,7 +138,7 @@ public final class BootstrapVerifier {
 
     private static void checkTlsSettings(String forceSsl, String minProtocol, String connectionTls,
             List<String> failures) {
-        if (!"1".equals(forceSsl) && !"on".equals(forceSsl)) {
+        if (forceSsl != null && !"1".equals(forceSsl) && !"on".equals(forceSsl)) {
             failures.add("rds.force_ssl is " + forceSsl + ", expected 1 (on)");
         }
         if (!TLS_1_3.equals(minProtocol)) {

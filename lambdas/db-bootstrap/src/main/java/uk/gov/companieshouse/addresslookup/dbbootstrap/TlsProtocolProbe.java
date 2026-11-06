@@ -7,11 +7,14 @@ import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509ExtendedTrustManager;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -46,6 +49,63 @@ public final class TlsProtocolProbe {
 
     public TlsProtocolProbe(Duration timeout) {
         this.timeout = timeout;
+    }
+
+    /** Sends only startup identifiers, never a password, and requires an explicit non-SSL pg_hba rejection. */
+    public Outcome probePlaintext(String host, int port, String username, String database) throws IOException {
+        ByteArrayOutputStream startup = new ByteArrayOutputStream();
+        DataOutputStream message = new DataOutputStream(startup);
+        message.writeInt(196608); // PostgreSQL protocol 3.0
+        for (String value : new String[] {"user", username, "database", database}) {
+            message.write(value.getBytes(StandardCharsets.UTF_8));
+            message.writeByte(0);
+        }
+        message.writeByte(0);
+
+        int millis = Math.toIntExact(timeout.toMillis());
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(host, port), millis);
+            socket.setSoTimeout(millis);
+            DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+            out.writeInt(startup.size() + 4);
+            startup.writeTo(out);
+            out.flush();
+
+            DataInputStream in = new DataInputStream(socket.getInputStream());
+            int type = in.readUnsignedByte();
+            int length = in.readInt();
+            if (length < 4 || length > 65536) {
+                throw new IOException("Invalid PostgreSQL response length in plaintext probe");
+            }
+            byte[] payload = new byte[length - 4];
+            in.readFully(payload);
+            if (type == 'R') {
+                return new Outcome(Result.ACCEPTED, "server requested authentication without TLS");
+            }
+            if (type != 'E') {
+                throw new IOException("Unexpected PostgreSQL response in plaintext probe: " + type);
+            }
+            String sqlState = null;
+            String detail = null;
+            DataInputStream fields = new DataInputStream(new ByteArrayInputStream(payload));
+            for (int field; (field = fields.readUnsignedByte()) != 0;) {
+                ByteArrayOutputStream value = new ByteArrayOutputStream();
+                for (int c; (c = fields.readUnsignedByte()) != 0;) {
+                    value.write(c);
+                }
+                String text = value.toString(StandardCharsets.UTF_8);
+                if (field == 'C') {
+                    sqlState = text;
+                } else if (field == 'M') {
+                    detail = text;
+                }
+            }
+            if ("28000".equals(sqlState) && detail != null && detail.contains("no pg_hba.conf entry")
+                    && (detail.contains("SSL off") || detail.contains("no encryption"))) {
+                return new Outcome(Result.REFUSED, "server explicitly rejected a non-SSL connection");
+            }
+            throw new IOException("Plaintext probe failed without proving SSL enforcement (SQLSTATE " + sqlState + ")");
+        }
     }
 
     public Outcome probe(String host, int port, String protocol) throws IOException, GeneralSecurityException {

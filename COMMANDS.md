@@ -49,6 +49,9 @@ make concourse-status NODES='["build-test-analyse", "source-code"]'
 make concourse-status NODES=build-test-analyse,source-code
 make concourse-status STATUS=red
 make concourse-status NODES=build-test-analyse,source-code STATUS=orange
+make concourse-status OUTPUT=human
+make concourse-status STATUS=red OUTPUT=json
+make concourse-status NODE=build-test-analyse OUTPUT=yaml
 ```
 
 `install-fly` downloads from
@@ -85,6 +88,15 @@ finished job results remain visible while a new build runs. Empty filter
 results are reported explicitly. Use `STATUS=green`, `STATUS=red` or
 `STATUS=orange`, not literal braces. `make consource-status` is also accepted
 as an alias for the spelling in the original request.
+
+`OUTPUT=human` (default) prints the table. `OUTPUT=json` and `OUTPUT=yaml`
+print only a machine-readable document with `pipeline` and `nodes` fields.
+Each node has `type`, `name`, `status` and `detail`; an empty selection result
+is an empty `nodes` array. All node/status filters apply to every format.
+YAML strings are quoted and escaped using jq, without an extra YAML dependency.
+GNU Make reserves `-o` for its own "old file" option, so use `OUTPUT=...`
+with Make, not `make concourse-status -o json`. Direct script calls support
+`bash scripts/concourse-status.sh -o json` (or `human`/`yaml`).
 
 Run `bash tests/test_concourse.sh` for isolated helper regressions.
 

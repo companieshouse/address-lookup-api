@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 fail() { printf '%s\n' "$*" >&2; exit 1; }
+output="${OUTPUT:-human}"
+if (( $# > 0 )); then
+    [[ $# == 2 && "$1" == -o ]] || fail 'Usage: concourse-status.sh [-o human|json|yaml]'
+    output="$2"
+fi
+case "$output" in
+    human|json|yaml) ;;
+    *) fail 'OUTPUT must be human, json, or yaml.' ;;
+esac
 for tool in curl jq; do
     command -v "$tool" >/dev/null || fail "$tool is required."
 done
@@ -45,7 +54,7 @@ for payload in "$jobs" "$resources"; do
         (.name | length > 0 and (test("[\u0000-\u001f\u007f]") | not)))' \
         <<<"$payload" >/dev/null || fail 'Invalid Concourse node response.'
 done
-rows="$(jq -nr --argjson jobs "$jobs" --argjson resources "$resources" \
+rows="$(jq -n --argjson jobs "$jobs" --argjson resources "$resources" \
     --argjson selection "$selection" --arg filter "$status" '
     def colour:
       if . == "succeeded" then "green"
@@ -74,15 +83,35 @@ rows="$(jq -nr --argjson jobs "$jobs" --argjson resources "$resources" \
          (if .last_checked == null then "never" else (.last_checked | todateiso8601) end))}]) as $all |
     ($selection - [$all[].name]) as $missing |
     if ($missing | length) > 0 then error("Unknown nodes: " + ($missing | join(", ")))
-    else $all | sort_by(.kind, .name) | .[] |
+    else [$all | sort_by(.kind, .name) | .[] |
       select(($selection | length) == 0 or (.name as $name | $selection | index($name) != null)) |
       select($filter == "" or .colour == $filter) |
-      [.kind, .name, .colour, .detail] | @tsv
+      {type:.kind, name, status:.colour, detail}]
     end')" || fail 'Unable to classify Concourse status.'
-printf 'Pipeline: team-development/address-lookup-api\n'
-printf 'TYPE\tNODE\tSTATUS\tDETAIL\n'
-if [[ -n "$rows" ]]; then
-    printf '%s\n' "$rows"
-else
-    printf 'No nodes match the selection and status filter.\n'
-fi
+report="$(jq -n --argjson nodes "$rows" \
+    '{pipeline:"team-development/address-lookup-api", nodes:$nodes}')"
+case "$output" in
+    human)
+        printf 'Pipeline: team-development/address-lookup-api\n'
+        printf 'TYPE\tNODE\tSTATUS\tDETAIL\n'
+        if [[ "$(jq '.nodes | length' <<<"$report")" != 0 ]]; then
+            jq -r '.nodes[] | [.type, .name, .status, .detail] | @tsv' <<<"$report"
+        else
+            printf 'No nodes match the selection and status filter.\n'
+        fi
+        ;;
+    json)
+        jq . <<<"$report"
+        ;;
+    yaml)
+        jq -r '
+          "pipeline: " + (.pipeline | tojson),
+          (if (.nodes | length) == 0 then "nodes: []"
+           else "nodes:", (.nodes[] |
+             "  - type: " + (.type | tojson),
+             "    name: " + (.name | tojson),
+             "    status: " + (.status | tojson),
+             "    detail: " + (.detail | tojson))
+           end)' <<<"$report"
+        ;;
+esac

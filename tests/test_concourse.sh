@@ -64,7 +64,7 @@ printf '%s\n' "$2" > "$INSTALLED"
 STUB
 chmod +x "$work/bin/"*
 export PATH="$work/bin:$PATH" CALLS="$work/calls" INSTALLED="$work/installed"
-export NODE='' NODES='' STATUS=''
+export NODE='' NODES='' STATUS='' OUTPUT=human
 run() {
     make --no-print-directory -s -C "$root" "$@" > "$work/output" 2>&1
 }
@@ -103,8 +103,35 @@ run consource-status STATUS=red
 expect $'job\taborted\tred'
 run concourse-status NODE=healthy STATUS=red
 expect 'No nodes match'
+run concourse-status 'NODES=healthy,source' OUTPUT=json
+jq -e '.pipeline == "team-development/address-lookup-api" and
+    (.nodes | length) == 2 and
+    .nodes[0] == {type:"job",name:"healthy",status:"green",detail:"latest: 1 (succeeded)"} and
+    .nodes[1].type == "resource"' "$work/output" >/dev/null
+run concourse-status STATUS=orange OUTPUT=json
+jq -e '(.nodes | length) == 3 and all(.nodes[]; .status == "orange")' "$work/output" >/dev/null
+run concourse-status NODE=healthy STATUS=red OUTPUT=json
+jq -e '.nodes == []' "$work/output" >/dev/null
+run concourse-status NODE=healthy OUTPUT=yaml
+expect 'pipeline: "team-development/address-lookup-api"'
+expect '  - type: "job"'
+expect '    name: "healthy"'
+expect '    status: "green"'
+expect '    detail: "latest: 1 (succeeded)"'
+run concourse-status NODE=healthy STATUS=red OUTPUT=yaml
+expect 'nodes: []'
+NODE=running bash "$root/scripts/concourse-status.sh" -o json > "$work/output"
+jq -e '.nodes[0].name == "running" and .nodes[0].status == "orange"' "$work/output" >/dev/null
+for args in '-o' '-o xml' '--unknown'; do
+    : > "$CALLS"
+    # Intentional splitting exercises missing values and unknown CLI options.
+    if bash "$root/scripts/concourse-status.sh" $args > "$work/output" 2>&1; then
+        printf 'Expected invalid script options to fail.\n' >&2; exit 1
+    fi
+    [[ ! -s "$CALLS" ]]
+done
 for input in 'NODES=[]' 'NODES=["healthy",3]' 'NODES=["healthy"' \
-    'NODES=["healthy\nbad"]' 'NODES=healthy,' 'STATUS=blue'; do
+    'NODES=["healthy\nbad"]' 'NODES=healthy,' 'STATUS=blue' 'OUTPUT=xml'; do
     : > "$CALLS"
     reject concourse-status "$input"
     [[ ! -s "$CALLS" ]]

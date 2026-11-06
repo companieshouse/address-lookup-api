@@ -55,6 +55,8 @@ make concourse-status NODE=build-test-analyse
 make concourse-status NODES='["build-test-analyse", "source-code"]'
 make concourse-status NODES=build-test-analyse,source-code STATUS=orange
 make concourse-status STATUS=red
+make concourse-status STATUS=red OUTPUT=json
+make concourse-status OUTPUT=yaml
 ```
 
 Status commands read all jobs and resources in the
@@ -63,6 +65,8 @@ using curl and jq, without requiring fly or login. They do not change the
 pipeline. Green means succeeded, red means failed/errored/aborted, and orange
 means started/pending. Nodes without results or paused nodes are shown as
 unknown; resource timestamps show when checks last ran.
+Use `OUTPUT=human` (default), `OUTPUT=json` or `OUTPUT=yaml`; Make reserves
+`-o` for another purpose. The script supports `-o` when invoked directly.
 See [COMMANDS.md](COMMANDS.md#concourse) for filtering, prerequisites and
 installation details.
 

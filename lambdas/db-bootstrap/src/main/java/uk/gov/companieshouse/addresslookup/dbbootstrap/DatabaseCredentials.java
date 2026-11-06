@@ -56,6 +56,12 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
         return port == -1 ? 5432 : port;
     }
 
+    /** The database name from the JDBC URL path. */
+    public String database() {
+        String path = uri().getPath();
+        return path == null || path.length() <= 1 ? "" : path.substring(1);
+    }
+
     /** Query parameters of the JDBC URL, e.g. {@code sslmode}. */
     public Map<String, String> parameters() {
         Map<String, String> parameters = new LinkedHashMap<>();

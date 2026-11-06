@@ -19,6 +19,8 @@ class BootstrapVerifierTest {
 
     private static final DatabaseCredentials MASTER = new DatabaseCredentials(
             "jdbc:postgresql://writer.example:5432/addressdb?sslmode=require", "master", "pw");
+    private static final TlsProtocolProbe.Outcome HBA_REJECTED = new TlsProtocolProbe.Outcome(REFUSED,
+            "no pg_hba.conf entry for host \"10.0.0.1\", user \"address_lookup_tls_probe\", database \"addressdb\", SSL off");
     private static final String OWNER = "address_lookup_owner";
 
     private final TlsProtocolProbe probe = mock(TlsProtocolProbe.class);
@@ -27,6 +29,7 @@ class BootstrapVerifierTest {
     void tls13Only() throws Exception {
         when(probe.probe("writer.example", 5432, "TLSv1.2")).thenReturn(new TlsProtocolProbe.Outcome(REFUSED, "protocol_version"));
         when(probe.probe("writer.example", 5432, "TLSv1.3")).thenReturn(new TlsProtocolProbe.Outcome(ACCEPTED, null));
+        when(probe.plaintext("writer.example", 5432, "addressdb")).thenReturn(HBA_REJECTED);
     }
 
     @Test
@@ -35,7 +38,7 @@ class BootstrapVerifierTest {
 
         assertEquals("3.6.0", report.postgisVersion());
         assertEquals(BootstrapVerifier.DatabaseState.EMPTY, report.databaseState());
-        assertEquals("1", report.forceSsl());
+        assertEquals("REFUSED", report.plaintext());
         assertEquals("TLSv1.3", report.sslMinProtocolVersion());
         assertEquals("REFUSED", report.tls12());
         assertEquals("ACCEPTED", report.tls13());
@@ -51,16 +54,6 @@ class BootstrapVerifierTest {
         BootstrapVerifier.Report report = new BootstrapVerifier(probe).verify(db.connection, MASTER, OWNER);
 
         assertEquals(BootstrapVerifier.DatabaseState.MIGRATED, report.databaseState());
-    }
-
-    @Test
-    void acceptsTheBooleanRepresentationOfForceSsl() throws Exception {
-        FakeDatabase db = FakeDatabase.ready().returns("rds.force_ssl", row("on"));
-
-        BootstrapVerifier.Report report = new BootstrapVerifier(probe).verify(db.connection, MASTER, OWNER);
-
-        assertEquals("on", report.forceSsl());
-        assertTrue(report.failures().isEmpty());
     }
 
     @Test
@@ -111,19 +104,32 @@ class BootstrapVerifierTest {
     @Test
     void failsWhenTls12IsAcceptedOrTlsIsNotForced() throws Exception {
         FakeDatabase db = FakeDatabase.ready()
-                .returns("rds.force_ssl", row("0"))
                 .returns("ssl_min_protocol_version", row("TLSv1.2"))
                 .returns("pg_stat_ssl", row("TLSv1.2"));
         when(probe.probe("writer.example", 5432, "TLSv1.2")).thenReturn(new TlsProtocolProbe.Outcome(ACCEPTED, null));
+        when(probe.plaintext("writer.example", 5432, "addressdb"))
+                .thenReturn(new TlsProtocolProbe.Outcome(ACCEPTED, "the server asked a non-TLS client to authenticate"));
 
         BootstrapVerifier.VerificationException e = assertThrows(BootstrapVerifier.VerificationException.class,
                 () -> new BootstrapVerifier(probe).verify(db.connection, MASTER, OWNER));
 
         assertEquals(4, e.report().failures().size(), e.report().failures().toString());
-        assertTrue(e.getMessage().contains("rds.force_ssl is 0"));
+        assertTrue(e.getMessage().contains("a client without TLS was not refused"));
         assertTrue(e.getMessage().contains("ssl_min_protocol_version is TLSv1.2"));
         assertTrue(e.getMessage().contains("this connection uses TLSv1.2"));
         assertTrue(e.getMessage().contains("TLS 1.2 client was not refused"));
+    }
+
+    @Test
+    void failsWhenTheClientWithoutTlsGetsAnUnexpectedAnswer() throws Exception {
+        when(probe.plaintext("writer.example", 5432, "addressdb"))
+                .thenReturn(new TlsProtocolProbe.Outcome(TlsProtocolProbe.Result.UNEXPECTED, "53300: too many clients"));
+
+        BootstrapVerifier.VerificationException e = assertThrows(BootstrapVerifier.VerificationException.class,
+                () -> new BootstrapVerifier(probe).verify(FakeDatabase.ready().connection, MASTER, OWNER));
+
+        assertEquals("UNEXPECTED", e.report().plaintext());
+        assertTrue(e.getMessage().contains("a client without TLS was not refused"), e.getMessage());
     }
 
     @Test
@@ -138,11 +144,9 @@ class BootstrapVerifierTest {
 
     @Test
     void skipsTlsChecksWithoutAProbe() throws Exception {
-        FakeDatabase db = FakeDatabase.ready().returns("rds.force_ssl", row("0"));
+        BootstrapVerifier.Report report = new BootstrapVerifier(null).verify(FakeDatabase.ready().connection, MASTER, OWNER);
 
-        BootstrapVerifier.Report report = new BootstrapVerifier(null).verify(db.connection, MASTER, OWNER);
-
-        assertNull(report.forceSsl());
+        assertNull(report.plaintext());
         assertNull(report.tls12());
     }
 }

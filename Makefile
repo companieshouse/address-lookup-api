@@ -28,6 +28,9 @@ SQL ?=
 FILE ?=
 POSTCODE ?=
 POSTCODES ?=
+NODE ?=
+NODES ?=
+STATUS ?=
 MIN_COVERAGE ?= 0.80
 PR ?=
 PR_BRANCH ?=
@@ -41,6 +44,7 @@ endif
 export LOCAL_API_PORT LOCAL_API_TIMEOUT CONFIRM MIN_COVERAGE PR PR_BRANCH PR_BASE
 export SONAR_HOST_URL SONAR_PROJECT_KEY
 export SQL FILE POSTCODE POSTCODES
+export NODE NODES STATUS
 export MAKE_JACOCO_AUTO := true
 MVN := bash scripts/maven.sh
 
@@ -99,6 +103,14 @@ test-commands:
 	bash tests/test_postcodes.sh
 	bash tests/test_add_postcode.sh
 	bash tests/test_maven.sh
+	bash tests/test_concourse.sh
+
+.PHONY: install-fly concourse-status consource-status
+install-fly:
+	@bash scripts/install-fly.sh
+
+concourse-status consource-status:
+	@bash scripts/concourse-status.sh
 
 test-smoke:
 	bash scripts/local-api-smoke.sh

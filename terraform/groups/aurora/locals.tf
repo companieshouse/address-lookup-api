@@ -73,4 +73,11 @@ locals {
 
   ssm_endpoint_name = "address-lookup-${var.environment}-ssm"
   ssm_endpoint_url  = "https://${aws_vpc_endpoint.ssm.dns_entry[0].dns_name}"
+
+  # UDP and TCP 53 to each of the VPC's DHCP resolvers (network.tf). AmazonProvidedDNS needs no rule.
+  dns_servers = [for server in data.aws_vpc_dhcp_options.vpc.domain_name_servers : server if server != "AmazonProvidedDNS"]
+  dns_egress = {
+    for pair in setproduct(local.dns_servers, ["udp", "tcp"]) :
+    "${pair[1]}-${pair[0]}" => { cidr_ipv4 = "${pair[0]}/32", ip_protocol = pair[1] }
+  }
 }

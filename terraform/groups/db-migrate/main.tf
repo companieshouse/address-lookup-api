@@ -56,7 +56,8 @@ module "lambda" {
   additional_policies = [data.aws_iam_policy_document.db_migrate.json]
 
   # No CIDR egress at all, so no route to the internet. The only egress rules
-  # are added in network.tf: Aurora, the S3 gateway endpoint and the SSM endpoint.
+  # are added in network.tf: Aurora, the S3 gateway endpoint, the SSM endpoint and
+  # DNS to the VPC resolvers.
   lambda_sg_egress_rule = {
     from_port   = 443
     to_port     = 443

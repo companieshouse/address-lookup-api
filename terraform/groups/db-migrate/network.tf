@@ -4,8 +4,9 @@
 # 0.0.0.0/0 to the transit gateway, so the function's security group is what
 # keeps it off the internet: it has no CIDR egress, only
 #   * 5432 to the Aurora security group,
-#   * 443 to the S3 gateway endpoint's prefix list (snapshots), and
-#   * 443 to the SSM interface endpoint (credentials).
+#   * 443 to the S3 gateway endpoint's prefix list (snapshots),
+#   * 443 to the SSM interface endpoint (credentials), and
+#   * 53 (UDP and TCP) to the VPC's DHCP DNS resolvers, to resolve those names.
 #
 # The S3 gateway endpoint belongs to the VPC and is looked up, not created.
 # The SSM endpoint and its security group belong to terraform/groups/aurora,
@@ -65,4 +66,16 @@ resource "aws_vpc_security_group_ingress_rule" "ssm_endpoint_from_lambda" {
   ip_protocol                  = "tcp"
   from_port                    = 443
   to_port                      = 443
+}
+
+resource "aws_vpc_security_group_egress_rule" "lambda_dns" {
+  for_each = local.dns_egress
+
+  security_group_id = module.lambda.security_group_id
+  description       = "DNS (${upper(each.value.ip_protocol)}) to VPC resolver ${each.value.cidr_ipv4}"
+
+  cidr_ipv4   = each.value.cidr_ipv4
+  ip_protocol = each.value.ip_protocol
+  from_port   = 53
+  to_port     = 53
 }

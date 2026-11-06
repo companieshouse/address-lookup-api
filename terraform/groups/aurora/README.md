@@ -12,7 +12,7 @@ migration Lambdas read from Parameter Store.
 | TLS | Cluster parameter group: `rds.force_ssl=1`, `ssl_min_protocol_version=TLSv1.3` (the agreed post-quantum readiness step). The master jdbcUrl uses `sslmode=verify-full` to verify the server certificate and hostname before authentication. The schema-owner jdbcUrl remains `sslmode=require`. The cluster refuses non-TLS and pre-1.3 connections. |
 | Credentials | SecureStrings `/address-lookup/<env>/db/master` and `/address-lookup/<env>/db/schema-owner` = `{"username","password","jdbcUrl"}` (writer endpoint), written from Vault by `module.credentials` and encrypted with `alias/<aws_profile>/environment-services-kms`. |
 | SSM endpoint | Interface endpoint `address-lookup-<env>-ssm` (private DNS off) and its security group `address-lookup-<env>-ssm-endpoint`. Its policy lets the bootstrap Lambda read both parameters and the db-migrate Lambda's role read only the schema owner's. `terraform/groups/db-migrate` looks both up by Name tag. |
-| db-bootstrap Lambda | `address-lookup-db-bootstrap-<env>` (code: `lambdas/db-bootstrap`). No CIDR egress: only Aurora (5432) and the SSM endpoint (443). No event sources or invoke permissions. |
+| db-bootstrap Lambda | `address-lookup-db-bootstrap-<env>` (code: `lambdas/db-bootstrap`). No CIDR egress to the internet: only Aurora (5432), the SSM endpoint (443) and DNS (53 udp/tcp) to the VPC's DHCP resolvers (/32 each). No event sources or invoke permissions. |
 | Bootstrap run | `aws_lambda_invocation.db_bootstrap` runs `{"command":"bootstrap"}` on the first apply and whenever the release, the cluster, the schema owner's credentials or the TLS settings change. A failure fails the apply. |
 
 ### What the bootstrap does
@@ -152,6 +152,7 @@ After the first `<env>-db-schema-migrate`, Flyway's `info` shows V2026.001 to V2
 | [aws_lambda_invocation.db_bootstrap](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_invocation) | resource |
 | [aws_security_group.ssm_endpoint](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group) | resource |
 | [aws_vpc_endpoint.ssm](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_endpoint) | resource |
+| [aws_vpc_security_group_egress_rule.db_bootstrap_dns](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_egress_rule) | resource |
 | [aws_vpc_security_group_egress_rule.db_bootstrap_to_aurora](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_egress_rule) | resource |
 | [aws_vpc_security_group_egress_rule.db_bootstrap_to_ssm_endpoint](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_egress_rule) | resource |
 | [aws_vpc_security_group_ingress_rule.aurora_from_db_bootstrap](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule) | resource |
@@ -162,6 +163,7 @@ After the first `<env>-db-schema-migrate`, Flyway's `info` shows V2026.001 to V2
 | [aws_kms_key.parameters](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/kms_key) | data source |
 | [aws_subnets.data](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/subnets) | data source |
 | [aws_vpc.vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/vpc) | data source |
+| [aws_vpc_dhcp_options.vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/vpc_dhcp_options) | data source |
 | [vault_generic_secret.aurora](https://registry.terraform.io/providers/hashicorp/vault/latest/docs/data-sources/generic_secret) | data source |
 | [vault_generic_secret.stack_secrets](https://registry.terraform.io/providers/hashicorp/vault/latest/docs/data-sources/generic_secret) | data source |
 

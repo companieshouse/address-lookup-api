@@ -23,7 +23,7 @@ final class BorderPostcodeFixtures {
             new Case("CH11DE", "CH1 1DE", "GB-ENG"),
             new Case("CH11DF", "CH1 1DF", "GB-ENG"),
             new Case("SY11EB", "SY1 1EB", "GB-ENG"),
-            new Case("SY100AU", "SY10 0AU", "GB-ENG"),
+            new Case("SY100AU", "SY10 0AU", "GB-WLS"),
             new Case("HR11AD", "HR1 1AD", "GB-ENG"),
             new Case("HR11AE", "HR1 1AE", "GB-ENG"),
             new Case("SY217BL", "SY21 7BL", "GB-WLS"),

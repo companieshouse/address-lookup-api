@@ -28,7 +28,7 @@ public interface LegacyAddressMapper {
      * Combines the sub-building name, building name and building number for the legacy premise field.
      *
      * @param address address with the premise components
-     * @return nonblank components joined by a comma, or an empty string
+     * @return nonblank components joined by a space, or an empty string
      */
     default String toPremise(RoyalMailAddressLookup address) {
         return join(
@@ -42,7 +42,7 @@ public interface LegacyAddressMapper {
                 .filter(Objects::nonNull)
                 .map(String::trim)
                 .filter(part -> !part.isBlank())
-                .collect(Collectors.joining(", "));
+                .collect(Collectors.joining(" "));
 
         return value.isBlank() ? "" : value;
     }

@@ -21,6 +21,8 @@ current Makefile and its maintained scripts.
 | Reset and reseed DB | `make db-reset CONFIRM=address_lookup` | Stops the managed API, verifies its port is free, starts Postgres, drops/recreates only the local Compose `address_lookup` DB, starts the API with Flyway/local fixtures, and verifies the lookup relation contains rows. Leaves both services running. |
 | Unit tests | `make test-unit` | Maven reactor Java unit tests with integration tests skipped and automatic Make JDK selection. Does not require local-service tools such as `jq`. |
 | Command-helper regressions | `make test-commands` | Runs lifecycle/Sonar, smoke, postcode lookup/generation and Maven-selector helper checks using stubs; requires `jq` and `ps`. |
+| Format Java | `make tidy FILE=path/File.java` | Formats one file in place. Use `FILE=.` for all Java files, or pipe Java source to `make tidy` for formatted stdout. |
+| Check Java formatting | `make spotless-check` | Read-only scan of all Java files; prints only unformatted paths and fails, or exits zero silently when clean. |
 | Smoke test | `make test-smoke` | Creates a temporary database, starts a separate API on an OS-assigned port, checks health and applied migrations, then stops its API and drops only its temporary database. |
 | Test selected postcodes | `make test-postcode POSTCODE=CF143AT` | Validates selected postcodes, starts the DB, rebuilds/restarts the managed API to apply local seeds, then prints and executes each curl command. |
 | Test database postcodes | `make test-postcodes` | Starts the DB, rebuilds/restarts the managed API, reads distinct postcodes from the lookup view, then prints and executes each curl command. Stops at the first failure. |
@@ -253,6 +255,102 @@ LOCAL_API_HEALTH_POLL_INTERVAL_SECONDS=2 make test-smoke
 The smoke helper's settings are distinct from `LOCAL_API_TIMEOUT`.
 `make test-commands` uses stubs;
 they are not live smoke tests.
+
+## Java formatting tools
+
+The project uses the [Spotless Maven plugin](https://github.com/diffplug/spotless/tree/main/plugin-maven),
+`com.diffplug.spotless:spotless-maven-plugin:3.11.0`, with pinned
+`google-java-format:2.0.0` in GOOGLE style (two-space indentation). Configuration
+lives in the root `pom.xml`; formatting does not run implicitly during ordinary
+Maven builds. Imports use Google ordering and unused imports are removed.
+Javadoc formatting, long-string reflow and optional syntax cleanups are disabled.
+
+```bash
+make tidy FILE=address-lookup-api/src/main/java/uk/gov/companieshouse/addresslookup/Application.java
+make tidy FILE=.
+cat foobar.java | make tidy > foobar-formatted.java
+make spotless-check
+```
+
+`FILE` names one Java file, including paths with spaces when quoted, and is
+formatted in place. `FILE=.` formats all Java files across the checkout.
+Without `FILE`, stdin is Java source content, not a list of filenames; only
+formatted Java is written to stdout. Empty input fails with usage guidance.
+Do not redirect piped output to the input file: the shell would truncate it.
+Use `FILE=...` for safe in-place formatting. A nonempty `FILE` takes precedence
+over stdin. Run these commands from the repository root.
+
+`scripts/spotless.sh check` scans the whole Java codebase, including tests and
+untracked Java files. Generated/build/runtime directories named `target`,
+`build-*`, `.git` and `.local-run` are excluded. Other languages, SQL migrations,
+POMs and documentation are not reformatted by these commands.
+The helper formats a temporary snapshot using the same POM configuration and
+compares every Java file. This avoids Spotless's truncated standard violation
+list and never modifies source files during checks. Temporary files are cleaned
+on exit; formatter or dependency errors are reported explicitly without
+overwriting inputs.
+Before tidy writes any results, it checks every destination against the original
+snapshot. If a file changed while Maven was running, tidy aborts without writing
+back any files, preserving the intervening edits. Avoid editing files during
+the final write-back; this check is not a filesystem-wide locking mechanism.
+
+On a clean tree, the helper and `make spotless-check` return 0 without listing
+files. On formatting violations, the helper prints every offending path
+relative to the repository root and exits **255**. Standard GNU Make converts
+any recipe failure to its own exit **2**, while showing `Error 255`; this is
+Make's behavior, not a different formatting result. For the exact script status:
+
+```bash
+bash scripts/spotless.sh check
+```
+
+Maven, parser or other operational failures are errors, not clean results.
+`tests/test_commands.sh` and `make test-commands` are unchanged; they do not
+invoke Spotless or gain new dependencies. Pipeline formatting enforcement is
+deferred, and no new workflow is added. Existing Java sources
+are intentionally unchanged by this tools-only introduction, so the opt-in
+scan may report existing differences. Before committing Java changes, tidy
+the files you intend to change and review the diff. `FILE=.` is available
+when a deliberate whole-codebase formatting pass is wanted; it is not run
+automatically.
+
+Run `bash tests/test_spotless.sh` manually for isolated, Maven-stub-based
+helper regressions. This suite is not connected to `make test-commands` or
+the pipeline, needs no Maven downloads, and does not format project sources.
+
+Direct Maven equivalents from the root are `mvn -N spotless:apply` and
+`mvn -N spotless:check`. The latter uses Maven's usual failure status and
+truncated diagnostics, not the helper's complete path list or 255 contract.
+
+### Editor integration
+
+See [EDITOR.md](EDITOR.md) for VS Code, Vim and IntelliJ setup and usage.
+All editor actions use the existing Spotless helper and root `pom.xml`;
+there is no separate formatting configuration or automatic format-on-save.
+
+### Optional pre-commit hook
+
+`scripts/git-hooks/pre-commit` runs `make tidy FILE=.` before a commit. It is opt-in:
+adding this script does not install it or change existing hooks or pipelines.
+To enable it for this checkout, first check your hook configuration:
+
+```bash
+git config --get core.hooksPath
+```
+
+If you already use hooks, integrate `bash scripts/git-hooks/pre-commit` into your
+existing pre-commit hook rather than replacing it. Otherwise, enable the
+tracked script directly for this checkout:
+
+```bash
+git config --local core.hooksPath scripts/git-hooks
+```
+
+This formats all Java files, not only staged files. If any tracked Java file
+has unstaged changes afterwards, the hook blocks the commit so you can review
+and stage the intended changes before retrying. It never stages files for you.
+Formatter failures also block the commit. With partially staged Java files,
+review the remaining unstaged changes carefully rather than staging blindly.
 
 ## Coverage
 

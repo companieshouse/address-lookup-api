@@ -12,6 +12,37 @@ Provides address lookup and validation to be used by CHIPS and frontend CH servi
 mvn -pl address-lookup-api -am package -Dskip.unit.tests=true -Dskip.integration.tests=true jib:dockerBuild
 ```
 
+## Java formatting tools
+
+Use Spotless to tidy your changed Java files before committing. From the
+repository root:
+
+```bash
+make tidy FILE=path/to/YourFile.java
+make spotless-check
+```
+
+You can also pipe Java source with `cat foobar.java | make tidy` to print the
+formatted source without editing the original. Java 21+ and Maven are required.
+See [COMMANDS.md](COMMANDS.md#java-formatting-tools) for details.
+
+The Spotless configuration in `pom.xml` is the single source of truth for
+Java formatting. Editor integrations should invoke `make tidy FILE=...`
+from the repository root rather than duplicate formatting rules in
+EditorConfig or editor-specific formatter settings. This does not configure
+automatic formatting on save. Shared editor actions invoke that same helper:
+VS Code's **Spotless: format current Java file** task, an IntelliJ
+**Spotless** External Tool, and Vim's
+`:Spotless` command. See [EDITOR.md](EDITOR.md)
+for activation and usage.
+
+`make spotless-check` is an opt-in, read-only scan of all Java sources. It is
+silent when clean and otherwise lists offending files. Existing Java sources
+have not been reformatted as part of introducing these tools, so the scan may
+report existing formatting differences. Review any formatting diff before
+committing. Pipeline formatting enforcement is deferred; no PR-wide formatting
+scan or workflow is added.
+
 ## Running locally
 
 Local seeds include one synthetic Cardiff address for each of the 14 supplied

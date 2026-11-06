@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${SKIP_FORMAT:-false}" == true ]]; then
+    exit 0
+fi
+
+root="$(git rev-parse --show-toplevel)"
+cd "$root"
+
+make tidy FILE=.
+
+if ! git diff --quiet -- '*.java'; then
+    printf 'Commit stopped: review and stage the Java formatting changes, then commit again.\n' >&2
+    exit 1
+fi

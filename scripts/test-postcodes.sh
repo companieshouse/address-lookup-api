@@ -1,6 +1,48 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+mode="${1:-all}"
+case "$mode" in
+    all) ;;
+    single|validate-single)
+        if ! command -v jq >/dev/null 2>&1; then
+            printf 'Required command is unavailable: jq\n' >&2
+            exit 2
+        fi
+        if [[ -n "${POSTCODE:-}" && -n "${POSTCODES:-}" ]]; then
+            printf 'Use POSTCODE or POSTCODES, not both.\n' >&2
+            exit 2
+        fi
+        if [[ -n "${POSTCODES:-}" ]]; then
+            input="$POSTCODES"
+            if [[ "$input" != *'['* ]]; then
+                input="$(jq -cn --arg postcodes "$input" '$postcodes | split(",")')"
+            fi
+        else
+            input="$(jq -cn --arg postcodes "${POSTCODE:-}" '$postcodes | split(",")')"
+        fi
+        if ! normalized="$(printf '%s' "$input" | jq -ers '
+            if length != 1 then error("Expected one JSON array") else .[0] end
+            | if type != "array" or length == 0 then
+                error("Expected a nonempty postcode array")
+              else . end
+            | map(if type != "string" then error("Postcodes must be strings")
+                  else ascii_upcase | gsub(" "; "") end)
+            | if all(.[]; test("^[A-Z]{1,2}[0-9][A-Z0-9]?[0-9][A-Z]{2}$"))
+              then .[] else error("Invalid UK postcode") end
+        ')"; then
+            printf 'Use POSTCODE=CF143AT,CF146RP or POSTCODES='\''["CF143AT","CF146RP"]'\''.\n' >&2
+            exit 2
+        fi
+        selected_postcodes=()
+        while IFS= read -r postcode; do
+            selected_postcodes+=("$postcode")
+        done <<< "$normalized"
+        [[ "$mode" != validate-single ]] || exit 0
+        ;;
+    *) printf 'Usage: test-postcodes.sh [all|single|validate-single]\n' >&2; exit 2 ;;
+esac
+
 for command_name in curl jq; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
         printf 'Required command is unavailable: %s\n' "$command_name" >&2
@@ -18,10 +60,35 @@ fi
 work_dir="$(mktemp -d)"
 trap 'rm -f "$work_dir/headers" "$work_dir/body"; rmdir "$work_dir"' EXIT
 
-postcodes=(
-    DG89JA DG27AZ NE119NU NE311JA CA11AA CA101AT TD12SJ TD11BE
-    CH11DE CH11DF SY11EB SY100AU HR11AD HR11AE SY217BL LL137TD NP253EQ
-)
+if [[ "$mode" == single ]]; then
+    postcodes=("${selected_postcodes[@]}")
+else
+    if ! command -v docker >/dev/null 2>&1; then
+        printf 'Required command is unavailable: docker\n' >&2
+        exit 1
+    fi
+    root="$(cd "$(dirname "$0")/.." && pwd)"
+    if ! database_postcodes="$(docker compose -f "$root/compose.yaml" exec -T postgres \
+        psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d address_lookup \
+        -c "SELECT DISTINCT upper(replace(postcode, ' ', '')) AS postcode
+            FROM address_lookup.address_lookup ORDER BY postcode;")"; then
+        printf 'Failed to read postcodes from the local lookup database.\n' >&2
+        exit 1
+    fi
+    postcodes=()
+    while IFS= read -r postcode; do
+        [[ -n "$postcode" ]] || continue
+        if [[ ! "$postcode" =~ ^[A-Z0-9]+$ ]]; then
+            printf 'Invalid postcode returned by database: %s\n' "$postcode" >&2
+            exit 1
+        fi
+        postcodes+=("$postcode")
+    done <<< "$database_postcodes"
+    if (( ${#postcodes[@]} == 0 )); then
+        printf 'No postcodes found in the local lookup database.\n' >&2
+        exit 1
+    fi
+fi
 
 for postcode in "${postcodes[@]}"; do
     url="http://localhost:${port}/address-lookup-api/addresses?postcode=${postcode}"

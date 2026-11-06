@@ -25,6 +25,8 @@ LOCAL_API_PORT ?= 8080
 LOCAL_API_TIMEOUT ?= 180
 CONFIRM ?=
 SQL ?=
+POSTCODE ?=
+POSTCODES ?=
 MIN_COVERAGE ?= 0.80
 PR ?=
 PR_BRANCH ?=
@@ -37,7 +39,7 @@ SONAR_PROJECT_KEY = uk.gov.companieshouse:address-lookup-api
 endif
 export LOCAL_API_PORT LOCAL_API_TIMEOUT CONFIRM MIN_COVERAGE PR PR_BRANCH PR_BASE
 export SONAR_HOST_URL SONAR_PROJECT_KEY
-export SQL
+export SQL POSTCODE POSTCODES
 export MAKE_JACOCO_AUTO := true
 MVN := bash scripts/maven.sh
 
@@ -87,14 +89,28 @@ test-commands:
 	bash tests/test_commands.sh
 	bash tests/test_local_api_smoke.sh
 	bash tests/test_postcodes.sh
+	bash tests/test_add_postcode.sh
 	bash tests/test_maven.sh
 
 test-smoke:
 	bash scripts/local-api-smoke.sh
 
 .PHONY: test-postcodes
-test-postcodes: start
+test-postcodes:
+	@$(MAKE) db-start
+	@$(MAKE) api-restart
 	@bash scripts/test-postcodes.sh
+
+.PHONY: test-postcode
+.PHONY: add-postcode
+add-postcode:
+	@bash scripts/add-postcode.sh
+
+test-postcode:
+	@bash scripts/test-postcodes.sh validate-single
+	@$(MAKE) db-start
+	@$(MAKE) api-restart
+	@bash scripts/test-postcodes.sh single
 
 coverage:
 	$(MVN) clean verify -Pcoverage -Dskip.integration.tests=true

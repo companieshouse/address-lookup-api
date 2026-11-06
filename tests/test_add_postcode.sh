@@ -4,7 +4,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 work="$(mktemp -d)"
 cleanup() {
     find "$work/database/local" -maxdepth 1 -type f -name 'R__*.sql' -delete
-    rm -f "$work/scripts/add-postcode.sh" "$work/bin/curl" "$work/expected" "$work/output"
+    rm -f "$work/scripts/add-postcode.sh" "$work/bin/curl" "$work/expected" "$work/output" "$work/ready" "$work/release"
     rmdir "$work/scripts" "$work/database/local" "$work/database" "$work/bin" "$work"
 }
 trap cleanup EXIT
@@ -21,6 +21,19 @@ while (( $# )); do
     esac
 done
 if [[ "$url" == *CF146RP ]]; then printf 503; exit 0; fi
+if [[ "${BLOCK_LOOKUP:-0}" == 1 ]]; then
+    touch "$READY"
+    for ((attempt=0; attempt<100; attempt++)); do
+        [[ ! -f "$RELEASE" ]] || break
+        sleep 0.1
+    done
+    [[ -f "$RELEASE" ]] || exit 7
+fi
+if [[ "$url" == *BT11AA ]]; then
+    printf '{"result":{"eastings":null,"northings":null,"latitude":54.6,"longitude":-5.9,"country":"Northern Ireland","admin_district":"Belfast"}}' > "$output"
+    printf 200
+    exit 0
+fi
 if [[ "$url" == *CF101PX ]]; then
     if [[ "$url" == */postcodes/* ]]; then printf 404; exit 0; fi
     printf '{"result":{"eastings":318138,"northings":176452,"latitude":51.481077,"longitude":-3.180247}}' > "$output"
@@ -84,4 +97,27 @@ if INVALID_COORDINATES=1 POSTCODE=AB101AU bash "$work/scripts/add-postcode.sh" \
     printf 'Expected invalid coordinates to fail.\n' >&2; exit 1
 fi
 [[ ! -f "$work/database/local/R__seed_AB101AU.sql" ]]
+POSTCODE=BT11AA bash "$work/scripts/add-postcode.sh"
+island="$work/database/local/R__seed_BT11AA.sql"
+grep -Fq 'INSERT INTO os_data.add_isl_royalmailaddress_v2' "$island"
+grep -Fq 'ST_SetSRID(ST_MakePoint(-5.9, 54.6), 4258)' "$island"
+
+BLOCK_LOOKUP=1 READY="$work/ready" RELEASE="$work/release" POSTCODE=AB101AU \
+    bash "$work/scripts/add-postcode.sh" > "$work/output" 2>&1 &
+pid=$!
+for ((attempt=0; attempt<100; attempt++)); do
+    [[ ! -f "$work/ready" ]] || break
+    sleep 0.1
+done
+[[ -f "$work/ready" ]]
+if POSTCODES=AB101AU,AB101AB bash "$work/scripts/add-postcode.sh" > "$work/expected" 2>&1; then
+    touch "$work/release"; wait "$pid"
+    printf 'Expected overlapping generation to be locked.\n' >&2; exit 1
+fi
+grep -Fq 'generation is locked' "$work/expected"
+touch "$work/release"
+wait "$pid"
+[[ -f "$work/database/local/R__seed_AB101AU.sql" ]]
+[[ ! -f "$work/database/local/R__seed_AB101AB,AB101AU.sql" ]]
+[[ ! -d "$work/database/local/.add-postcode.lock" ]]
 printf 'PASS: Bash postcode generator checks.\n'

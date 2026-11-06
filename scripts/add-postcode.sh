@@ -25,8 +25,23 @@ postcodes="$(printf '%s' "$input" | jq -ers '
     | if all(.[]; test("^[A-Z]{1,2}[0-9][A-Z0-9]?[0-9][A-Z]{2}$"))
       then unique[] else error("Invalid UK postcode") end
 ')"
+lock="$seed_dir/.add-postcode.lock"
+if ! mkdir "$lock"; then
+    printf 'Postcode generation is locked; inspect %s before removing a stale lock.\n' "$lock" >&2
+    exit 1
+fi
+work=""
+cleanup() {
+    if [[ -n "$work" ]]; then
+        rm -f "$work/records" "$work/body" "$work/new"
+        rmdir "$work"
+    fi
+    rmdir "$lock"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 work="$(mktemp -d "$seed_dir/.add-postcode.XXXXXX")"
-trap 'rm -f "$work/records" "$work/body" "$work/new"; rmdir "$work"' EXIT
 printf '[]\n' > "$work/records"
 added=0
 names=()
@@ -52,11 +67,15 @@ while IFS= read -r postcode; do
     fi
     record="$(jq -ce --arg postcode "$spaced" --argjson historical "$historical" '
         .result
+        | ($postcode | startswith("BT")) as $island
         | if type != "object"
-             or any(.eastings,.northings,.latitude,.longitude; type != "number")
-             or any(.eastings,.northings,.latitude,.longitude; isfinite | not)
-             or .eastings < 0 or .eastings >= 1000000
-             or .northings < 0 or .northings >= 10000000
+             or any(.latitude,.longitude; type != "number")
+             or any(.latitude,.longitude; isfinite | not)
+             or (if $island then false else
+                 any(.eastings,.northings; type != "number")
+                 or any(.eastings,.northings; isfinite | not)
+                 or .eastings < 0 or .eastings >= 1000000
+                 or .northings < 0 or .northings >= 10000000 end)
              or .latitude < -90 or .latitude > 90
              or .longitude < -180 or .longitude > 180
           then error("Missing postcode metadata") else . end
@@ -69,6 +88,8 @@ while IFS= read -r postcode; do
                else error("Missing district metadata") end
           else . end
         | .fixture_postcode = $postcode | .historical = $historical
+        | .fixture_island = $island
+        | if $island then .eastings = null | .northings = null else . end
     ' "$work/body")"
     checksum="$(printf '%s' "$postcode" | cksum)"
     identifier=$(( -(${checksum%% *} % 2147483647 + 1) ))
@@ -99,12 +120,13 @@ cat >> "$work/new" <<'SQL'
 -- District labels are not authoritative postal towns; UPRNs remain NULL.
 SQL
 printf "DELETE FROM os_data.add_gb_royalmailaddress_v2 WHERE release_id = '%s';\n" "$release" >> "$work/new"
+printf "DELETE FROM os_data.add_isl_royalmailaddress_v2 WHERE release_id = '%s';\n" "$release" >> "$work/new"
 jq -r --arg release "$release" --arg date "$generated_date" '
     def sql: if . == null then "NULL"
              else "'"'"'" + (tostring | gsub("'"'"'"; "'"'"''"'"'")) + "'"'"'" end;
     .[]
     | .fixture_postcode as $pc
-    | "INSERT INTO os_data.add_gb_royalmailaddress_v2 (
+    | "INSERT INTO os_data.add_\(if .fixture_island then "isl" else "gb" end)_royalmailaddress_v2 (
     udprn, versiondate, versionavailablefromdate, changetype, theme, description,
     buildingname, buildingnumber, thoroughfare, posttown, postcode, postcodetype,
     postcodearea, postcodedistrict, postcodesector, fulladdress, country,
@@ -117,8 +139,9 @@ jq -r --arg release "$release" --arg date "$generated_date" '
     \($pc | capture("^(?<area>[A-Z]+)").area | sql), \($pc | split(" ")[0] | sql),
     \($pc[:-2] | sql), \(("SYNTHETIC TEST ADDRESS, 1 TEST FIXTURE ROAD, " + .admin_district + ", " + $pc) | sql),
     \(.country[:25] | sql), '"'"'1A'"'"', DATE \($date | sql), DATE \($date | sql),
-    \(.eastings), \(.northings), \(.latitude), \(.longitude),
-    ST_SetSRID(ST_MakePoint(\(.eastings), \(.northings)), 27700),
+    \(if .fixture_island then "NULL, NULL" else "\(.eastings), \(.northings)" end), \(.latitude), \(.longitude),
+    \(if .fixture_island then "ST_SetSRID(ST_MakePoint(\(.longitude), \(.latitude)), 4258)"
+      else "ST_SetSRID(ST_MakePoint(\(.eastings), \(.northings)), 27700)" end),
     '"'"'Postcode centroid'"'"', '"'"'Synthetic fixture'"'"', '"'"'Unmatched'"'"', \($release | sql)
 );"
 ' "$work/records" >> "$work/new"

@@ -73,6 +73,8 @@ Historical metadata without a district uses the explicit synthetic town
 `SYNTHETIC LOCALITY`, not an inferred real postal town; an unavailable country
 is left NULL. Invalid or out-of-range
 coordinates fail before file creation.
+Northern Ireland (`BT`) fixtures use the ISL table and longitude/latitude
+geometry with SRID 4258; GB fixtures use British National Grid SRID 27700.
 
 The command creates a new file such as `database/local/R__seed_KT138GL.sql`
 or `database/local/R__seed_CF143AT,KT138GL.sql`. Names use sorted, uppercase
@@ -83,6 +85,10 @@ overwritten. Each file has its own release marker so rerunning it does not
 delete another file's fixtures. The command validates
 the whole input and fetches all metadata before writing; failures leave the
 seed file unchanged. Review and commit the generated diff yourself.
+Generation holds a shared `database/local/.add-postcode.lock` directory lock.
+Concurrent invocations fail explicitly rather than creating overlapping seeds.
+Normal exits release it; after an abrupt termination, verify no generator is
+running before removing a stale lock with `rmdir database/local/.add-postcode.lock`.
 It does not start services or apply SQL. Run `make test-postcode` with the same
 selection afterward to rebuild/restart and query the new fixtures.
 After seeds are applied, `make test-postcodes` discovers them automatically

@@ -179,7 +179,7 @@ they are not live smoke tests.
 
 The project uses the [Spotless Maven plugin](https://github.com/diffplug/spotless/tree/main/plugin-maven),
 `com.diffplug.spotless:spotless-maven-plugin:3.11.0`, with pinned
-`google-java-format:2.0.0` in AOSP style (four-space indentation). Configuration
+`google-java-format:2.0.0` in GOOGLE style (two-space indentation). Configuration
 lives in the root `pom.xml`; formatting does not run implicitly during ordinary
 Maven builds. Imports use Google ordering and unused imports are removed.
 Javadoc formatting, long-string reflow and optional syntax cleanups are disabled.

@@ -38,7 +38,7 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
                 .andExpect(jsonPath("$[0].postTown").value("ABERDEEN"))
                 .andExpect(jsonPath("$[0].country").value("GB-SCT"))
                 .andExpect(jsonPath("$[1].postcode").value("AB10 1AU"))
-                .andExpect(jsonPath("$[1].premise").value("FLAT 1, 16"))
+                .andExpect(jsonPath("$[1].premise").value("FLAT 1 16"))
                 .andExpect(jsonPath("$[1].addressLine1").value("NETHERKIRKGATE"))
                 .andExpect(jsonPath("$[1].country").value("GB-SCT"));
     }

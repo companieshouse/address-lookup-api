@@ -71,11 +71,18 @@ Run the database feed layout checks and fresh-PostGIS integration test with
 `make test-flyway`. Docker is required. API integration tests use Flyway with
 both `classpath:db/migrations` and `classpath:db/local`.
 
+Integration tests (classes named `*IT`, e.g. `MultipleAddressesControllerIT`) are
+run by Failsafe, not Surefire. `mvn test` does **not** run them, so a green
+`mvn test` can hide failing ITs; the pipeline runs them with `mvn verify`. Run
+`mvn clean verify` (with local PostGIS running) before pushing; `clean` avoids
+stale compiled classes hiding failures.
+
 Run the API unit and controller integration tests with:
 
 ```bash
+mvn clean verify
 mvn -pl address-lookup-api -Dtest=AddressLookupControllerTest test
-mvn -pl address-lookup-api -am -Dit.test=AddressesControllerIT -Dskip.unit.tests=true test-compile failsafe:integration-test failsafe:verify
+mvn -pl address-lookup-api -am -Dit.test=AddressesControllerIT -Dskip.unit.tests=true -Dfailsafe.failIfNoSpecifiedTests=false -Dsurefire.failIfNoSpecifiedTests=false verify
 ```
 
 Look up addresses by postcode:

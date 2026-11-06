@@ -79,10 +79,24 @@ class KeyLayoutTest {
       "Scanned/12345678-1234-1234-1234-123456789abc/extra/add_gb_builtaddress.zip",
       "Scanned/12345678-1234-1234-1234-123456789abc/unknown.zip",
       "Scanned/not-a-uuid/add_gb_builtaddress.zip",
-      "Scanned/12345678-1234-1234-1234-123456789abc/add_gb_builtaddress.csv"
+      "Scanned/12345678-1234-1234-1234-123456789abc/extra/add_gb_builtaddress.csv",
+      "Scanned/12345678-1234-1234-1234-123456789abc/unknown.csv",
+      "Scanned/not-a-uuid/add_gb_builtaddress.csv"
   })
   void rejectsInvalidScannedKeys(String key) {
     assertThrows(IllegalArgumentException.class, () -> KeyLayout.parseObjectKey(key));
+  }
+
+  @Test
+  void parsesScannedCsvWrittenByUnzip() {
+    String releaseId = "12345678-1234-1234-1234-123456789abc";
+    for (Dataset dataset : Dataset.values()) {
+      String key = "Scanned/" + releaseId + "/" + dataset.datasetName() + ".csv";
+      var parsed = KeyLayout.parseCsvKey(key);
+      assertEquals(releaseId, parsed.releaseId());
+      assertEquals(dataset, parsed.dataset());
+      assertEquals(KeyLayout.FileType.CSV, parsed.fileType());
+    }
   }
 
   @Test

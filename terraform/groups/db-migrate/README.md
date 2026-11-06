@@ -21,7 +21,7 @@ the major or minor version, edit `database/version`.
 
 ```
 Concourse (env AWS keys) ──────lambda:InvokeFunction──▶ address-lookup-db-migrate-<env>
-                                                          │  data subnets, own SG, no CIDR egress
+                                                          │  data subnets, own SG, no internet egress
                        ┌──────────────────────────────────┼──────────────────────────────┐
                  443 ▼ S3 gateway endpoint          443 ▼ SSM interface endpoint    5432 ▼ Aurora SG
           shared-services configs bucket       /address-lookup/<env>/db/       <env>-address-rds
@@ -37,7 +37,7 @@ Concourse (env AWS keys) ──────lambda:InvokeFunction──▶ addres
 | Env `SNAPSHOT_BUCKET`, `DB_CREDENTIALS_PARAMETER`, `LOCK_TIMEOUT=10s`, `ALLOW_REPAIR=false` | `lambda_env_vars`, plus `AWS_ENDPOINT_URL_SSM` (see Network) |
 | No triggers | No event source mappings, EventBridge rules, schedules or SNS/SQS subscriptions are declared |
 | Invoke only by that environment's Concourse | No resource policy. Concourse invokes it in the same account with that environment's AWS keys, whose IAM permissions allow it. See "Anyone else → AccessDenied" below. |
-| Private subnets, own SG, no internet route | Data subnets (`data_subnet_pattern` from Vault). The SG has no CIDR egress. Its only egress rules go to Aurora 5432, the S3 gateway prefix list 443 and the SSM endpoint SG 443. |
+| Private subnets, own SG, no internet route | Data subnets (`data_subnet_pattern` from Vault). The SG has no internet egress. Its only egress rules go to Aurora 5432, the S3 gateway prefix list 443, the SSM endpoint SG 443 and DNS 53 (udp/tcp) to the VPC's DHCP resolvers (/32 each), which the SSM endpoint name needs. |
 | Aurora allows 5432 from it | `aws_vpc_security_group_ingress_rule.aurora_from_lambda` on `<env>-address-rds-rds-sg` |
 | Endpoints S3 gateway, SSM, KMS, Logs | S3 gateway: the VPC's existing one, looked up. SSM: created by `terraform/groups/aurora` (`address-lookup-<env>-ssm`) and looked up by Name tag; this group adds the ingress rule from the function's SG. KMS and Logs: not needed (see Network). |
 | IAM S3 Get on `address-lookup/db-schema-snapshots/*`, `ssm:GetParameter` on the one parameter, `kms:Decrypt` on the parameters key | `data.aws_iam_policy_document.db_migrate` attached via `additional_policies` |
@@ -154,7 +154,7 @@ SG=$(aws ec2 describe-security-groups --filters Name=group-name,Values=<env>-add
 aws ec2 describe-security-group-rules --filters Name=group-id,Values="$SG" \
   --query 'SecurityGroupRules[?!IsEgress].[FromPort,ReferencedGroupInfo.GroupId,CidrIpv4,Description]' --output table
 
-# No internet access: the function SG's egress is only Aurora, the S3 prefix list and the SSM endpoint SG
+# No internet access: the function SG's egress is only Aurora, the S3 prefix list, the SSM endpoint SG and DNS to the VPC resolvers
 LSG=$(terraform output -raw security_group_id)
 aws ec2 describe-security-group-rules --filters Name=group-id,Values="$LSG" \
   --query 'SecurityGroupRules[?IsEgress].[FromPort,ReferencedGroupInfo.GroupId,PrefixListId,CidrIpv4]' --output table
@@ -263,6 +263,7 @@ aws kms get-key-policy --key-id <key id> --policy-name default
 | Name | Type |
 |------|------|
 | [aws_cloudwatch_metric_alarm.errors](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_metric_alarm) | resource |
+| [aws_vpc_security_group_egress_rule.lambda_dns](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_egress_rule) | resource |
 | [aws_vpc_security_group_egress_rule.lambda_to_aurora](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_egress_rule) | resource |
 | [aws_vpc_security_group_egress_rule.lambda_to_s3](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_egress_rule) | resource |
 | [aws_vpc_security_group_egress_rule.lambda_to_ssm_endpoint](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_egress_rule) | resource |
@@ -277,6 +278,7 @@ aws kms get-key-policy --key-id <key id> --policy-name default
 | [aws_sns_topic.alarms](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/sns_topic) | data source |
 | [aws_subnets.data](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/subnets) | data source |
 | [aws_vpc.vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/vpc) | data source |
+| [aws_vpc_dhcp_options.vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/vpc_dhcp_options) | data source |
 | [aws_vpc_endpoint.s3](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/vpc_endpoint) | data source |
 | [aws_vpc_endpoint.ssm](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/vpc_endpoint) | data source |
 | [vault_generic_secret.database_secrets](https://registry.terraform.io/providers/hashicorp/vault/latest/docs/data-sources/generic_secret) | data source |

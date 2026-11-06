@@ -12,6 +12,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -26,6 +27,7 @@ import java.util.function.Function;
 public final class Handler implements RequestHandler<Map<String, Object>, Map<String, Object>> {
 
     private static final String BOOTSTRAP_COMMAND = "bootstrap";
+    private static final Set<String> ENCRYPTED_SSL_MODES = Set.of("require", "verify-ca", "verify-full");
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Logger LOGGER = LoggerFactory.getLogger("address-lookup-db-bootstrap");
 
@@ -95,13 +97,13 @@ public final class Handler implements RequestHandler<Map<String, Object>, Map<St
     private Connection connect(DatabaseCredentials credentials) throws SQLException {
         Properties urlProperties = org.postgresql.Driver.parseURL(credentials.jdbcUrl(), new Properties());
         DatabaseCredentials.require(urlProperties != null, "Invalid PostgreSQL JDBC URL");
-        DatabaseCredentials.require("verify-full".equals(urlProperties.getProperty("sslmode")),
-                "Master JDBC connection requires sslmode=verify-full");
+        DatabaseCredentials.require(ENCRYPTED_SSL_MODES.contains(urlProperties.getProperty("sslmode", "")),
+                "Master JDBC connection requires sslmode=require, verify-ca or verify-full");
         // URL options override connection properties, so validate the driver's parsed options before connecting.
         String sslFactory = urlProperties.getProperty("sslfactory", "org.postgresql.ssl.LibPQFactory");
         DatabaseCredentials.require("org.postgresql.ssl.LibPQFactory".equals(sslFactory)
                         || "org.postgresql.ssl.DefaultJavaSSLFactory".equals(sslFactory),
-                "Master JDBC connection requires a standard certificate-validating SSL factory");
+                "Master JDBC connection requires a standard SSL factory");
         for (String option : new String[] {"sslfactoryarg", "sslhostnameverifier"}) {
             DatabaseCredentials.require(!urlProperties.containsKey(option),
                     "Master JDBC connection must not override " + option);

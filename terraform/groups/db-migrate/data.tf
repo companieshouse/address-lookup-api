@@ -15,6 +15,12 @@ data "aws_vpc" "vpc" {
   }
 }
 
+# The VPC's DHCP options. The VPC uses its own DNS resolvers rather than AmazonProvidedDNS (which
+# security groups never filter), so a Lambda with no CIDR egress needs explicit DNS egress to them.
+data "aws_vpc_dhcp_options" "vpc" {
+  dhcp_options_id = data.aws_vpc.vpc.dhcp_options_id
+}
+
 # The Aurora cluster's data subnets: private, one per availability zone.
 data "aws_subnets" "data" {
   filter {

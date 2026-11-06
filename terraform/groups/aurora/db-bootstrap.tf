@@ -33,7 +33,8 @@ module "db_bootstrap" {
 
   additional_policies = [data.aws_iam_policy_document.db_bootstrap.json]
 
-  # No CIDR egress, so no route to the internet; the egress rules are in network.tf.
+  # No CIDR egress, so no route to the internet; the egress rules (Aurora, SSM endpoint, VPC DNS
+  # resolvers) are in network.tf.
   lambda_sg_egress_rule = {
     from_port   = 443
     to_port     = 443
@@ -68,6 +69,7 @@ resource "aws_lambda_invocation" "db_bootstrap" {
     aws_vpc_endpoint.ssm,
     aws_vpc_security_group_ingress_rule.ssm_endpoint_from_db_bootstrap,
     aws_vpc_security_group_egress_rule.db_bootstrap_to_ssm_endpoint,
+    aws_vpc_security_group_egress_rule.db_bootstrap_dns,
     aws_vpc_security_group_egress_rule.db_bootstrap_to_aurora,
     aws_vpc_security_group_ingress_rule.aurora_from_db_bootstrap,
   ]

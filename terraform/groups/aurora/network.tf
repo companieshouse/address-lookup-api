@@ -1,7 +1,7 @@
 # The SSM interface endpoint both migration Lambdas use for their credentials.
 #
 # The data subnets route 0.0.0.0/0 to the transit gateway, so the Lambdas' security groups are what
-# keep them off the internet: no CIDR egress, only Aurora and this endpoint. Private DNS is off,
+# keep them off the internet: no CIDR egress, only Aurora, this endpoint and DNS to the VPC resolvers. Private DNS is off,
 # because turning it on would send every SSM call in the shared VPC to an endpoint that only admits
 # these two functions; the Lambdas are pointed at it with AWS_ENDPOINT_URL_SSM instead.
 # terraform/groups/db-migrate looks the endpoint and its security group up by their Name tags and
@@ -69,4 +69,16 @@ resource "aws_vpc_security_group_ingress_rule" "aurora_from_db_bootstrap" {
   ip_protocol                  = "tcp"
   from_port                    = local.database_port
   to_port                      = local.database_port
+}
+
+resource "aws_vpc_security_group_egress_rule" "db_bootstrap_dns" {
+  for_each = local.dns_egress
+
+  security_group_id = module.db_bootstrap.security_group_id
+  description       = "DNS (${upper(each.value.ip_protocol)}) to VPC resolver ${each.value.cidr_ipv4}"
+
+  cidr_ipv4   = each.value.cidr_ipv4
+  ip_protocol = each.value.ip_protocol
+  from_port   = 53
+  to_port     = 53
 }

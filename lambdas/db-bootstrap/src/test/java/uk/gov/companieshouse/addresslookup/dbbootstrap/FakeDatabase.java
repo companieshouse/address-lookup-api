@@ -57,7 +57,6 @@ final class FakeDatabase {
         return new FakeDatabase()
                 .returns("extname = 'postgis'", row("3.6.0"))
                 .returns("r.rolsuper", row(false, true, false, true, true, true))
-                .returns("rds.force_ssl", row("1"))
                 .returns("ssl_min_protocol_version", row("TLSv1.3"))
                 .returns("pg_stat_ssl", row("TLSv1.3"));
     }

@@ -3,7 +3,7 @@
 #   * creates (or updates) the schema-owner role: LOGIN, password from Vault, CONNECT and CREATE on the
 #     database and CREATE on schema public (flyway_schema_history). Not a superuser, not rds_superuser.
 #   * verifies: postgis installed, owner is not the master, the database has no application objects
-#     unless flyway_schema_history exists, rds.force_ssl=1, ssl_min_protocol_version=TLSv1.3, and a
+#     unless flyway_schema_history exists, a client without TLS is refused, ssl_min_protocol_version=TLSv1.3, and a
 #     TLS 1.2 handshake is refused while TLS 1.3 succeeds.
 # Any failure fails the invocation and so this apply. Only Terraform invokes it: there are no event
 # sources and no invoke permissions. Code: lambdas/db-bootstrap in this repository.

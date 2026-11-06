@@ -32,10 +32,13 @@ Connected as the master user (the only code that uses it):
    * the database is **EMPTY** (no schemas or relations except PostGIS's own) or **MIGRATED**
      (`flyway_schema_history` exists). **NOT_EMPTY** fails with the offending objects listed, because Flyway
      would stop with a "non-empty schema" error
-   * `rds.force_ssl` is `1`, `ssl_min_protocol_version` is `TLSv1.3`, and its own connection uses TLS 1.3
+   * `ssl_min_protocol_version` is `TLSv1.3`, and its own connection uses TLS 1.3
+   * a client without TLS is refused. Aurora applies `rds.force_ssl` through pg_hba.conf and doesn't expose it as a
+     setting, so the probe sends a startup message for the role `address_lookup_tls_probe` (it need not exist)
+     and expects SQLSTATE 28000 ("no pg_hba.conf entry ..., SSL off" or "..., no encryption"). It never sends a password.
    * a client limited to TLS 1.2 is refused and one limited to TLS 1.3 is accepted (PostgreSQL SSLRequest
      then a handshake pinned to one version, stopped at the server certificate so it needs no CA file; no credentials are sent).
-     These probes check protocol support only, not endpoint identity; JDBC independently verifies the certificate and hostname.
+     These probes check protocol support only, not endpoint identity.
 
 It never creates application schemas or tables: those all come from Flyway, starting at V2026.001.
 
@@ -91,7 +94,7 @@ terraform output -json db_bootstrap_result
 aws lambda invoke --function-name "$FN" --cli-binary-format raw-in-base64-out \
   --payload '{"command":"verify"}' /dev/stdout
 #   databaseState EMPTY before the first Flyway run, MIGRATED after; postgisVersion set;
-#   schemaOwner != master; forceSsl "1"; sslMinProtocolVersion "TLSv1.3"; tls12 REFUSED; tls13 ACCEPTED
+#   schemaOwner != master; plaintext REFUSED; sslMinProtocolVersion "TLSv1.3"; tls12 REFUSED; tls13 ACCEPTED
 
 # Parameters are SecureStrings with the customer-managed key:
 aws ssm describe-parameters --parameter-filters "Key=Name,Option=BeginsWith,Values=/address-lookup/$ENV/db/" \

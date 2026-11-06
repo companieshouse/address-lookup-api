@@ -27,7 +27,7 @@ public final class BootstrapVerifier {
     }
 
     public record Report(String postgisVersion, String schemaOwner, DatabaseState databaseState, List<String> objects,
-                         String forceSsl, String sslMinProtocolVersion, String connectionTls,
+                         String plaintext, String sslMinProtocolVersion, String connectionTls,
                          String tls12, String tls13, List<String> failures) {
     }
 
@@ -95,16 +95,22 @@ public final class BootstrapVerifier {
             }
         }
 
-        String forceSsl = null;
+        String plaintext = null;
         String minProtocol = null;
         String connectionTls = null;
         String tls12 = null;
         String tls13 = null;
         if (probe != null) {
-            forceSsl = string(master, "SELECT current_setting('rds.force_ssl', true)", null);
             minProtocol = string(master, "SELECT current_setting('ssl_min_protocol_version', true)", null);
             connectionTls = string(master, "SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()", null);
-            checkTlsSettings(forceSsl, minProtocol, connectionTls, failures);
+            checkTlsSettings(minProtocol, connectionTls, failures);
+            // rds.force_ssl is not readable on Aurora, so check its effect: a client without TLS is refused.
+            TlsProtocolProbe.Outcome noTls = probe.plaintext(
+                    masterCredentials.host(), masterCredentials.port(), masterCredentials.database());
+            plaintext = noTls.result().name();
+            if (noTls.result() != TlsProtocolProbe.Result.REFUSED) {
+                failures.add("a client without TLS was not refused: " + noTls);
+            }
             TlsProtocolProbe.Outcome old = probe.probe(masterCredentials.host(), masterCredentials.port(), "TLSv1.2");
             TlsProtocolProbe.Outcome current = probe.probe(masterCredentials.host(), masterCredentials.port(), TLS_1_3);
             tls12 = old.result().name();
@@ -117,7 +123,7 @@ public final class BootstrapVerifier {
             }
         }
 
-        Report report = new Report(postgis, schemaOwner, state, objects, forceSsl, minProtocol, connectionTls,
+        Report report = new Report(postgis, schemaOwner, state, objects, plaintext, minProtocol, connectionTls,
                 tls12, tls13, List.copyOf(failures));
         if (!failures.isEmpty()) {
             throw new VerificationException(report);
@@ -125,11 +131,7 @@ public final class BootstrapVerifier {
         return report;
     }
 
-    private static void checkTlsSettings(String forceSsl, String minProtocol, String connectionTls,
-            List<String> failures) {
-        if (!"1".equals(forceSsl) && !"on".equals(forceSsl)) {
-            failures.add("rds.force_ssl is " + forceSsl + ", expected 1 (on)");
-        }
+    private static void checkTlsSettings(String minProtocol, String connectionTls, List<String> failures) {
         if (!TLS_1_3.equals(minProtocol)) {
             failures.add("ssl_min_protocol_version is " + minProtocol + ", expected " + TLS_1_3);
         }

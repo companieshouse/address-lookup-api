@@ -158,9 +158,11 @@ the CSV-backed database, explicitly enable fallback and provide `OS_API_KEY`
 in the environment:
 
 ```bash
-OS_PLACES_FALLBACK_ENABLED=true mvn -pl address-lookup-api spring-boot:run \
-  -Dspring-boot.run.profiles=local
+make api-restart OS_PLACES_FALLBACK_ENABLED=true
 ```
+
+For initial startup of PostGIS and the API together, use
+`make start OS_PLACES_FALLBACK_ENABLED=true`.
 
 Database results always take precedence and are never supplemented or
 overwritten by OS results. Only an empty successful database lookup invokes
@@ -178,19 +180,19 @@ return a sanitized 502 rather than a misleading successful empty response.
 Requests use HTTPS with no redirects, a 3-second connect timeout and a
 5-second per-page read timeout; responses above 10,000 entries are rejected.
 
-The JVM must trust the OS HTTPS certificate chain. If macOS Java reports
-PKIX errors while curl works, use the trusted system keychain for the API
-process, without disabling TLS verification:
+The managed lifecycle script already builds the local-profile JAR and
+checks readiness. On macOS it uses the trusted system keychain for the API
+when fallback is enabled, unless `JAVA_TOOL_OPTIONS` or `JDK_JAVA_OPTIONS`
+already configures a Java trust store. It never disables TLS verification.
+Other platforms keep their normal approved Java trust store.
 
 ```bash
-OS_PLACES_FALLBACK_ENABLED=true mvn -pl address-lookup-api spring-boot:run \
-  -Dspring-boot.run.profiles=local \
-  -Dspring-boot.run.jvmArguments="-Djavax.net.ssl.trustStoreType=KeychainStore -Djavax.net.ssl.trustStore=NONE"
+make db-reset CONFIRM=address_lookup OS_PLACES_FALLBACK_ENABLED=true
 ```
 
-Those trust-store options are macOS-specific. Other platforms should use
-their normal approved Java trust store. API fallback is separate from the
-seed generation commands and never resets or modifies the database.
+Use that destructive reset only when intentionally dropping and reseeding
+the local database. A normal API restart is sufficient to enable fallback
+and apply updated local repeatables. Fallback itself never modifies the DB.
 
 ## Sample HTTP requests
 

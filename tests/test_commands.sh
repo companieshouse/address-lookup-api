@@ -45,9 +45,15 @@ case "$tool" in
         touch address-lookup-api/target/address-lookup-api-test.jar
         ;;
     java)
+        printf '%s\n' "$*" >"$CALL_LOG.java-args"
+        printf 'fallback=%s\n' "${OS_PLACES_FALLBACK_ENABLED:-false}" >"$CALL_LOG.java-env"
+        if [[ "${OS_API_KEY:-}" == fixture-os-key ]]; then
+            printf 'fixture-key-present\n' >>"$CALL_LOG.java-env"
+        fi
         trap 'exit 0' TERM
         while :; do sleep 0.1; done
         ;;
+    uname) printf '%s\n' "${MOCK_OS:-Linux}" ;;
     lsof)
         [[ "${OCCUPIED:-0}" == 0 ]] || { printf '12345\n'; exit 0; }
         exit 1
@@ -84,7 +90,7 @@ case "$tool" in
 esac
 STUB
 chmod +x "$temp/bin/tool"
-for tool in mvn java lsof curl docker git; do ln -s tool "$temp/bin/$tool"; done
+for tool in mvn java lsof curl docker git uname; do ln -s tool "$temp/bin/$tool"; done
 
 pass=0
 success() {
@@ -194,4 +200,28 @@ success env SONAR_HOST_URL=https://sonar.override.invalid SONAR_PROJECT_KEY=othe
     make --no-print-directory -C "$temp" sonar-report PR=84
 check grep -q 'https://sonar.override.invalid/api/measures/component' "$CALL_LOG"
 check grep -q 'component=other-project' "$CALL_LOG"
+success env MOCK_OS=Darwin OS_API_KEY=fixture-os-key JAVA_TOOL_OPTIONS= JDK_JAVA_OPTIONS= \
+    make --no-print-directory -C "$temp" api-start OS_PLACES_FALLBACK_ENABLED=true
+check grep -Fxq 'fallback=true' "$CALL_LOG.java-env"
+check grep -Fxq 'fixture-key-present' "$CALL_LOG.java-env"
+check grep -q -- '-Djavax.net.ssl.trustStoreType=KeychainStore -Djavax.net.ssl.trustStore=NONE -jar' "$CALL_LOG.java-args"
+check test "$(grep -c fixture-os-key "$CALL_LOG" || true)" == 0
+success local_command api-stop
+success env MOCK_OS=Darwin OS_API_KEY= JAVA_TOOL_OPTIONS= JDK_JAVA_OPTIONS= \
+    make --no-print-directory -C "$temp" api-start OS_PLACES_FALLBACK_ENABLED=false
+check grep -q -- '^-jar ' "$CALL_LOG.java-args"
+success local_command api-stop
+success env MOCK_OS=Linux OS_API_KEY=fixture-os-key JAVA_TOOL_OPTIONS= JDK_JAVA_OPTIONS= \
+    make --no-print-directory -C "$temp" api-start OS_PLACES_FALLBACK_ENABLED=true
+check grep -q -- '^-jar ' "$CALL_LOG.java-args"
+success local_command api-stop
+success env MOCK_OS=Darwin OS_API_KEY=fixture-os-key \
+    JAVA_TOOL_OPTIONS=-Djavax.net.ssl.trustStore=/fixture/trust JDK_JAVA_OPTIONS= \
+    make --no-print-directory -C "$temp" api-start OS_PLACES_FALLBACK_ENABLED=true
+check grep -q -- '^-jar ' "$CALL_LOG.java-args"
+success local_command api-stop
+success env MOCK_OS=Darwin OS_API_KEY=fixture-os-key JAVA_TOOL_OPTIONS= JDK_JAVA_OPTIONS= \
+    make --no-print-directory -C "$temp" db-reset CONFIRM=address_lookup OS_PLACES_FALLBACK_ENABLED=true
+check grep -q -- '-Djavax.net.ssl.trustStoreType=KeychainStore -Djavax.net.ssl.trustStore=NONE -jar' "$CALL_LOG.java-args"
+success local_command api-stop
 printf 'PASS: %s local lifecycle and Sonar command checks\n' "$pass"

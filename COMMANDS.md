@@ -216,12 +216,9 @@ readiness, excluding build time. An occupied port is an error, not permission
 to stop its owner. A healthy managed `api-start` is idempotent. To change
 ports, stop the managed API first or use `api-restart`.
 
-Make's lifecycle helper builds through the automatic JDK selector:
-
-```bash
-MAKE_JACOCO_AUTO=true bash scripts/maven.sh -pl address-lookup-api -am package -DskipTests=true \
-  -Dskip.unit.tests=true -Dskip.integration.tests=true
-```
+The lifecycle targets build the API and its required modules through the
+automatic JDK selector, skipping tests during startup. Use `make test-unit`
+or `make test-integration` separately when test execution is wanted.
 
 It expects exactly one matching API JAR under `address-lookup-api/target/`.
 Clean stale outputs if there are multiple. It runs that JAR with the `local`
@@ -259,9 +256,27 @@ running for diagnosis.
 With `OS_API_KEY` set securely in the environment, enable runtime fallback:
 
 ```bash
-OS_PLACES_FALLBACK_ENABLED=true mvn -pl address-lookup-api spring-boot:run \
-  -Dspring-boot.run.profiles=local
+make api-restart OS_PLACES_FALLBACK_ENABLED=true
 ```
+
+For initial startup of both PostGIS and the API, use
+`make start OS_PLACES_FALLBACK_ENABLED=true` instead.
+
+The existing lifecycle script builds and launches the local-profile JAR,
+then checks readiness. On macOS, this path automatically uses the trusted
+system keychain for OS HTTPS unless `JAVA_TOOL_OPTIONS` or `JDK_JAVA_OPTIONS`
+already specifies a Java trust store. No Maven or JVM command is needed.
+Other platforms keep their normal Java trust configuration.
+
+To deliberately reset and reseed the local Compose database as well:
+
+```bash
+make db-reset CONFIRM=address_lookup OS_PLACES_FALLBACK_ENABLED=true
+```
+
+This reuses the same managed startup path after the confirmed destructive
+reset. A normal `api-restart` applies changed repeatable seeds without
+dropping the database. Do not reset merely to enable fallback.
 
 This is separate from `add-postcode` and `refresh-seed-data`: no API data
 is written into FULL CSV seed tables. A database hit is returned unchanged;
@@ -270,8 +285,8 @@ local structured/legacy JSON formats are preserved, not replaced with the
 OS response envelope. Fallback is disabled by default. Upstream failures
 produce a sanitized 502, not an empty success.
 
-See [README.md](README.md#optional-os-places-fallback) for limits and the
-macOS trusted-keychain JVM options when Java reports a PKIX trust error.
+See [README.md](README.md#optional-os-places-fallback) for upstream limits.
+Disable fallback with `make api-restart OS_PLACES_FALLBACK_ENABLED=false`.
 
 ### Execute SQL
 
@@ -389,9 +404,8 @@ Run `bash tests/test_spotless.sh` manually for isolated, Maven-stub-based
 helper regressions. This suite is not connected to `make test-commands` or
 the pipeline, needs no Maven downloads, and does not format project sources.
 
-Direct Maven equivalents from the root are `mvn -N spotless:apply` and
-`mvn -N spotless:check`. The latter uses Maven's usual failure status and
-truncated diagnostics, not the helper's complete path list or 255 contract.
+Use `make tidy` and `make spotless-check`; the existing wrapper owns the
+Maven invocation and complete diagnostics described above.
 
 ### Editor integration
 
@@ -591,27 +605,10 @@ passthrough: `make test-unit test=SomeTest` does not select a test.
 `make -n package` is not fully side-effect-free: its `$(shell mktemp ...)`
 can execute during recipe expansion.
 
-For targeted tests/builds on Java 21, direct Maven needs no JaCoCo flags.
-These commands bypass Make and do not automatically switch JaCoCo on Java 25:
-
-```bash
-mvn -pl address-lookup-api -am package \
-  -Dskip.unit.tests=true -Dskip.integration.tests=true
-mvn -pl address-lookup-api -Dtest=AddressLookupControllerTest test
-mvn -pl address-lookup-api -am -Dit.test=AddressesControllerIT \
-  -Dskip.unit.tests=true test-compile failsafe:integration-test failsafe:verify
-```
-
-For the same targeted operations on Java 25, use Make's selector explicitly
-instead of raw Maven, for example:
-
-```bash
-MAKE_JACOCO_AUTO=true bash scripts/maven.sh \
-  -pl address-lookup-api -Dtest=AddressLookupControllerTest test
-```
-
-For normal developer workflows, prefer `make test-unit`, `make coverage`,
-`make test-flyway`, and the lifecycle targets; they enable selection themselves.
+Use `make build`, `make test-unit`, `make test-integration`, `make coverage`,
+`make test-flyway`, and the lifecycle targets for supported operations.
+The Makefile and its wrappers own the Maven arguments and newer-JDK JaCoCo
+selection; users do not need to assemble a separate Maven command.
 
 The parent POM wires `skip.unit.tests` to Surefire; the API wires
 `skip.integration.tests` to Failsafe. No `help`, `run`, or `setup-db` target

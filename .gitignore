@@ -21,3 +21,6 @@ http-client.private.env.json
 # Local process state, logs and analysis results
 .local-run/
 .scannerwork/
+
+# IntelliJ HTTP Client download output
+/downloads/

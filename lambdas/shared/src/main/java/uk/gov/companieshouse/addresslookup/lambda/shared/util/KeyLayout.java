@@ -13,7 +13,7 @@ public class KeyLayout {
   private static final Pattern OBJECT =
       Pattern.compile("^(zips|csv)/(\\w+-\\w+)/([a-z0-9_]+)\\.(zip|csv)$");
   private static final Pattern SCANNED_OBJECT =
-      Pattern.compile("^Scanned/(" + UUID + ")/([a-z0-9_]+)\\.(zip|receipt\\.json)$");
+      Pattern.compile("^Scanned/(" + UUID + ")/([a-z0-9_]+)\\.(zip|csv|receipt\\.json)$");
   private static final Pattern MANIFEST =
       Pattern.compile("^acquisitions/(\\d{4}-\\d{2}-\\d{2})/(" + UUID + ")\\.json$");
 
@@ -57,10 +57,13 @@ public class KeyLayout {
     }
     Matcher scanned = SCANNED_OBJECT.matcher(key);
     if (scanned.matches()) {
-      return new ObjectKey(
-          scanned.group(1),
-          Dataset.named(scanned.group(2)),
-          "zip".equals(scanned.group(3)) ? FileType.ZIP : FileType.RECEIPT);
+      FileType scannedType =
+          switch (scanned.group(3)) {
+            case "zip" -> FileType.ZIP;
+            case "csv" -> FileType.CSV;
+            default -> FileType.RECEIPT;
+          };
+      return new ObjectKey(scanned.group(1), Dataset.named(scanned.group(2)), scannedType);
     }
     Matcher m = OBJECT.matcher(key);
     if (!m.matches()) throw new IllegalArgumentException("Invalid object key");

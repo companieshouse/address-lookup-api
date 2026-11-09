@@ -56,10 +56,10 @@ class DatabaseBootstrapIT {
             .baselineOnMigrate(false)
             .createSchemas(false)
             .load();
-    assertEquals(4, flyway.migrate().migrationsExecuted);
+    assertEquals(6, flyway.migrate().migrationsExecuted);
     flyway.validate();
     assertEquals(
-        List.of("2026.001", "2026.002", "2026.003", "2026.004"),
+        List.of("2026.001", "2026.002", "2026.003", "2026.004", "2026.005", "2026.006"),
         List.of(flyway.info().applied()).stream()
             .map(migration -> migration.getVersion().getVersion())
             .toList());

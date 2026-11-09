@@ -2,6 +2,7 @@ package uk.gov.companieshouse.addresslookup;
 
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static uk.gov.companieshouse.logging.util.LogContextProperties.REQUEST_ID;
@@ -19,6 +20,20 @@ import org.junit.jupiter.params.provider.ValueSource;
  */
 
 class AddressesControllerIT extends AddressTestBaseIT {
+
+    @Test
+    void shouldReturnAllRealCardiffSourceAddresses() throws Exception {
+        this.mockMvc.perform(get("/address-lookup-api/addresses")
+                        .queryParam("postcode", "CF101FG")
+                        .header(REQUEST_ID.value(), "request_id"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalResults").value(20))
+                .andExpect(jsonPath("$.addresses[*].udprn").value(hasItem(4181477)))
+                .andExpect(jsonPath("$.addresses[?(@.udprn == 4181477)].organisationName")
+                        .value(hasItem("GREEK VILLAGE")))
+                .andExpect(jsonPath("$.addresses[?(@.udprn == 4181477)].buildingNumber")
+                        .value(hasItem(21)));
+    }
 
     // ========================
     // Happy Path Tests
@@ -59,7 +74,8 @@ class AddressesControllerIT extends AddressTestBaseIT {
         "ZZ1 1ZZ",
         "INVALID",
         "A VERY LONG POSTCODE",
-        "INVALID@POSTCODE"
+        "INVALID@POSTCODE",
+        "CF101PX"
     })
     void shouldReturnEmptyResultsForUnknownPostcode(String postcode) throws Exception {
         this.mockMvc.perform(get("/address-lookup-api/addresses")

@@ -36,17 +36,20 @@ class AddressLookupServiceTest {
     @Mock
     private RoyalMailAddressMapper royalMailAddressMapper;
 
+    @Mock
+    private OsPlacesClient osPlacesClient;
+
     @InjectMocks
     private AddressLookupService service;
 
     @Test
-    void lookupByPostcodeMapsTheRepositoryResults() {
+    void lookupByPostcodePreservesEmptyResultsWhenFallbackIsUnavailable() {
         when(repository.findByNormalizedPostcode("AB1 2CD")).thenReturn(List.of());
-        when(royalMailAddressMapper.toDtos(List.of())).thenReturn(List.of());
+        when(osPlacesClient.lookup("AB1 2CD")).thenReturn(List.of());
 
         assertEquals(List.of(), service.lookupByPostcode("AB1 2CD"));
 
-        verify(royalMailAddressMapper).toDtos(List.of());
+        verify(osPlacesClient).lookup("AB1 2CD");
     }
 
     @Test

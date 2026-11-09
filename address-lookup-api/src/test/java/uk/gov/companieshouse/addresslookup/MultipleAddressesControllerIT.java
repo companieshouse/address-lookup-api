@@ -2,6 +2,7 @@ package uk.gov.companieshouse.addresslookup;
 
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static uk.gov.companieshouse.logging.util.LogContextProperties.REQUEST_ID;
@@ -19,6 +20,18 @@ import org.junit.jupiter.params.provider.ValueSource;
  */
 
 class MultipleAddressesControllerIT extends AddressTestBaseIT {
+
+    @Test
+    void shouldReturnAllRealCardiffSourceAddresses() throws Exception {
+        this.mockMvc.perform(get("/address-lookup-api/multiple-addresses")
+                        .queryParam("postcode", "CF101FG")
+                        .header(REQUEST_ID.value(), "request_id"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(20))
+                .andExpect(jsonPath("$[?(@.premise == '21')].addressLine1")
+                        .value(hasItem("CAROLINE STREET")))
+                .andExpect(jsonPath("$[?(@.premise == '21')].country").value(hasItem("GB-WLS")));
+    }
 
     // ========================
     // Happy Path Tests
@@ -92,7 +105,8 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
         "ZZ1 1ZZ",
         "INVALID",
         "INVALID@POSTCODE",
-        "AB12 4NY"
+        "AB12 4NY",
+        "CF101PX"
     })
     void shouldReturnEmptyArrayForUnknownPostcode(String postcode) throws Exception {
         this.mockMvc.perform(get("/address-lookup-api/multiple-addresses")

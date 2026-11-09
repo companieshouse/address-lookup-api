@@ -111,7 +111,13 @@ api_start() {
     [[ ${#jars[@]} == 1 ]] ||
         { printf 'Expected exactly one API JAR; clean stale build outputs first.\n' >&2; return 1; }
     port_free
-    nohup java -jar "${jars[0]}" --spring.profiles.active=local \
+    local java_options=()
+    local configured_java_options="${JAVA_TOOL_OPTIONS:-} ${JDK_JAVA_OPTIONS:-}"
+    if [[ "${OS_PLACES_FALLBACK_ENABLED:-false}" == true && "$(uname -s)" == Darwin &&
+        "$configured_java_options" != *-Djavax.net.ssl.trustStore* ]]; then
+        java_options=(-Djavax.net.ssl.trustStoreType=KeychainStore -Djavax.net.ssl.trustStore=NONE)
+    fi
+    nohup java "${java_options[@]+"${java_options[@]}"}" -jar "${jars[0]}" --spring.profiles.active=local \
         "--server.port=$port" --spring.docker.compose.enabled=false \
         --spring.datasource.url=jdbc:postgresql://localhost:5433/address_lookup \
         --spring.flyway.enabled=true \

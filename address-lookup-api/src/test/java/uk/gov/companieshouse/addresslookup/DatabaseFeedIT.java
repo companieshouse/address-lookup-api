@@ -190,7 +190,7 @@ class DatabaseFeedIT {
                     "JE27NA",
                     "CF143AT", "CF146RP", "CF239XN", "CF243DJ",
                     "CF102BY", "CF245HB", "CF101FG", "CF102EF",
-                    "CF101GA", "CF102HQ", "CF101PX", "CF102DP",
+                    "CF101GA", "CF102HQ", "CF102DP",
                     "CF118TA", "CF145XW", "KT138GL"),
             BorderPostcodeFixtures.compactPostcodes().stream())
             .collect(Collectors.toUnmodifiableSet());
@@ -232,6 +232,15 @@ class DatabaseFeedIT {
         for (String table : TABLES) {
             localRowCounts.put(table, rowCount(table, "local"));
             addNonLocalSentinel(table);
+        }
+        try (Connection connection = connection(); Statement statement = connection.createStatement()) {
+            assertEquals(1, statement.executeUpdate(
+                    "INSERT INTO os_data.add_gb_royalmailaddress_v2 "
+                            + "SELECT (jsonb_populate_record(NULL::os_data.add_gb_royalmailaddress_v2, "
+                            + "to_jsonb(t) || '{\"udprn\":2000000011,\"postcode\":\"CF10 1PX\","
+                            + "\"buildingname\":\"SYNTHETIC TEST ADDRESS\","
+                            + "\"release_id\":\"local-synthetic-cardiff\"}'::jsonb)).* "
+                            + "FROM os_data.add_gb_royalmailaddress_v2 t WHERE release_id = 'local' LIMIT 1"));
         }
 
         copySeedsWithChangedChecksums(databaseRoot.resolve("local"), tempSeeds);
@@ -455,8 +464,41 @@ class DatabaseFeedIT {
     }
 
     private static void assertLocalFixtures() throws SQLException {
-        assertEquals(15, rowCount(TABLES.get(0), "local-synthetic-cardiff"));
+        assertEquals(266, rowCount(TABLES.get(0), "local-synthetic-cardiff"));
         try (Connection connection = connection()) {
+            Map<String, Integer> sourceCounts = Map.ofEntries(
+                    Map.entry("CF101FG", 20), Map.entry("CF101GA", 21),
+                    Map.entry("CF102BY", 47), Map.entry("CF102DP", 32),
+                    Map.entry("CF102EF", 20), Map.entry("CF102HQ", 18),
+                    Map.entry("CF118TA", 1), Map.entry("CF143AT", 7),
+                    Map.entry("CF145XW", 1), Map.entry("CF146RP", 34),
+                    Map.entry("CF239XN", 1), Map.entry("CF243DJ", 4),
+                    Map.entry("CF245HB", 49), Map.entry("KT138GL", 11),
+                    Map.entry("CF101PX", 0));
+            for (var entry : sourceCounts.entrySet()) {
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "SELECT count(*) FROM address_lookup.address_lookup "
+                                + "WHERE upper(replace(postcode, ' ', '')) = ?")) {
+                    statement.setString(1, entry.getKey());
+                    try (ResultSet result = statement.executeQuery()) {
+                        assertTrue(result.next());
+                        assertEquals(entry.getValue().longValue(), result.getLong(1), entry.getKey());
+                    }
+                }
+            }
+            try (Statement statement = connection.createStatement();
+                    ResultSet row = statement.executeQuery(
+                            "SELECT organisationname, buildingnumber, thoroughfare, uprn, "
+                                    + "ST_AsText(geometry), versiondate FROM os_data.add_gb_royalmailaddress_v2 "
+                                    + "WHERE udprn = 4181477")) {
+                assertTrue(row.next());
+                assertEquals("GREEK VILLAGE", row.getString(1));
+                assertEquals(21, row.getInt(2));
+                assertEquals("CAROLINE STREET", row.getString(3));
+                assertEquals(100100890065L, row.getLong(4));
+                assertEquals("POINT(318421 176136)", row.getString(5));
+                assertEquals("2026-09-29", row.getString(6));
+            }
             for (String postcode : HAPPY_PATH_POSTCODES) {
                 try (PreparedStatement statement = connection.prepareStatement(
                         "SELECT count(*) FROM address_lookup.address_lookup "
@@ -681,7 +723,7 @@ class DatabaseFeedIT {
             List<Path> seeds = files
                     .filter(path -> path.getFileName().toString().endsWith(".sql"))
                     .toList();
-            assertTrue(seeds.size() >= 3, "Expected dataset seeds and synthetic fixtures");
+            assertTrue(seeds.size() >= 3, "Expected dataset seeds and source postcode fixtures");
             for (Path seed : seeds) {
                 Path copy = target.resolve(seed.getFileName());
                 Files.copy(seed, copy);

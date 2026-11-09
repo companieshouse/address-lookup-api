@@ -45,13 +45,28 @@ scan or workflow is added.
 
 ## Running locally
 
-Local seeds include one synthetic Cardiff address for each of the 14 supplied
-test postcodes, plus `KT13 8GL` in Weybridge, in
-`database/local/R__seed_synthetic_cardiff_addresses.sql`.
-These are labelled test fixtures, not real OS addresses; their coordinates are
-postcode centroids from Postcodes.io. `CF10 1PX` uses historical metadata
-(terminated January 2023). The source-accurate GB and ISL seeds remain unchanged,
-and synthetic fixtures are excluded from the production migration package.
+Local postcode seeds contain all 266 real OS records for 13 Cardiff postcodes
+and `KT13 8GL`, from v2 package `24833`, FULL version `150450`.
+`CF10 1PX` is absent from that source and is tested as a zero-result case.
+The legacy filename `database/local/R__seed_synthetic_cardiff_addresses.sql`
+and its release marker are retained so Flyway replaces previously applied
+synthetic rows; its contents now preserve actual source fields, IDs and geometry.
+Simon's existing corrected GB/ISL seeds remain unchanged. All local fixtures
+remain excluded from the production migration package.
+
+```bash
+make download-os-addresses OS_FULL_VERSION=150450
+make add-postcode POSTCODE=KT138GL
+make refresh-seed-data OS_SOURCE_DIR=~/os-data/24833/150450
+```
+
+Downloads require `OS_API_KEY` in the environment. The helper selects FULL,
+not daily COU, checks archive MD5/length and primary CSV CRC, and caches
+sources outside the repository. Generation requires Java 21+, Maven, curl
+and jq, uses a CSV-safe Java helper behind Bash, and never invents missing
+addresses. Source CSVs are large (GB about 13.3 GB); allow temporary disk space.
+See [COMMANDS.md](COMMANDS.md#download-and-seed-real-os-address-records) for
+cache/source inputs, refresh behavior, locking and safe local application.
 
 The API uses Flyway migrations from `classpath:db/migrations` when
 `FLYWAY_ENABLED=true`; the base configuration defaults to disabled when the
@@ -61,9 +76,8 @@ unset does not create `flyway_schema_history`; environments that use a separate
 migration runner should leave the API flag unset. The API package includes the
 SQL feed from `database/` without copying or modifying those files.
 
-The local GB Royal Mail seed includes 17 synthetic postcode fixtures for
-regional lookup integration tests. Their postcode and country values are
-owner-approved; all other address attributes are synthetic local test data.
+The existing GB/ISL regional lookup fixtures use source-accurate OS records,
+retaining all addresses for their selected postcodes.
 
 From `CODE/`, start PostGIS and then the API with:
 
@@ -137,6 +151,49 @@ provide a PostgreSQL datasource. Credentials must allow Flyway to apply
 pending migrations wherever API startup is configured to run them. Local seed
 files are not part of the production package.
 
+### Optional OS Places fallback
+
+The API normally remains database-only. To look up postcodes missing from
+the CSV-backed database, explicitly enable fallback and provide `OS_API_KEY`
+in the environment:
+
+```bash
+make api-restart OS_PLACES_FALLBACK_ENABLED=true
+```
+
+For initial startup of PostGIS and the API together, use
+`make start OS_PLACES_FALLBACK_ENABLED=true`.
+
+Database results always take precedence and are never supplemented or
+overwritten by OS results. Only an empty successful database lookup invokes
+Places, using English `DPA` delivery addresses, not `LPI` property records.
+Every page is read and duplicate UDPRNs are deduplicated. Existing
+`/addresses`, `/multiple-addresses` and `/postcode` formats remain unchanged;
+raw OS payloads are never returned or saved as FULL CSV rows.
+`CF14 3AT` retains its seven CSV records. `CF10 1PX` currently has no English
+DPA result either, so it remains empty (404 for `/postcode`).
+
+Fallback defaults to disabled in every profile, including `local`. Enabling
+it adds a live OS dependency for missing postcodes and requires valid
+credentials at startup. Upstream errors, incomplete pages and invalid data
+return a sanitized 502 rather than a misleading successful empty response.
+Requests use HTTPS with no redirects, a 3-second connect timeout and a
+5-second per-page read timeout; responses above 10,000 entries are rejected.
+
+The managed lifecycle script already builds the local-profile JAR and
+checks readiness. On macOS it uses the trusted system keychain for the API
+when fallback is enabled, unless `JAVA_TOOL_OPTIONS` or `JDK_JAVA_OPTIONS`
+already configures a Java trust store. It never disables TLS verification.
+Other platforms keep their normal approved Java trust store.
+
+```bash
+make db-reset CONFIRM=address_lookup OS_PLACES_FALLBACK_ENABLED=true
+```
+
+Use that destructive reset only when intentionally dropping and reseeding
+the local database. A normal API restart is sufficient to enable fallback
+and apply updated local repeatables. Fallback itself never modifies the DB.
+
 ## Sample HTTP requests
 
 `rest-api.http` holds sample requests for the API and the Ordnance Survey download API. See
@@ -155,6 +212,8 @@ files are not part of the production package.
 | SPRING_DATASOURCE_USERNAME | Username for the address lookup Postgres database.                    | postgres                              |
 | SPRING_DATASOURCE_PASSWORD | Password for the address lookup Postgres database.                    | postgres                              |
 | FLYWAY_ENABLED | Enables Flyway in the base profile; unset defaults to false. The local profile enables it explicitly. | false |
+| OS_PLACES_FALLBACK_ENABLED | Enables English DPA lookup only after an empty database lookup; defaults to false. | false |
+| OS_API_KEY | OS API credential, required when fallback is enabled; never commit or log it. | Provided securely in the environment |
 
 ## Building the docker image
 

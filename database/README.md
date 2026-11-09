@@ -42,10 +42,21 @@ does not create `flyway_schema_history`. The separate production migration
 runner is managed outside this feed and checkout. Do not treat the presence of
 SQL here as proof that an external database release was deployed.
 
-The two local repeatable seeds cover all ten current happy-path API postcode
+The two original local repeatable seeds cover the ten regional API postcode
 fixtures. The source-accurate seeds retain `country = 'Scotland'` for GB UDPRN
 19 and `country = 'Channel Islands'` for ISL UDPRN 10403188. These replace the
 earlier synthetic NULL-country examples; the schema still permits NULL countries.
+
+The additional legacy-named `R__seed_synthetic_cardiff_addresses.sql` now
+contains 266 real FULL v2 source records for 13 Cardiff postcodes and
+`KT13 8GL`. Its filename and release marker are deliberately retained for
+Flyway repeatable compatibility and cleanup of earlier synthetic rows.
+`CF10 1PX` is absent from the source and remains a zero-result case.
+Use `make download-os-addresses` and `make refresh-seed-data` for verified
+source-backed generation, or `make add-postcode` for a new selection.
+These commands only write local SQL; they do not reset or modify a database.
+See [COMMANDS.md](../COMMANDS.md#download-and-seed-real-os-address-records)
+for credentials, FULL pinning, offline CSV inputs and safe application.
 
 The `os_ingest.promote_full` procedure is not part of this initial feed phase.
 Ian Mclaughlin clarified on 2026-10-13 that it is intended to promote a FULL

@@ -254,6 +254,25 @@ It refuses an occupied configured API port after stopping its own API.
 not a machine-wide Docker shutdown. If API startup fails, Postgres remains
 running for diagnosis.
 
+### Optional direct OS lookup for missing database records
+
+With `OS_API_KEY` set securely in the environment, enable runtime fallback:
+
+```bash
+OS_PLACES_FALLBACK_ENABLED=true mvn -pl address-lookup-api spring-boot:run \
+  -Dspring-boot.run.profiles=local
+```
+
+This is separate from `add-postcode` and `refresh-seed-data`: no API data
+is written into FULL CSV seed tables. A database hit is returned unchanged;
+only an empty lookup queries English DPA records from OS Places. Existing
+local structured/legacy JSON formats are preserved, not replaced with the
+OS response envelope. Fallback is disabled by default. Upstream failures
+produce a sanitized 502, not an empty success.
+
+See [README.md](README.md#optional-os-places-fallback) for limits and the
+macOS trusted-keychain JVM options when Java reports a PKIX trust error.
+
 ### Execute SQL
 
 Start the local Compose database first, then use:

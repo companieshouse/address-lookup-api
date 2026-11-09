@@ -151,6 +151,47 @@ provide a PostgreSQL datasource. Credentials must allow Flyway to apply
 pending migrations wherever API startup is configured to run them. Local seed
 files are not part of the production package.
 
+### Optional OS Places fallback
+
+The API normally remains database-only. To look up postcodes missing from
+the CSV-backed database, explicitly enable fallback and provide `OS_API_KEY`
+in the environment:
+
+```bash
+OS_PLACES_FALLBACK_ENABLED=true mvn -pl address-lookup-api spring-boot:run \
+  -Dspring-boot.run.profiles=local
+```
+
+Database results always take precedence and are never supplemented or
+overwritten by OS results. Only an empty successful database lookup invokes
+Places, using English `DPA` delivery addresses, not `LPI` property records.
+Every page is read and duplicate UDPRNs are deduplicated. Existing
+`/addresses`, `/multiple-addresses` and `/postcode` formats remain unchanged;
+raw OS payloads are never returned or saved as FULL CSV rows.
+`CF14 3AT` retains its seven CSV records. `CF10 1PX` currently has no English
+DPA result either, so it remains empty (404 for `/postcode`).
+
+Fallback defaults to disabled in every profile, including `local`. Enabling
+it adds a live OS dependency for missing postcodes and requires valid
+credentials at startup. Upstream errors, incomplete pages and invalid data
+return a sanitized 502 rather than a misleading successful empty response.
+Requests use HTTPS with no redirects, a 3-second connect timeout and a
+5-second per-page read timeout; responses above 10,000 entries are rejected.
+
+The JVM must trust the OS HTTPS certificate chain. If macOS Java reports
+PKIX errors while curl works, use the trusted system keychain for the API
+process, without disabling TLS verification:
+
+```bash
+OS_PLACES_FALLBACK_ENABLED=true mvn -pl address-lookup-api spring-boot:run \
+  -Dspring-boot.run.profiles=local \
+  -Dspring-boot.run.jvmArguments="-Djavax.net.ssl.trustStoreType=KeychainStore -Djavax.net.ssl.trustStore=NONE"
+```
+
+Those trust-store options are macOS-specific. Other platforms should use
+their normal approved Java trust store. API fallback is separate from the
+seed generation commands and never resets or modifies the database.
+
 ## Sample HTTP requests
 
 `rest-api.http` holds sample requests for the API and the Ordnance Survey download API. See
@@ -169,6 +210,8 @@ files are not part of the production package.
 | SPRING_DATASOURCE_USERNAME | Username for the address lookup Postgres database.                    | postgres                              |
 | SPRING_DATASOURCE_PASSWORD | Password for the address lookup Postgres database.                    | postgres                              |
 | FLYWAY_ENABLED | Enables Flyway in the base profile; unset defaults to false. The local profile enables it explicitly. | false |
+| OS_PLACES_FALLBACK_ENABLED | Enables English DPA lookup only after an empty database lookup; defaults to false. | false |
+| OS_API_KEY | OS API credential, required when fallback is enabled; never commit or log it. | Provided securely in the environment |
 
 ## Building the docker image
 

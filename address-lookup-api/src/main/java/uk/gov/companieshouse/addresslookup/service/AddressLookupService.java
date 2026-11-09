@@ -12,33 +12,53 @@ import uk.gov.companieshouse.addresslookup.model.LegacyAddress;
 import uk.gov.companieshouse.addresslookup.model.RoyalMailAddressDto;
 import uk.gov.companieshouse.addresslookup.repository.RoyalMailAddressLookupRepository;
 
+/** Database-first lookup with opt-in OS fallback only after a successful empty result. */
 @Service
 public class AddressLookupService {
 
     private final RoyalMailAddressLookupRepository royalMailAddressLookupRepository;
     private final LegacyAddressMapper legacyAddressMapper;
     private final RoyalMailAddressMapper royalMailAddressMapper;
+    private final OsPlacesClient osPlacesClient;
 
     public AddressLookupService(RoyalMailAddressLookupRepository royalMailAddressLookupRepository,
             LegacyAddressMapper legacyAddressMapper,
-            RoyalMailAddressMapper royalMailAddressMapper) {
+            RoyalMailAddressMapper royalMailAddressMapper,
+            OsPlacesClient osPlacesClient) {
         this.royalMailAddressLookupRepository = royalMailAddressLookupRepository;
         this.legacyAddressMapper = legacyAddressMapper;
         this.royalMailAddressMapper = royalMailAddressMapper;
+        this.osPlacesClient = osPlacesClient;
     }
 
     public List<RoyalMailAddressDto> lookupByPostcode(String postcode) {
-        return royalMailAddressMapper.toDtos(findByPostcode(postcode));
+        var rows = findByPostcode(postcode);
+        return rows.isEmpty()
+                ? osPlacesClient.lookup(postcode).stream().map(OsPlacesClient.Address::address).toList()
+                : royalMailAddressMapper.toDtos(rows);
     }
 
     public List<LegacyAddress> lookupLegacyAddressesByPostcode(String postcode) {
-        return findByPostcode(postcode).stream()
+        var rows = findByPostcode(postcode);
+        if (rows.isEmpty()) {
+            return osPlacesClient.lookup(postcode).stream()
+                    .map(address -> legacyAddressMapper.toLegacyAddress(
+                            address.address(), address.country(), true))
+                    .toList();
+        }
+        return rows.stream()
                 .map(legacyAddressMapper::toLegacyAddress)
                 .toList();
     }
 
     public Optional<LegacyAddress> lookupLegacyAddressByPostcode(String postcode) {
-        return findByPostcode(postcode).stream()
+        var rows = findByPostcode(postcode);
+        if (rows.isEmpty()) {
+            return osPlacesClient.lookup(postcode).stream().findFirst()
+                    .map(address -> legacyAddressMapper.toLegacyAddress(
+                            address.address(), address.country(), false));
+        }
+        return rows.stream()
                 .findFirst()
                 .map(legacyAddressMapper::toLegacyAddressWithoutPremise);
     }

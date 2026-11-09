@@ -4,6 +4,7 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import uk.gov.companieshouse.addresslookup.entity.RoyalMailAddressLookup;
 import uk.gov.companieshouse.addresslookup.model.LegacyAddress;
+import uk.gov.companieshouse.addresslookup.model.RoyalMailAddressDto;
 
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -23,6 +24,16 @@ public interface LegacyAddressMapper {
     @Mapping(target = "addressLine2", expression = "java(join(address.getDoubleDependentLocality(), address.getDependentLocality()))")
     @Mapping(target = "country", expression = "java(toLegacyCountry(address.getCountry()))")
     LegacyAddress toLegacyAddressWithoutPremise(RoyalMailAddressLookup address);
+
+    /** Applies the same legacy component and country rules to an OS fallback DTO. */
+    default LegacyAddress toLegacyAddress(RoyalMailAddressDto address, String country, boolean includePremise) {
+        return new LegacyAddress(address.postcode(),
+                includePremise ? join(address.subBuildingName(), address.buildingName(),
+                        address.buildingNumber() == null ? null : address.buildingNumber().toString()) : null,
+                join(address.dependentThoroughfare(), address.thoroughfare()),
+                join(address.doubleDependentLocality(), address.dependentLocality()),
+                address.postTown(), toLegacyCountry(country));
+    }
 
     /**
      * Combines the sub-building name, building name and building number for the legacy premise field.

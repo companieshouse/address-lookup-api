@@ -10,7 +10,7 @@ cleanup() {
 trap cleanup EXIT
 mkdir -p "$work/scripts" "$work/database/local" "$work/bin"
 cp "$root/scripts/add-postcode.sh" "$work/scripts/"
-seed="$work/database/local/R__seed_synthetic_cardiff_addresses.sql"
+seed="$work/database/local/R__seed_add_gb_royalmailaddress.sql"
 cat > "$work/bin/curl" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail

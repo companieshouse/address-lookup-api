@@ -92,7 +92,8 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
         "ZZ1 1ZZ",
         "INVALID",
         "INVALID@POSTCODE",
-        "AB12 4NY"
+        "AB12 4NY",
+        "CF101PX"
     })
     void shouldReturnEmptyArrayForUnknownPostcode(String postcode) throws Exception {
         this.mockMvc.perform(get("/address-lookup-api/multiple-addresses")

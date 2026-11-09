@@ -59,7 +59,8 @@ class AddressesControllerIT extends AddressTestBaseIT {
         "ZZ1 1ZZ",
         "INVALID",
         "A VERY LONG POSTCODE",
-        "INVALID@POSTCODE"
+        "INVALID@POSTCODE",
+        "CF101PX"
     })
     void shouldReturnEmptyResultsForUnknownPostcode(String postcode) throws Exception {
         this.mockMvc.perform(get("/address-lookup-api/addresses")

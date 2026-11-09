@@ -18,11 +18,56 @@ GET https://postcode.cidev.aws.chdev.org/multiple-addresses/AB124NY
 GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=LU49PJ
 
 # Ordnance Survey API
+# Select the "dev" environment. os_api_key is read from http-client.private.env.json (gitignored).
+# dataPackageId and versionId are set in http-client.env.json.
 
 ###
 # @name [OS] query the detailed dataPackageId
-GET https://api.os.uk/downloads/v1/dataPackages/24833/versions/150450
+# Stores the download URLs and file names for the download requests below.
+GET https://api.os.uk/downloads/v1/dataPackages/{{dataPackageId}}/versions/{{versionId}}
 key: {{os_api_key}}
+Accept: application/json
+
+> {%
+    const downloads = response.body.downloads || [];
+    client.global.set("downloadCount", String(downloads.length));
+    downloads.forEach((d, i) => {
+        client.global.set("url_" + i, d.url);
+        client.global.set("fileName_" + i, d.fileName);
+        client.log(`[${i}] ${d.fileName} (${d.size} bytes)`);
+    });
+    client.test("has downloads", () => client.assert(downloads.length > 0, "No downloads returned"));
+%}
+
+###
+# @name [OS] download file 0
+# url_N and fileName_N are set by the response script of "query the detailed dataPackageId", so run that first.
+# If it logs more files, copy a download request and bump the index.
+GET {{url_0}}
+key: {{os_api_key}}
+
+>> downloads/{{dataPackageId}}/{{versionId}}/{{fileName_0}}
+
+###
+# @name [OS] download file 1
+GET {{url_1}}
+key: {{os_api_key}}
+
+>> downloads/{{dataPackageId}}/{{versionId}}/{{fileName_1}}
+
+###
+# @name [OS] download file 2
+GET {{url_2}}
+key: {{os_api_key}}
+
+>> downloads/{{dataPackageId}}/{{versionId}}/{{fileName_2}}
+
+###
+# @name [OS] download file 3
+GET {{url_3}}
+key: {{os_api_key}}
+
+>> downloads/{{dataPackageId}}/{{versionId}}/{{fileName_3}}
 
 ###
 # @name [OS] show all data package available
@@ -31,5 +76,5 @@ key: {{os_api_key}}
 
 ###
 # @name [OS] query the new data package with using dataPackageId
-GET https://api.os.uk/downloads/v1/dataPackages/24833
+GET https://api.os.uk/downloads/v1/dataPackages/{{dataPackageId}}
 key: {{os_api_key}}

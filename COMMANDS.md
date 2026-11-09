@@ -20,13 +20,15 @@ current Makefile and its maintained scripts.
 | Stop everything local | `make stop` | Stops this helper's API, then this repository's Compose Postgres. Does not stop shared ingress, other containers, or processes started by other runners. |
 | Reset and reseed DB | `make db-reset CONFIRM=address_lookup` | Stops the managed API, verifies its port is free, starts Postgres, drops/recreates only the local Compose `address_lookup` DB, starts the API with Flyway/local fixtures, and verifies the lookup relation contains rows. Leaves both services running. |
 | Unit tests | `make test-unit` | Maven reactor Java unit tests with integration tests skipped and automatic Make JDK selection. Does not require local-service tools such as `jq`. |
-| Command-helper regressions | `make test-commands` | Runs lifecycle/Sonar, smoke, postcode lookup/generation and Maven-selector helper checks using stubs; requires `jq` and `ps`. |
+| Command-helper regressions | `make test-commands` | Runs lifecycle/Sonar, smoke, postcode and Maven-selector checks. Source seed tests also run the small Java CSV tool's tests; requires Java 21+, Maven, `jq` and `ps`, but no live OS access. |
 | Format Java | `make tidy FILE=path/File.java` | Formats one file in place. Use `FILE=.` for all Java files, or pipe Java source to `make tidy` for formatted stdout. |
 | Check Java formatting | `make spotless-check` | Read-only scan of all Java files; prints only unformatted paths and fails, or exits zero silently when clean. |
 | Smoke test | `make test-smoke` | Creates a temporary database, starts a separate API on an OS-assigned port, checks health and applied migrations, then stops its API and drops only its temporary database. |
 | Test selected postcodes | `make test-postcode POSTCODE=CF143AT` | Validates selected postcodes, starts the DB, rebuilds/restarts the managed API to apply local seeds, then prints and executes each curl command. |
 | Test database postcodes | `make test-postcodes` | Starts the DB, rebuilds/restarts the managed API, reads distinct postcodes from the lookup view, then prints and executes each curl command. Stops at the first failure. |
-| Add local postcode fixtures | `make add-postcode POSTCODE=KT138GL` | Fetches public postcode metadata and creates a new local repeatable SQL file containing labelled synthetic addresses. Accepts comma-separated or JSON selections; does not apply SQL. |
+| Download full OS address sources | `make download-os-addresses` | Uses environment `OS_API_KEY` to discover a compatible FULL version, verify both Royal Mail ZIPs and extract the primary CSVs into a private local cache. |
+| Add local postcode fixtures | `make add-postcode POSTCODE=KT138GL` | Extracts every real source address for new postcodes into a separate local repeatable SQL file; no invented IDs or fields. |
+| Refresh managed postcode fixtures | `make refresh-seed-data` | Regenerates managed postcode SQL from full OS sources, replacing earlier synthetic content. Does not apply SQL, reset the DB or rewrite the existing corrected GB/ISL seeds. |
 | Generate coverage | `make coverage` | Fresh Maven reactor `clean verify` under the `coverage` profile; integration tests skipped. Produces per-module HTML/XML reports without a percentage gate. |
 | Check coverage | `make coverage-check MIN_COVERAGE=0.80` | Fresh unit coverage run, enforcing at least 80% LINE coverage for each JaCoCo module bundle with execution data. |
 | Get SonarQube coverage | `make sonar-report` | Prints latest server-computed coverage measures as JSON to stdout; does not save files or run analysis. |
@@ -58,25 +60,56 @@ uses `mktemp`. `m2-check` requires Perl; `deps` requires Homebrew;
 
 ## Local API and database
 
-### Add synthetic local postcode fixtures
+### Download and seed real OS address records
 
 ```bash
+make download-os-addresses
 make add-postcode POSTCODE=KT138GL
 make add-postcode POSTCODES='["CF14 3AT", "KT13 8GL"]'
 make add-postcode POSTCODES=CF143AT,KT138GL
+make refresh-seed-data
 ```
 
-Requires Bash, curl, jq and internet access to Postcodes.io. This fetches postcode
-centroids and district/country metadata, not actual postal address records.
-It generates one labelled synthetic address with a negative test UDPRN and
-no UPRN per new postcode. District names are not authoritative postal towns.
-Terminated postcodes use historical metadata with a printed warning.
-Historical metadata without a district uses the explicit synthetic town
-`SYNTHETIC LOCALITY`, not an inferred real postal town; an unavailable country
-is left NULL. Invalid or out-of-range
-coordinates fail before file creation.
-Northern Ireland (`BT`) fixtures use the ISL table and longitude/latitude
-geometry with SRID 4258; GB fixtures use British National Grid SRID 27700.
+Requires Bash, Java 21+, Maven, curl and jq. Set `OS_API_KEY` securely in the
+environment, never as a Make argument or in tracked files. Downloads use the
+OS Downloads API, not Places search or Postcodes.io. Package `24833` is the
+default v2 package; `OS_PACKAGE_ID` can select another compatible package.
+The helper explicitly selects the newest `FULL` version, not `versions[0]`
+(which may be daily `COU`). Use `OS_FULL_VERSION=150450` to pin the checked-in
+fixture source. The root response is a package array; selected FULL version
+metadata contains the download links directly.
+
+The helper selects `add_gb_royalmailaddress.zip` and
+`add_isl_royalmailaddress.zip` by exact filename, verifies advertised length
+and MD5, and extracts only the exact primary CSV from each archive with CRC
+and size validation. HTTPS redirects are handled without forwarding the key
+to non-OS hosts. curl uses the system certificate store; TLS verification is
+never disabled. The API key is passed through stdin, not command arguments.
+
+Default cache: `${XDG_CACHE_HOME:-$HOME/.cache}/address-lookup-api/os`,
+under `<package>/<version>/`. Override the cache root with `OS_CACHE_DIR`.
+The FULL v2 GB archive is approximately 1.9 GB and its CSV approximately
+13.3 GB; ISL adds about 62 MB compressed and 460 MB extracted. Allow extra
+space for temporary extraction/download files. Do not commit full downloads.
+`source.json` records FULL identity and source checksums, without credentials.
+Cached ZIPs are verified and CSVs re-extracted on a download invocation.
+
+For offline generation from a previously verified download, pass the exact
+directory containing both CSVs and `source.json`:
+
+```bash
+make add-postcode POSTCODE=CF101FG OS_SOURCE_DIR=~/os-data/24833/150450
+make refresh-seed-data OS_SOURCE_DIR=~/os-data/24833/150450
+```
+
+Without `OS_SOURCE_DIR`, generation invokes the authenticated download/cache
+path first. CSV SHA-256 and exact catalog headers are validated before
+rendering. A small isolated Maven tool under `scripts/address-seeds/` reuses
+the repository's managed Jackson and Apache Commons CSV dependencies;
+Bash remains the entry point. Source rows are streamed, including proper
+quoted comma, quote and multiline handling. All matches and source fields
+are retained, including real UDPRNs/UPRNs, dates, NULLs and point geometry.
+Only `release_id` is local metadata. GB uses SRID 27700; ISL uses SRID 4258.
 
 The command creates a new file such as `database/local/R__seed_KT138GL.sql`
 or `database/local/R__seed_CF143AT,KT138GL.sql`. Names use sorted, uppercase
@@ -84,9 +117,10 @@ postcodes without spaces. Already seeded postcodes are skipped by inspecting
 all local repeatable SQL files, and only new postcodes appear in the filename.
 If all are already seeded, no file is created. Existing files are never
 overwritten. Each file has its own release marker so rerunning it does not
-delete another file's fixtures. The command validates
-the whole input and fetches all metadata before writing; failures leave the
-seed file unchanged. Review and commit the generated diff yourself.
+delete another file's fixtures. Missing postcodes fail without publishing a
+partial seed; no terminated-postcode metadata or invented fallback is used.
+The command validates and renders before publishing an add operation
+atomically. Review and commit generated files yourself.
 Generation holds a shared `database/local/.add-postcode.lock` directory lock.
 Concurrent invocations fail explicitly rather than creating overlapping seeds.
 Normal exits release it; after an abrupt termination, verify no generator is
@@ -95,9 +129,25 @@ It does not start services or apply SQL. Run `make test-postcode` with the same
 selection afterward to rebuild/restart and query the new fixtures.
 After seeds are applied, `make test-postcodes` discovers them automatically
 from the database. Do not supply both POSTCODE and POSTCODES.
-Dates in generated fixtures use the UTC generation date. Large selections
-whose filenames exceed the filesystem limit must be split into smaller
-commands; the helper reports this without creating a file.
+Large selections whose filenames exceed the filesystem limit must be split
+into smaller commands; the helper reports this without creating a file.
+
+`refresh-seed-data` regenerates files managed by this tool, including earlier
+generated synthetic selections. It preserves their filenames and release
+markers so the next Flyway repeatable run deletes the previous synthetic
+rows before inserting real data. In particular,
+`R__seed_synthetic_cardiff_addresses.sql` is a legacy filename: its contents
+are now 266 real addresses from FULL version 150450 for 14 positive postcodes.
+Its `local-synthetic-cardiff` marker is retained only for upgrade cleanup.
+The old synthetic `CF10 1PX` fixture has no record in that source and is now
+a documented zero-result case. Refresh does not fabricate it.
+All managed files are validated/rendered before refresh publication, but
+publication is atomic per file, not a transaction across multiple files.
+
+After review, `make api-restart` applies changed local repeatables without
+resetting the DB. `make db-reset CONFIRM=address_lookup` remains an explicit,
+destructive local reset and consumes the checked-in real seeds; it does not
+download OS data. No production migrations or production seed packages change.
 
 Run `bash tests/test_add_postcode.sh` for isolated generator regressions.
 
@@ -146,8 +196,10 @@ new or changed local seed files are packaged and applied by Flyway before
 lookups. They do not reset the database. Startup or build failures prevent
 the queries. Unlike `make start`, they do not reuse an already healthy API.
 
-The 14 Cardiff lookups use synthetic local fixtures, including historical
-`CF10 1PX`; they do not assert that these are real or current postal addresses.
+The source-backed fixture has 13 Cardiff postcodes and `KT13 8GL`.
+`CF10 1PX` has no source record and is excluded from successful lookup batches.
+`make test-postcode POSTCODE=CF101PX` fails its non-empty-result check by
+design; Java integration tests cover the expected empty API response.
 
 ```bash
 make start

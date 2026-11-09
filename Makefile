@@ -28,6 +28,10 @@ SQL ?=
 FILE ?=
 POSTCODE ?=
 POSTCODES ?=
+OS_SOURCE_DIR ?=
+OS_CACHE_DIR ?=
+OS_PACKAGE_ID ?=
+OS_FULL_VERSION ?=
 MIN_COVERAGE ?= 0.80
 PR ?=
 PR_BRANCH ?=
@@ -41,6 +45,7 @@ endif
 export LOCAL_API_PORT LOCAL_API_TIMEOUT CONFIRM MIN_COVERAGE PR PR_BRANCH PR_BASE
 export SONAR_HOST_URL SONAR_PROJECT_KEY
 export SQL FILE POSTCODE POSTCODES
+export OS_SOURCE_DIR OS_CACHE_DIR OS_PACKAGE_ID OS_FULL_VERSION
 export MAKE_JACOCO_AUTO := true
 MVN := bash scripts/maven.sh
 
@@ -111,8 +116,15 @@ test-postcodes:
 
 .PHONY: test-postcode
 .PHONY: add-postcode
+.PHONY: download-os-addresses refresh-seed-data
 add-postcode:
 	@bash scripts/add-postcode.sh
+
+download-os-addresses:
+	@bash scripts/os-address-seeds.sh download
+
+refresh-seed-data:
+	@bash scripts/os-address-seeds.sh refresh
 
 test-postcode:
 	@bash scripts/test-postcodes.sh validate-single

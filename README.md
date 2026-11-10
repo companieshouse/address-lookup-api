@@ -56,9 +56,12 @@ fixtures are excluded from the production migration package; the existing
 `make db-reset` uses this hardcoded SQL without downloading data or requiring
 an OS API key.
 
-For an existing checkout using the former separate Cardiff seed, see
-[the local fixture transition notes](database/README.md#local-fixture-conventions)
-before rebuilding or resetting its database.
+For an existing checkout using the former separate Cardiff seed, run
+`make clean` before rebuilding to remove obsolete packaged SQL. If a disposable
+local database has already applied that removed repeatable migration, recreate
+it with `make db-reset CONFIRM=address_lookup` rather than repairing Flyway
+history. This deletes the local database and its data; never run it against a
+shared database.
 
 The API uses Flyway migrations from `classpath:db/migrations` when
 `FLYWAY_ENABLED=true`; the base configuration defaults to disabled when the

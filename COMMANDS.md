@@ -20,7 +20,7 @@ current Makefile and its maintained scripts.
 | Stop everything local | `make stop` | Stops this helper's API, then this repository's Compose Postgres. Does not stop shared ingress, other containers, or processes started by other runners. |
 | Reset and reseed DB | `make db-reset CONFIRM=address_lookup` | Stops the managed API, verifies its port is free, starts Postgres, drops/recreates only the local Compose `address_lookup` DB, starts the API with Flyway/local fixtures, and verifies the lookup relation contains rows. Leaves both services running. |
 | Unit tests | `make test-unit` | Maven reactor Java unit tests with integration tests skipped and automatic Make JDK selection. Does not require local-service tools such as `jq`. |
-| Command-helper regressions | `make test-commands` | Runs lifecycle/Sonar, smoke, postcode lookup/generation and Maven-selector helper checks using stubs; requires `jq` and `ps`. |
+| Command-helper regressions | `make test-commands` | Runs lifecycle/Sonar, smoke, postcode lookup/generation, Maven-selector and Concourse helper checks using stubs; requires `jq` and `ps`. |
 | Format Java | `make tidy FILE=path/File.java` | Formats one file in place. Use `FILE=.` for all Java files, or pipe Java source to `make tidy` for formatted stdout. |
 | Check Java formatting | `make spotless-check` | Read-only scan of all Java files; prints only unformatted paths and fails, or exits zero silently when clean. |
 | Smoke test | `make test-smoke` | Creates a temporary database, starts a separate API on an OS-assigned port, checks health and applied migrations, then stops its API and drops only its temporary database. |
@@ -31,10 +31,74 @@ current Makefile and its maintained scripts.
 | Check coverage | `make coverage-check MIN_COVERAGE=0.80` | Fresh unit coverage run, enforcing at least 80% LINE coverage for each JaCoCo module bundle with execution data. |
 | Get SonarQube coverage | `make sonar-report` | Prints latest server-computed coverage measures as JSON to stdout; does not save files or run analysis. |
 | Analyze a PR | `make sonar-pr PR=123 PR_BRANCH=feature/example PR_BASE=main` | Builds fresh unit coverage for the checked-out source branch, submits SonarQube PR analysis, and waits for the quality gate. |
+| Install Concourse CLI | `make install-fly` | Downloads the server-matched darwin/arm64 CLI and installs it at `/usr/local/bin/fly` using `sudo`. Apple Silicon macOS only. |
+| Show Concourse nodes | `make concourse-status` | Read-only status of every job and resource in the Address Lookup API pipeline; supports node and status filters. |
 
 Complex local control and Sonar logic is in `scripts/local-services.sh` and
 `scripts/sonar.sh`. `make test-commands` exercises both with isolated stub
-commands, without starting real services or contacting a server.
+commands, without starting real services or contacting a server. Concourse
+helpers are tested with isolated network and installer stubs too.
+
+## Concourse
+
+```bash
+make install-fly
+make concourse-status
+make concourse-status NODE=build-test-analyse
+make concourse-status NODES='["build-test-analyse", "source-code"]'
+make concourse-status NODES=build-test-analyse,source-code
+make concourse-status STATUS=red
+make concourse-status NODES=build-test-analyse,source-code STATUS=orange
+make concourse-status OUTPUT=human
+make concourse-status STATUS=red OUTPUT=json
+make concourse-status NODE=build-test-analyse OUTPUT=yaml
+```
+
+`install-fly` downloads from
+`https://ci-platform.companieshouse.gov.uk/api/v1/cli?arch=arm64&platform=darwin`,
+makes the temporary binary executable, checks its version, then runs
+`sudo install` to `/usr/local/bin/fly`. It replaces any existing binary there
+and may prompt for your administrator password. Downloads and installation
+errors fail explicitly; the temporary download is cleaned up. It does not
+configure targets or log in, and is supported only on Apple Silicon macOS.
+
+`concourse-status` requires Bash, curl, jq and network access, but not fly,
+Docker, Maven, login, or any personal command wrapper. It reads the publicly
+accessible jobs and resources endpoints for
+[team-development/address-lookup-api](https://ci-platform.companieshouse.gov.uk/teams/team-development/pipelines/address-lookup-api).
+It never triggers builds, resource checks or deployments. HTTP, JSON and
+unknown-node errors fail rather than reporting success-shaped status.
+
+`NODE` selects one exact name; `NODES` accepts a non-empty JSON string array or
+comma-separated names. Do not set both. Names are trimmed and deduplicated;
+a name shared by a job and resource selects both. `STATUS` optionally filters
+either all nodes or the selected nodes:
+
+| Status | Meaning |
+|---|---|
+| green | Latest job build or resource check succeeded. |
+| red | Failed, errored or aborted build/check, or a reported resource check/setup error. |
+| orange | Build/check is started or pending. An active job build takes precedence over its previous result. |
+| unknown | No build/check result, an unrecognised state, or a paused node. Not included in the three colour filters. |
+
+Output uses ASCII status names, with job build numbers and resource
+last-check UTC timestamps. Green reflects the reported result, not a live
+health probe: an old successful resource check may be stale. Previously
+finished job results remain visible while a new build runs. Empty filter
+results are reported explicitly. Use `STATUS=green`, `STATUS=red` or
+`STATUS=orange`, not literal braces. `make consource-status` is also accepted
+as an alias for the spelling in the original request.
+
+`OUTPUT=human` (default) prints the table. `OUTPUT=json` and `OUTPUT=yaml`
+print only a machine-readable document with `pipeline` and `nodes` fields.
+Each node has `type`, `name`, `status` and `detail`; an empty selection result
+is an empty `nodes` array. All node/status filters apply to every format.
+YAML strings are quoted and escaped using jq, without an extra YAML dependency.
+GNU Make reserves `-o` for its own "old file" option, so use `OUTPUT=...`
+with Make, not `make concourse-status -o json`. Direct script calls support
+`bash scripts/concourse-status.sh -o json` (or `human`/`yaml`).
+
+Run `bash tests/test_concourse.sh` for isolated helper regressions.
 
 ## Requirements
 

@@ -23,6 +23,33 @@ Local development uses the repository's PostGIS container and checked-in
 real OS seed data. No OS API key is needed to start the API or load these
 local fixtures.
 
+## Concourse pipeline commands
+
+From the repository root, use `make install-fly` to install the server-matched
+Concourse CLI on Apple Silicon macOS. This downloads a temporary binary and
+uses `sudo install` to replace `/usr/local/bin/fly`.
+
+```bash
+make concourse-status
+make concourse-status NODE=build-test-analyse
+make concourse-status NODES='["build-test-analyse", "source-code"]'
+make concourse-status NODES=build-test-analyse,source-code STATUS=orange
+make concourse-status STATUS=red
+make concourse-status STATUS=red OUTPUT=json
+make concourse-status OUTPUT=yaml
+```
+
+Status commands read all jobs and resources in the
+[Address Lookup API pipeline](https://ci-platform.companieshouse.gov.uk/teams/team-development/pipelines/address-lookup-api)
+using curl and jq, without requiring fly or login. They do not change the
+pipeline. Green means succeeded, red means failed/errored/aborted, and orange
+means started/pending. Nodes without results or paused nodes are shown as
+unknown; resource timestamps show when checks last ran.
+Use `OUTPUT=human` (default), `OUTPUT=json` or `OUTPUT=yaml`; Make reserves
+`-o` for another purpose. The script supports `-o` when invoked directly.
+See [COMMANDS.md](COMMANDS.md#concourse) for filtering, prerequisites and
+installation details.
+
 ## Running locally
 
 Clone this repository and run Make commands from its root. A separate

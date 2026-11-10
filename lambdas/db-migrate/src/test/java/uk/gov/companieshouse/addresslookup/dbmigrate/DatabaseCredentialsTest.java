@@ -1,12 +1,12 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class DatabaseCredentialsTest {
 
@@ -16,8 +16,11 @@ class DatabaseCredentialsTest {
         DatabaseCredentials.fromJson(
             """
             {"host":"db.cluster.local","port":5432,"dbname":"address_lookup",
-             "username":"schema_owner","password":"s3cret"}""");
-    assertEquals("jdbc:postgresql://db.cluster.local:5432/address_lookup?sslmode=require", credentials.jdbcUrl());
+             "username":"schema_owner","password":"s3cret"}\
+            """);
+    assertEquals(
+        "jdbc:postgresql://db.cluster.local:5432/address_lookup?sslmode=require",
+        credentials.jdbcUrl());
     assertEquals("schema_owner", credentials.username());
     assertEquals("s3cret", credentials.password());
   }
@@ -27,7 +30,8 @@ class DatabaseCredentialsTest {
     var credentials =
         DatabaseCredentials.fromJson(
             """
-            {"jdbcUrl":"jdbc:postgresql://h:6543/db?sslmode=verify-full","username":"u","password":"p"}""");
+            {"jdbcUrl":"jdbc:postgresql://h:6543/db?sslmode=verify-full","username":"u","password":"p"}\
+            """);
     assertEquals("jdbc:postgresql://h:6543/db?sslmode=verify-full", credentials.jdbcUrl());
   }
 
@@ -50,7 +54,9 @@ class DatabaseCredentialsTest {
         "{\"host\":\"h\",\"username\":\"u\",\"password\":\"p\"}"
       })
   void rejectsIncompleteBlankNonTextOrForeignCredentials(String dbCredentialsJson) {
-    var migrationException = assertThrows(MigrationException.class, () -> DatabaseCredentials.fromJson(dbCredentialsJson));
+    var migrationException =
+        assertThrows(
+            MigrationException.class, () -> DatabaseCredentials.fromJson(dbCredentialsJson));
     assertEquals(MigrationException.Code.CREDENTIALS_INVALID, migrationException.code());
   }
 
@@ -58,7 +64,9 @@ class DatabaseCredentialsTest {
   void sanitisesUserInfoAndPropertiesFromTheJdbcUrl() {
     var credentials =
         new DatabaseCredentials(
-            "jdbc:postgresql://owner:s3cret@db.local:5432/address_lookup?user=owner&password=s3cret", "u", "p");
+            "jdbc:postgresql://owner:s3cret@db.local:5432/address_lookup?user=owner&password=s3cret",
+            "u",
+            "p");
 
     assertEquals("jdbc:postgresql://db.local:5432/address_lookup", credentials.sanitisedJdbcUrl());
     assertFalse(credentials.toString().contains("s3cret"));
@@ -80,14 +88,16 @@ class DatabaseCredentialsTest {
     assertFalse(credentials.toString().contains("s3cret"));
     var migrationException =
         assertThrows(
-            MigrationException.class, () -> DatabaseCredentials.fromJson("{\"password\":\"s3cret\" broken"));
+            MigrationException.class,
+            () -> DatabaseCredentials.fromJson("{\"password\":\"s3cret\" broken"));
     assertFalse(migrationException.getMessage().contains("s3cret"));
   }
 
   @Test
   void usesTheDefaultPortWhenThePortIsMissing() {
     var credentials =
-        DatabaseCredentials.fromJson("{\"host\":\"h\",\"dbname\":\"d\",\"username\":\"u\",\"password\":\"p\"}");
+        DatabaseCredentials.fromJson(
+            "{\"host\":\"h\",\"dbname\":\"d\",\"username\":\"u\",\"password\":\"p\"}");
 
     assertEquals("jdbc:postgresql://h:5432/d?sslmode=require", credentials.jdbcUrl());
   }
@@ -126,7 +136,9 @@ class DatabaseCredentialsTest {
     var migrationException =
         assertThrows(MigrationException.class, () -> DatabaseCredentials.fromJson(credentialsJson));
 
-    assertEquals("CREDENTIALS_INVALID: jdbcUrl must not contain a username or password", migrationException.getMessage());
+    assertEquals(
+        "CREDENTIALS_INVALID: jdbcUrl must not contain a username or password",
+        migrationException.getMessage());
   }
 
   @ParameterizedTest
@@ -161,12 +173,15 @@ class DatabaseCredentialsTest {
 
   @Test
   void reportsMalformedEncodingWithoutRevealingTheJdbcUrl() {
-    var credentialsJson = credentialsJsonWithUrl("jdbc:postgresql://h/d?sslmode=require&x=s3cret%zz");
+    var credentialsJson =
+        credentialsJsonWithUrl("jdbc:postgresql://h/d?sslmode=require&x=s3cret%zz");
 
     var migrationException =
         assertThrows(MigrationException.class, () -> DatabaseCredentials.fromJson(credentialsJson));
 
-    assertEquals("CREDENTIALS_INVALID: jdbcUrl contains malformed percent-encoding", migrationException.getMessage());
+    assertEquals(
+        "CREDENTIALS_INVALID: jdbcUrl contains malformed percent-encoding",
+        migrationException.getMessage());
     assertFalse(migrationException.getMessage().contains("s3cret"));
   }
 
@@ -183,14 +198,17 @@ class DatabaseCredentialsTest {
     assertEquals("jdbc:postgresql://h:5432/d?sslmode=require", credentials.jdbcUrl());
   }
 
-
   @Test
   void namesTheMissingFieldWithoutRevealingValues() {
     var migrationException =
         assertThrows(
             MigrationException.class,
-            () -> DatabaseCredentials.fromJson("{\"host\":\"h\",\"dbname\":\"d\",\"password\":\"s3cret\"}"));
+            () ->
+                DatabaseCredentials.fromJson(
+                    "{\"host\":\"h\",\"dbname\":\"d\",\"password\":\"s3cret\"}"));
 
-    assertEquals("CREDENTIALS_INVALID: Database credentials are missing username", migrationException.getMessage());
+    assertEquals(
+        "CREDENTIALS_INVALID: Database credentials are missing username",
+        migrationException.getMessage());
   }
 }

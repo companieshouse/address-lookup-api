@@ -11,20 +11,20 @@ import java.util.Map;
  * @param verifyTls            whether verify checks ssl_min_protocol_version and probes no TLS, TLS 1.2 and TLS 1.3 (VERIFY_TLS)
  * @param timeout              connect and TLS probe timeout (CONNECT_TIMEOUT_SECONDS)
  */
-public record BootstrapConfiguration(String masterParameter, String schemaOwnerParameter, boolean verifyTls,
-                                     Duration timeout) {
+public record BootstrapConfiguration(
+    String masterParameter, String schemaOwnerParameter, boolean verifyTls, Duration timeout) {
 
-    public static BootstrapConfiguration fromEnvironment(Map<String, String> env) {
-        return new BootstrapConfiguration(
-                required(env, "MASTER_CREDENTIALS_PARAMETER"),
-                required(env, "SCHEMA_OWNER_CREDENTIALS_PARAMETER"),
-                !"false".equalsIgnoreCase(env.getOrDefault("VERIFY_TLS", "true")),
-                Duration.ofSeconds(Long.parseLong(env.getOrDefault("CONNECT_TIMEOUT_SECONDS", "10"))));
-    }
+  public static BootstrapConfiguration fromEnvironment(Map<String, String> env) {
+    return new BootstrapConfiguration(
+        required(env, "MASTER_CREDENTIALS_PARAMETER"),
+        required(env, "SCHEMA_OWNER_CREDENTIALS_PARAMETER"),
+        !"false".equalsIgnoreCase(env.getOrDefault("VERIFY_TLS", "true")),
+        Duration.ofSeconds(Long.parseLong(env.getOrDefault("CONNECT_TIMEOUT_SECONDS", "10"))));
+  }
 
-    private static String required(Map<String, String> env, String name) {
-        String value = env.get(name);
-        DatabaseCredentials.require(value != null && !value.isBlank(), name + " is not set");
-        return value;
-    }
+  private static String required(Map<String, String> env, String name) {
+    String value = env.get(name);
+    DatabaseCredentials.require(value != null && !value.isBlank(), name + " is not set");
+    return value;
+  }
 }

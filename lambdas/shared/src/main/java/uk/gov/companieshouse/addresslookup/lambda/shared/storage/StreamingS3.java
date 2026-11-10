@@ -1,11 +1,6 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.CompletedPart;
-import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport;
-import uk.gov.companieshouse.logging.Logger;
-import uk.gov.companieshouse.logging.LoggerFactory;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,217 +13,233 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.function.LongSupplier;
-
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CompletedPart;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
-
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
+import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
 
 /**
  * Bounded 256 MiB parts, with checksum validation before multipart completion.
  */
 public final class StreamingS3 {
-    private static final Logger LOG = LoggerFactory.getLogger(StreamingS3.class.getName());
+  private static final Logger LOG = LoggerFactory.getLogger(StreamingS3.class.getName());
 
-    private static final String BUCKET_FIELD = "bucket";
-    private static final String KEY_FIELD = "key";
-    private static final int PART_SIZE_BYTES = 256 * 1024 * 1024;
-    private static final String S3_VERSIONING_MESSAGE = "S3 versioning must be enabled";
+  private static final String BUCKET_FIELD = "bucket";
+  private static final String KEY_FIELD = "key";
+  private static final int PART_SIZE_BYTES = 256 * 1024 * 1024;
+  private static final String S3_VERSIONING_MESSAGE = "S3 versioning must be enabled";
 
-    public record Uploaded(String key, String version, String sha256, String md5, long bytes) {
+  public record Uploaded(String key, String version, String sha256, String md5, long bytes) {}
+
+  public static final class ChecksumMismatchException extends Exception {
+    public ChecksumMismatchException(String expected, String actual) {
+      super("OS MD5 checksum mismatch: expected=" + expected + " actual=" + actual);
     }
+  }
 
-    public static final class ChecksumMismatchException extends Exception {
-        public ChecksumMismatchException(String expected, String actual) {
-            super("OS MD5 checksum mismatch: expected=" + expected + " actual=" + actual);
+  public static final class ExistingObjectVerificationException extends Exception {
+    public ExistingObjectVerificationException(Throwable cause) {
+      super("Could not verify existing extracted CSV", cause);
+    }
+  }
+
+  private final S3Client s3;
+  private final LongSupplier remaining;
+
+  public StreamingS3(S3Client s3, LongSupplier remaining) {
+    this.s3 = s3;
+    this.remaining = remaining;
+  }
+
+  public Uploaded put(InputStream in, String bucket, String key, String expectedMd5, long limit)
+      throws Exception {
+    return put(in, bucket, key, expectedMd5, limit, false);
+  }
+
+  public Uploaded putIdempotent(InputStream in, String bucket, String key, long limit)
+      throws Exception {
+    return put(in, bucket, key, null, limit, true);
+  }
+
+  public static String checksumKey(String key) throws Exception {
+    return "metadata/checksums/"
+        + RuntimeSupport.sha(key.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+        + ".json";
+  }
+
+  private Uploaded put(
+      InputStream in,
+      String bucket,
+      String key,
+      String expectedMd5,
+      long limit,
+      boolean reuseExisting)
+      throws Exception {
+    String upload = s3.createMultipartUpload(b -> b.bucket(bucket).key(key)).uploadId();
+    LOG.info("Multipart upload started", Map.of(BUCKET_FIELD, bucket, KEY_FIELD, key));
+
+    var parts = new ArrayList<CompletedPart>();
+    var md5 = MessageDigest.getInstance("MD5");
+    var sha = MessageDigest.getInstance("SHA-256");
+    long total = 0;
+
+    try {
+      while (true) {
+        check(
+            remaining.getAsLong() > 30000,
+            "Lambda deadline approaching; retry with a new object key");
+
+        byte[] bytes = in.readNBytes(PART_SIZE_BYTES);
+        if (bytes.length == 0) break;
+        total += bytes.length;
+        check(total <= limit && parts.size() < 10000, "Object exceeds configured streaming budget");
+
+        // Update checksums while streaming; do not read the completed object back from S3.
+        md5.update(bytes);
+        sha.update(bytes);
+
+        final int part = parts.size() + 1;
+        var response =
+            s3.uploadPart(
+                b ->
+                    b.bucket(bucket)
+                        .key(key)
+                        .uploadId(upload)
+                        .partNumber(part)
+                        .contentLength((long) bytes.length),
+                RequestBody.fromBytes(bytes));
+        parts.add(CompletedPart.builder().partNumber(part).eTag(response.eTag()).build());
+      }
+
+      check(total > 0, "Empty object");
+      String actualMd5 = HexFormat.of().formatHex(md5.digest()),
+          actualSha = HexFormat.of().formatHex(sha.digest());
+
+      // Complete the multipart upload only after proving the supplier checksum matches.
+      if (expectedMd5 != null && !expectedMd5.equalsIgnoreCase(actualMd5))
+        throw new ChecksumMismatchException(expectedMd5, actualMd5);
+      String version = completeUpload(bucket, key, upload, parts, reuseExisting, actualSha);
+      check(version != null && !"null".equals(version), S3_VERSIONING_MESSAGE);
+      // Store immutable checksum evidence separately from the receipt used by the workflow.
+      String checksumKey = checksumKey(key);
+
+      String evidence =
+          JSON.writeValueAsString(
+              Map.of(
+                  BUCKET_FIELD,
+                  bucket,
+                  KEY_FIELD,
+                  key,
+                  "versionId",
+                  version,
+                  "md5",
+                  actualMd5,
+                  "sha256",
+                  actualSha,
+                  "bytes",
+                  total));
+
+      var uploaded = new Uploaded(key, version, actualSha, actualMd5, total);
+      saveChecksumEvidence(bucket, checksumKey, evidence, reuseExisting, uploaded);
+      return uploaded;
+    } catch (Exception e) {
+      abortIncompleteUpload(bucket, key, upload, e);
+      throw e;
+    }
+  }
+
+  private void saveChecksumEvidence(
+      String bucket, String checksumKey, String evidence, boolean reuseExisting, Uploaded uploaded)
+      throws Exception {
+    try {
+      s3.putObject(
+          b -> b.bucket(bucket).key(checksumKey).ifNoneMatch("*"),
+          RequestBody.fromString(evidence));
+
+      LOG.info(
+          "Multipart upload completed",
+          Map.of(
+              BUCKET_FIELD,
+              bucket,
+              KEY_FIELD,
+              uploaded.key(),
+              "bytes",
+              uploaded.bytes(),
+              "version",
+              uploaded.version()));
+    } catch (S3Exception e) {
+      if (!reuseExisting || !ReleaseStore.isPreconditionFailed(e)) throw e;
+      var recorded = new ReleaseStore(s3).read(bucket, checksumKey);
+      check(
+          recorded != null && JSON.readTree(evidence).equals(recorded),
+          "Existing checksum evidence differs from the extracted CSV");
+    }
+  }
+
+  private String completeUpload(
+      String bucket,
+      String key,
+      String upload,
+      List<CompletedPart> parts,
+      boolean reuseExisting,
+      String actualSha)
+      throws ExistingObjectVerificationException {
+    try {
+      var result =
+          s3.completeMultipartUpload(b ->
+              b.bucket(bucket)
+                  .key(key)
+                  .uploadId(upload)
+                  .ifNoneMatch("*")
+                  .multipartUpload(m -> m.parts(parts)));
+      check(
+          result.versionId() != null && !result.versionId().equals("null"), S3_VERSIONING_MESSAGE);
+      return result.versionId();
+    } catch (S3Exception e) {
+      if (!reuseExisting || !ReleaseStore.isPreconditionFailed(e)) throw e;
+      s3.abortMultipartUpload(b -> b.bucket(bucket).key(key).uploadId(upload));
+      String version =
+          s3.headObject(HeadObjectRequest.builder().bucket(bucket).key(key).build()).versionId();
+      check(version != null && !"null".equals(version), S3_VERSIONING_MESSAGE);
+      String existingChecksum;
+      try {
+        var existingSha = MessageDigest.getInstance("SHA-256");
+        try (var existing =
+            new DigestInputStream(
+                s3.getObject(
+                    GetObjectRequest.builder().bucket(bucket).key(key).versionId(version).build()),
+                existingSha)) {
+          existing.transferTo(OutputStream.nullOutputStream());
         }
+        existingChecksum = HexFormat.of().formatHex(existingSha.digest());
+      } catch (IOException | NoSuchAlgorithmException verificationFailure) {
+        throw new ExistingObjectVerificationException(verificationFailure);
+      }
+      check(
+          actualSha.equals(existingChecksum), "Existing extracted CSV differs from the source ZIP");
+      return version;
     }
+  }
 
-    public static final class ExistingObjectVerificationException extends Exception {
-        public ExistingObjectVerificationException(Throwable cause) {
-            super("Could not verify existing extracted CSV", cause);
-        }
+  // Best effort cleanup: incomplete multipart uploads should not become readable objects.
+  private void abortIncompleteUpload(
+      String bucket, String key, String uploadId, Exception failure) {
+    LOG.error("Multipart upload failed", failure, Map.of(BUCKET_FIELD, bucket, KEY_FIELD, key));
+
+    try {
+      s3.abortMultipartUpload(b -> b.bucket(bucket).key(key).uploadId(uploadId));
+      LOG.info(
+          "Incomplete multipart upload cleaned up", Map.of(BUCKET_FIELD, bucket, KEY_FIELD, key));
+    } catch (Exception abortFailure) {
+      LOG.error(
+          "Incomplete multipart upload cleanup failed",
+          abortFailure,
+          Map.of(BUCKET_FIELD, bucket, KEY_FIELD, key));
     }
-
-    private final S3Client s3;
-    private final LongSupplier remaining;
-
-    public StreamingS3(S3Client s3, LongSupplier remaining) {
-        this.s3 = s3;
-        this.remaining = remaining;
-    }
-
-    public Uploaded put(InputStream in, String bucket, String key, String expectedMd5, long limit)
-            throws Exception {
-        return put(in, bucket, key, expectedMd5, limit, false);
-    }
-
-    public Uploaded putIdempotent(InputStream in, String bucket, String key, long limit)
-            throws Exception {
-        return put(in, bucket, key, null, limit, true);
-    }
-
-    public static String checksumKey(String key) throws Exception {
-        return "metadata/checksums/"
-                + RuntimeSupport.sha(key.getBytes(java.nio.charset.StandardCharsets.UTF_8)) + ".json";
-    }
-
-    private Uploaded put(
-            InputStream in, String bucket, String key, String expectedMd5, long limit,
-            boolean reuseExisting) throws Exception {
-        String upload = s3.createMultipartUpload(b -> b.bucket(bucket).key(key)).uploadId();
-        LOG.info("Multipart upload started", Map.of(BUCKET_FIELD, bucket, KEY_FIELD, key));
-
-        var parts = new ArrayList<CompletedPart>();
-        var md5 = MessageDigest.getInstance("MD5");
-        var sha = MessageDigest.getInstance("SHA-256");
-        long total = 0;
-
-        try {
-            while (true) {
-                check(
-                        remaining.getAsLong() > 30000,
-                        "Lambda deadline approaching; retry with a new object key");
-
-                byte[] bytes = in.readNBytes(PART_SIZE_BYTES);
-                if (bytes.length == 0) break;
-                total += bytes.length;
-                check(total <= limit && parts.size() < 10000, "Object exceeds configured streaming budget");
-
-                // Update checksums while streaming; do not read the completed object back from S3.
-                md5.update(bytes);
-                sha.update(bytes);
-
-                final int part = parts.size() + 1;
-                var response =
-                        s3.uploadPart(
-                                b ->
-                                        b.bucket(bucket)
-                                                .key(key)
-                                                .uploadId(upload)
-                                                .partNumber(part)
-                                                .contentLength((long) bytes.length),
-                                RequestBody.fromBytes(bytes));
-                parts.add(CompletedPart.builder().partNumber(part).eTag(response.eTag()).build());
-            }
-
-            check(total > 0, "Empty object");
-            String actualMd5 = HexFormat.of().formatHex(md5.digest()),
-                    actualSha = HexFormat.of().formatHex(sha.digest());
-
-            // Complete the multipart upload only after proving the supplier checksum matches.
-            if (expectedMd5 != null && !expectedMd5.equalsIgnoreCase(actualMd5))
-                throw new ChecksumMismatchException(expectedMd5, actualMd5);
-            String version = completeUpload(bucket, key, upload, parts, reuseExisting, actualSha);
-            check(
-                    version != null && !"null".equals(version),
-                    S3_VERSIONING_MESSAGE);
-            // Store immutable checksum evidence separately from the receipt used by the workflow.
-            String checksumKey = checksumKey(key);
-
-            String evidence =
-                    JSON.writeValueAsString(
-                            Map.of(
-                                    BUCKET_FIELD,
-                                    bucket,
-                                    KEY_FIELD,
-                                    key,
-                                    "versionId",
-                                    version,
-                                    "md5",
-                                    actualMd5,
-                                    "sha256",
-                                    actualSha,
-                                    "bytes",
-                                    total));
-
-            var uploaded = new Uploaded(key, version, actualSha, actualMd5, total);
-            saveChecksumEvidence(bucket, checksumKey, evidence, reuseExisting, uploaded);
-            return uploaded;
-        } catch (Exception e) {
-            abortIncompleteUpload(bucket, key, upload, e);
-            throw e;
-        }
-    }
-
-    private void saveChecksumEvidence(String bucket, String checksumKey, String evidence,
-                                      boolean reuseExisting, Uploaded uploaded) throws Exception {
-        try {
-            s3.putObject(
-                    b -> b.bucket(bucket).key(checksumKey).ifNoneMatch("*"),
-                    RequestBody.fromString(evidence));
-
-            LOG.info("Multipart upload completed",
-                    Map.of(BUCKET_FIELD, bucket,
-                            KEY_FIELD, uploaded.key(),
-                            "bytes", uploaded.bytes(),
-                            "version", uploaded.version()));
-        } catch (S3Exception e) {
-            if (!reuseExisting || !ReleaseStore.isPreconditionFailed(e)) throw e;
-            var recorded = new ReleaseStore(s3).read(bucket, checksumKey);
-            check(recorded != null && JSON.readTree(evidence).equals(recorded),
-                    "Existing checksum evidence differs from the extracted CSV");
-        }
-    }
-
-    private String completeUpload(String bucket, String key, String upload,
-                                  List<CompletedPart> parts, boolean reuseExisting, String actualSha)
-            throws ExistingObjectVerificationException {
-        try {
-            var result =
-                    s3.completeMultipartUpload(
-                            b ->
-                                    b.bucket(bucket)
-                                            .key(key)
-                                            .uploadId(upload)
-                                            .ifNoneMatch("*")
-                                            .multipartUpload(m -> m.parts(parts)));
-            check(
-                    result.versionId() != null && !result.versionId().equals("null"),
-                    S3_VERSIONING_MESSAGE);
-            return result.versionId();
-        } catch (S3Exception e) {
-            if (!reuseExisting || !ReleaseStore.isPreconditionFailed(e)) throw e;
-            s3.abortMultipartUpload(b -> b.bucket(bucket).key(key).uploadId(upload));
-            String version = s3.headObject(
-                    HeadObjectRequest.builder().bucket(bucket).key(key).build()).versionId();
-            check(version != null && !"null".equals(version), S3_VERSIONING_MESSAGE);
-            String existingChecksum;
-            try {
-                var existingSha = MessageDigest.getInstance("SHA-256");
-                try (var existing =
-                             new DigestInputStream(
-                                     s3.getObject(
-                                             GetObjectRequest.builder().bucket(bucket).key(key).versionId(version).build()),
-                                     existingSha)) {
-                    existing.transferTo(OutputStream.nullOutputStream());
-                }
-                existingChecksum = HexFormat.of().formatHex(existingSha.digest());
-            } catch (IOException | NoSuchAlgorithmException verificationFailure) {
-                throw new ExistingObjectVerificationException(verificationFailure);
-            }
-            check(actualSha.equals(existingChecksum),
-                    "Existing extracted CSV differs from the source ZIP");
-            return version;
-        }
-    }
-
-    // Best effort cleanup: incomplete multipart uploads should not become readable objects.
-    private void abortIncompleteUpload(
-            String bucket, String key, String uploadId, Exception failure) {
-        LOG.error("Multipart upload failed",
-                failure,
-                Map.of(BUCKET_FIELD, bucket, KEY_FIELD, key));
-
-        try {
-            s3.abortMultipartUpload(b -> b.bucket(bucket).key(key).uploadId(uploadId));
-            LOG.info("Incomplete multipart upload cleaned up",
-                    Map.of(BUCKET_FIELD, bucket, KEY_FIELD, key));
-        } catch (Exception abortFailure) {
-            LOG.error("Incomplete multipart upload cleanup failed",
-                    abortFailure,
-                    Map.of(BUCKET_FIELD, bucket, KEY_FIELD, key));
-        }
-    }
+  }
 }

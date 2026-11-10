@@ -1,5 +1,6 @@
 package uk.gov.companieshouse.addresslookup.releasecore.service;
 
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uk.gov.companieshouse.addresslookup.releasecore.aurora.AuroraOperations;
@@ -10,8 +11,6 @@ import uk.gov.companieshouse.addresslookup.releasecore.state.SchemaContractRepos
 import uk.gov.companieshouse.release.model.Dataset;
 import uk.gov.companieshouse.release.model.ReleaseJson;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
-
-import java.util.UUID;
 
 @Service
 public class DatasetImportService {

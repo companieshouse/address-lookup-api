@@ -1,6 +1,9 @@
 package uk.gov.companieshouse.addresslookup.release.importer;
 
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
+
 import com.amazonaws.services.lambda.runtime.Context;
+import java.util.*;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReconciliationCursor;
@@ -11,15 +14,11 @@ import uk.gov.companieshouse.addresslookup.releasecore.service.PromotionService;
 import uk.gov.companieshouse.addresslookup.releasecore.service.ReleaseRegistration;
 import uk.gov.companieshouse.addresslookup.releasecore.state.Release;
 import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseRepository;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
 import uk.gov.companieshouse.release.model.Dataset;
 import uk.gov.companieshouse.release.model.ObjectReference;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
-import uk.gov.companieshouse.logging.Logger;
-import uk.gov.companieshouse.logging.LoggerFactory;
-
-import java.util.*;
-
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 /**
  * Events are wake-ups only; persisted immutable descriptions and clean evidence authorize import.
@@ -104,7 +103,8 @@ public final class ImportService {
                   + " retry");
       // Lambda's serialized exception does not reliably include suppressed causes.
       for (Exception cause : failures) {
-        LOG.error("Import processing failed",
+        LOG.error(
+            "Import processing failed",
             cause,
             Map.of("failure_type", cause.getClass().getSimpleName()));
       }

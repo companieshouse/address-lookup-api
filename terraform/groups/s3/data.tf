@@ -1,13 +1,11 @@
 data "aws_caller_identity" "current" {}
 
 data "aws_iam_policy_document" "bucket" {
-  for_each = local.buckets
-
   statement {
     sid       = "DenyInsecureTransport"
     effect    = "Deny"
     actions   = ["s3:*"]
-    resources = [aws_s3_bucket.this[each.key].arn, "${aws_s3_bucket.this[each.key].arn}/*"]
+    resources = [aws_s3_bucket.this.arn, "${aws_s3_bucket.this.arn}/*"]
 
     principals {
       type        = "*"
@@ -21,49 +19,72 @@ data "aws_iam_policy_document" "bucket" {
     }
   }
 
-  # Quarantine: only the Quarantine Lambda role writes ...
-  dynamic "statement" {
-    for_each = each.key == "quarantine" ? [1] : []
+  statement {
+    sid    = "DenyWriteExceptQuarantineLambda"
+    effect = "Deny"
+    actions = [
+      "s3:PutObject*",
+      "s3:DeleteObject*",
+      "s3:AbortMultipartUpload",
+      "s3:RestoreObject",
+      "s3:ReplicateObject",
+      "s3:ReplicateDelete",
+      "s3:ObjectOwnerOverrideToBucketOwner",
+    ]
+    resources = ["${aws_s3_bucket.this.arn}/quarantine/*"]
 
-    content {
-      sid       = "DenyWriteExceptQuarantineLambda"
-      effect    = "Deny"
-      actions   = local.quarantine_write_actions
-      resources = ["${aws_s3_bucket.this[each.key].arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
 
-      principals {
-        type        = "*"
-        identifiers = ["*"]
-      }
-
-      condition {
-        test     = "ArnNotEquals"
-        variable = "aws:PrincipalArn"
-        values   = [local.quarantine_lambda_role_arn]
-      }
+    condition {
+      test     = "ArnNotEquals"
+      variable = "aws:PrincipalArn"
+      values   = [aws_iam_role.lambda["quarantine"].arn]
     }
   }
 
-  # ... and nobody reads except the break-glass role (the Lambda cannot read back).
-  dynamic "statement" {
-    for_each = each.key == "quarantine" ? [1] : []
+  statement {
+    sid       = "DenyReadExceptBreakGlass"
+    effect    = "Deny"
+    actions   = ["s3:GetObject*", "s3:ListMultipartUploadParts"]
+    resources = ["${aws_s3_bucket.this.arn}/quarantine/*"]
 
-    content {
-      sid       = "DenyReadExceptBreakGlass"
-      effect    = "Deny"
-      actions   = local.quarantine_read_actions
-      resources = [aws_s3_bucket.this[each.key].arn, "${aws_s3_bucket.this[each.key].arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
 
-      principals {
-        type        = "*"
-        identifiers = ["*"]
-      }
+    condition {
+      test     = "ArnNotEquals"
+      variable = "aws:PrincipalArn"
+      values   = [var.break_glass_role_arn]
+    }
+  }
 
-      condition {
-        test     = "ArnNotEquals"
-        variable = "aws:PrincipalArn"
-        values   = [local.break_glass_role_arn]
-      }
+  # An unfiltered listing would expose Quarantine object names.
+  statement {
+    sid       = "DenyListingOutsideNonQuarantinePrefixes"
+    effect    = "Deny"
+    actions   = ["s3:ListBucket", "s3:ListBucketVersions", "s3:ListBucketMultipartUploads"]
+    resources = [aws_s3_bucket.this.arn]
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "ArnNotEquals"
+      variable = "aws:PrincipalArn"
+      values   = [var.break_glass_role_arn]
+    }
+
+    condition {
+      test     = "StringNotLike"
+      variable = "s3:prefix"
+      values   = ["control/*", "landing/*"]
     }
   }
 }

@@ -7,11 +7,20 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sanitizeUrl;
 import static uk.gov.companieshouse.release.model.SupplyType.COU;
 import static uk.gov.companieshouse.release.model.SupplyType.FULL;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.TreeNode;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -38,15 +47,6 @@ import uk.gov.companieshouse.release.model.PackageVersionData;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
 import uk.gov.companieshouse.release.model.SupplyType;
 
-import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-
 /**
  * Scheduled acquisition; the supply cursor is published acquisition descriptions, not the DB
  * watermark.
@@ -70,7 +70,7 @@ public final class DiscoveryService {
     private static final String VERSION_ID_FIELD = "version_id";
     private static final String RELEASE_ID_FIELD = "release_id";
     private static final String CURSOR_KEY = "control/address-release/active.json";
-    private static final String PATH_KEY_STUB = "acquisitions/%s/%s.json";
+  private static final String PATH_KEY_STUB = "control/acquisitions/%s/%s.json";
 
     private static final String MISSING_CURSOR_FILE_MESSAGE = "The active.json Cursor file could not be found in the S3 bucket.";
     private static final String NO_COMMON_CONTIGUOUS_RELEASE_RESPONSE = "NO_COMMON_CONTIGUOUS_RELEASE";

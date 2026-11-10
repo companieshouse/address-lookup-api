@@ -15,7 +15,11 @@ import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.js
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToObject;
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.readFileFromClasspath;
 import static uk.gov.companieshouse.release.model.DetailType.DOWNLOAD;
+
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,10 +41,6 @@ import uk.gov.companieshouse.release.model.OrderSummary;
 import uk.gov.companieshouse.release.model.PackageVersionData;
 import uk.gov.companieshouse.release.model.ReleaseJson;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
-
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 
 @ExtendWith(MockitoExtension.class)
 class DiscoveryServiceTest {
@@ -126,14 +126,15 @@ class DiscoveryServiceTest {
                 .key(CURSOR_KEY)
                 .contentType("application/json")
                 .build();
-        PutObjectRequest saveManifestRequest = PutObjectRequest.builder()
-                .bucket(TEST_SOURCE_BUCKET)
-                .key("acquisitions/2026-10-06/" + TEST_RELEASE_ID + ".json")
-                .ifNoneMatch("*")
-                .contentType("application/json")
-                .build();
+    PutObjectRequest saveManifestRequest =
+        PutObjectRequest.builder()
+            .bucket(TEST_SOURCE_BUCKET)
+            .key("control/acquisitions/2026-10-06/" + TEST_RELEASE_ID + ".json")
+            .ifNoneMatch("*")
+            .contentType("application/json")
+            .build();
 
-        String expectedPlanKey = "acquisitions/2026-10-06/" + TEST_RELEASE_ID + ".json";
+    String expectedPlanKey = "control/acquisitions/2026-10-06/" + TEST_RELEASE_ID + ".json";
 
         S3PutRequestBodyMatcher<VersionCursor> cursorUpdateMatcher = new S3PutRequestBodyMatcher<>(TEST_COU_UPDATE_CURSOR_JSON, VersionCursor.class);
 
@@ -190,14 +191,15 @@ class DiscoveryServiceTest {
                 .key(CURSOR_KEY)
                 .contentType("application/json")
                 .build();
-        PutObjectRequest saveManifestRequest = PutObjectRequest.builder()
-                .bucket(TEST_SOURCE_BUCKET)
-                .key("acquisitions/2026-05-01/" + TEST_RELEASE_ID + ".json")
-                .ifNoneMatch("*")
-                .contentType("application/json")
-                .build();
+    PutObjectRequest saveManifestRequest =
+        PutObjectRequest.builder()
+            .bucket(TEST_SOURCE_BUCKET)
+            .key("control/acquisitions/2026-05-01/" + TEST_RELEASE_ID + ".json")
+            .ifNoneMatch("*")
+            .contentType("application/json")
+            .build();
 
-        String expectedPlanKey = "acquisitions/2026-05-01/" + TEST_RELEASE_ID + ".json";
+    String expectedPlanKey = "control/acquisitions/2026-05-01/" + TEST_RELEASE_ID + ".json";
 
         S3PutRequestBodyMatcher<VersionCursor> cursorUpdateMatcher = new S3PutRequestBodyMatcher<>(TEST_FULL_UPDATE_CURSOR_JSON, VersionCursor.class);
 

@@ -1,6 +1,26 @@
 package uk.gov.companieshouse.addresslookup.release.importer;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+
 import com.amazonaws.services.lambda.runtime.Context;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,36 +42,14 @@ import uk.gov.companieshouse.release.model.Dataset;
 import uk.gov.companieshouse.release.model.ObjectReference;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
 
-import java.time.LocalDate;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockStatic;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
-
 @ExtendWith(MockitoExtension.class)
 class ImportServiceTest {
   private static final String BUCKET = "scanned";
   private static final String RELEASE_ID = "12345678-1234-1234-1234-123456789abc";
-  private static final String MANIFEST_KEY = "manifests/2026-10-06/" + RELEASE_ID + ".json";
+  private static final String MANIFEST_KEY =
+      "control/acquisitions/2026-10-06/" + RELEASE_ID + ".json";
   private static final String OBJECT_KEY =
-      "quarantine/csv/"
-          + RELEASE_ID
-          + "/add_gb_royalmailaddress/12345678-1234-1234-1234-123456789abc.csv";
+      "landing/extracted/" + RELEASE_ID + "/add_gb_royalmailaddress.csv";
   private static final String SHA256 = "a".repeat(64);
 
   @Mock private S3Client s3;
@@ -82,11 +80,10 @@ class ImportServiceTest {
     UUID id = UUID.fromString(RELEASE_ID);
     when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
     when(releases.findById(id)).thenReturn(Optional.empty());
-    when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(true);
     when(store.read(BUCKET, MANIFEST_KEY)).thenReturn(manifestNode);
     when(manifest.id()).thenReturn(id);
     when(manifest.target()).thenReturn(LocalDate.parse("2026-10-06"));
-    when(store.read(eq(BUCKET), org.mockito.ArgumentMatchers.startsWith("ready/")))
+    when(store.read(eq(BUCKET), org.mockito.ArgumentMatchers.startsWith("control/ready/")))
         .thenReturn(null);
 
     try (MockedStatic<ReleaseManifest> mockedManifest = mockStatic(ReleaseManifest.class)) {
@@ -97,7 +94,7 @@ class ImportServiceTest {
 
     verify(registration)
         .register(eq(manifest), eq(MANIFEST_KEY), org.mockito.ArgumentMatchers.matches("[a-f0-9]{64}"));
-    verify(store).isClean(BUCKET, MANIFEST_KEY, null);
+    verify(store, never()).isClean(BUCKET, MANIFEST_KEY, null);
     verify(importer, never())
         .importClean(
             any(), any(), any(), any(), any(), any(), any());
@@ -132,16 +129,20 @@ class ImportServiceTest {
   }
 
   @Test
-  void skipsManifestUntilItsScanIsClean() throws Exception {
+  void readsControlManifestWithoutRequiringAMalwareScan() throws Exception {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
     when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
     when(releases.findById(UUID.fromString(RELEASE_ID))).thenReturn(Optional.empty());
-    when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(false);
+    when(store.read(BUCKET, MANIFEST_KEY))
+        .thenThrow(new IllegalArgumentException("Invalid manifest"));
 
-    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+    assertThrows(
+        IllegalStateException.class,
+        () -> service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
 
-    verify(store, never()).read(any(), any());
+    verify(store).read(BUCKET, MANIFEST_KEY);
+    verify(store, never()).isClean(BUCKET, MANIFEST_KEY, null);
     verify(registration, never()).register(any(), any(), any());
   }
 
@@ -149,7 +150,9 @@ class ImportServiceTest {
   void reportsMalformedManifestKeyForRetry() throws Exception {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
-    when(cursor.next()).thenReturn(Optional.of("manifests/2026-10-06/not-a-uuid.json"), Optional.empty());
+    when(cursor.next())
+        .thenReturn(
+            Optional.of("control/acquisitions/2026-10-06/not-a-uuid.json"), Optional.empty());
 
     var failure =
         assertThrows(
@@ -226,7 +229,7 @@ class ImportServiceTest {
             .put("key", OBJECT_KEY)
             .put("version", "version-1")
             .put("sha256", SHA256);
-    when(store.read(BUCKET, "ready/" + RELEASE_ID + "/add_gb_royalmailaddress.json"))
+    when(store.read(BUCKET, "control/ready/" + RELEASE_ID + "/add_gb_royalmailaddress.json"))
         .thenReturn(reference);
     when(store.clean(BUCKET, reference)).thenReturn(true);
     when(importer.importClean(
@@ -252,7 +255,7 @@ class ImportServiceTest {
         .put("key", OBJECT_KEY)
         .put("version", "version-1")
         .put("sha256", SHA256);
-    when(store.read(BUCKET, "ready/" + RELEASE_ID + "/add_gb_royalmailaddress.json"))
+    when(store.read(BUCKET, "control/ready/" + RELEASE_ID + "/add_gb_royalmailaddress.json"))
         .thenReturn(null, reference);
     when(store.clean(BUCKET, reference)).thenReturn(false);
 
@@ -272,11 +275,11 @@ class ImportServiceTest {
   void rejectsReadyFileFromAnotherReleaseOrDataset() {
     var manifest = mock(ReleaseManifest.class);
     when(manifest.id()).thenReturn(UUID.fromString(RELEASE_ID));
-    var foreignReference = new ObjectReference(
-        "quarantine/csv/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/add_gb_royalmailaddress/"
-            + "12345678-1234-1234-1234-123456789abc.csv",
-        "version-1",
-        SHA256);
+    var foreignReference =
+        new ObjectReference(
+            "landing/extracted/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/add_gb_royalmailaddress.csv",
+            "version-1",
+            SHA256);
 
     var failure =
         assertThrows(
@@ -301,7 +304,7 @@ class ImportServiceTest {
   @Test
   void collectsReadyFileReadFailuresForRetry() throws Exception {
     var store = mock(ReleaseStore.class);
-    when(store.read(eq(BUCKET), org.mockito.ArgumentMatchers.startsWith("ready/")))
+    when(store.read(eq(BUCKET), org.mockito.ArgumentMatchers.startsWith("control/ready/")))
         .thenThrow(new IllegalStateException("S3 unavailable"));
 
     var failures =

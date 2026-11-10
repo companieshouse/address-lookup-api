@@ -5,8 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,8 +19,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import uk.gov.companieshouse.addresslookup.lambda.scan.service.ScanResultsService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport;
-
-import java.util.Map;
 
 @ExtendWith(MockitoExtension.class)
 class HandlerTest {
@@ -36,27 +36,30 @@ class HandlerTest {
     static {
         Map<String, Object> event = null;
         try {
-             event = RuntimeSupport.JSON.readValue("""
+      event =
+          RuntimeSupport.JSON.readValue(
+              """
+              {
+                "detail":
+                {
+                  "s3ObjectDetails":
+                  {
+                    "bucketName":"ingest-bucket",
+                    "versionId":"3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY",
+                    "objectKey":"landing/raw/f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4/add_gb_royalmailaddress.zip"
+                  },
+                  "scanResultDetails":
                     {
-                      "detail":
-                      {
-                        "s3ObjectDetails":
-                        {
-                          "bucketName":"ingest-bucket",
-                          "versionId":"3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY",
-                          "objectKey":"acquisitions/2026-10-15/f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4.json"
-                        },
-                        "scanResultDetails":
-                          {
-                            "scanResultStatus":"NO_THREATS_FOUND"
-                          },
-                        "scanStatus":"COMPLETED"
-                      },
-                      "id":"evt-1",
-                      "source":"aws.guardduty",
-                      "detail-type":"GuardDuty Malware Protection Object Scan Result"
-                    }
-                    """, Map.class);
+                      "scanResultStatus":"NO_THREATS_FOUND"
+                    },
+                  "scanStatus":"COMPLETED"
+                },
+                "id":"evt-1",
+                "source":"aws.guardduty",
+                "detail-type":"GuardDuty Malware Protection Object Scan Result"
+              }
+              """,
+              Map.class);
         } catch (JsonProcessingException e) {
             fail(e);
         }

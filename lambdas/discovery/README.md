@@ -51,11 +51,11 @@ A manifest file (see below) is generated from the Data Package data and the Orde
 
 and is written to the S3 Bucket at:
 
-```acquisitions/{target-date}/{release-id-calculated-from-manifest}.json```
+```control/acquisitions/{target-date}/{release-id-calculated-from-manifest}.json```
 
 e.g.,
 
-```acquisitions/2026-10-06/12345678-1234-1234-1234-123456789abc.json```
+```control/acquisitions/2026-10-06/12345678-1234-1234-1234-123456789abc.json```
 
 The *Release ID* is immutable and is calculated by:
 
@@ -71,7 +71,7 @@ Once the manifest is created successfully, for each dataset, a *command* is sent
   "source": "os.acquisition",
   "detail-type": "DOWNLOAD",
   "detail": {
-    "planKey": "acquisitions/<target>/<releaseId>.json",
+    "planKey": "control/acquisitions/<target>/<releaseId>.json",
     "dataset": "<dataset-name>" 
   }
 ```
@@ -151,11 +151,9 @@ The initial trust policy used to create the role applicable for the Discovery La
 }
 ```
 
-The role then needs to have the Full Access policy for S3 to be added to the role to allow reading and writing from the S3 bucket:
-
-```
-arn:aws:iam::aws:policy/AmazonS3FullAccess
-```
+Use the Discovery role from `terraform/groups/s3`, not `AmazonS3FullAccess`.
+It can read and update `control/address-release/active.json` and write
+`control/acquisitions/*`. It has no Landing or Quarantine access.
 
 A policy needs to be defined, and attached to the role, to allow the Lambda to output events to the event bridge, for the Download Lambda to consume:
 

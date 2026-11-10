@@ -5,7 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.amazonaws.services.lambda.runtime.Context;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,8 +17,6 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uk.gov.companieshouse.addresslookup.lambda.download.service.DownloadService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
-
-import java.util.Map;
 
 @ExtendWith(MockitoExtension.class)
 class HandlerTest {
@@ -29,8 +29,12 @@ class HandlerTest {
 
     private Handler handler;
 
-    private static final Map<String, Object> TEST_EVENT = Map.of("dataset", "add_gb_royalmailaddress",
-            "planKey", "acquisitions/2026-10-06/12345678-1234-1234-1234-123456789abc.json");
+  private static final Map<String, Object> TEST_EVENT =
+      Map.of(
+          "dataset",
+          "add_gb_royalmailaddress",
+          "planKey",
+          "control/acquisitions/2026-10-06/12345678-1234-1234-1234-123456789abc.json");
     private static final String TEST_RESPONSE = "ZIP_SCAN";
 
     @BeforeEach

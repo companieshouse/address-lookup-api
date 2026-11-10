@@ -1,21 +1,19 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.*;
-import uk.gov.companieshouse.release.model.DatasetCatalog;
-
 import java.net.HttpURLConnection;
-import java.time.Instant;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
-
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.*;
+import uk.gov.companieshouse.release.model.DatasetCatalog;
 
 /** S3 progress records and scan evidence; no database dependency. */
 public final class ReleaseStore {
@@ -23,7 +21,6 @@ public final class ReleaseStore {
   private static final String JSON_CONTENT_TYPE = "application/json";
   private static final String FIELD_S3_KEY = "s3Key";
   private static final String FIELD_VERSION = "version";
-  private static final String SCANNED_PREFIX = "Scanned/";
   private final S3Client s3;
 
   public ReleaseStore(S3Client s3) {
@@ -131,23 +128,24 @@ public final class ReleaseStore {
   }
 
   public static String planKey(JsonNode plan) {
-    return "acquisitions/" + required(plan, "target") + "/" + required(plan, "releaseId") + ".json";
+    return "control/acquisitions/"
+        + required(plan, "target")
+        + "/"
+        + required(plan, "releaseId")
+        + ".json";
   }
 
   public static String receiptKey(String id, String dataset, String step) {
     UUID release = UUID.fromString(id);
-    if ("download".equals(step)) {
-      return SCANNED_PREFIX + release + "/" + dataset + ".receipt.json";
-    }
-    return "control/" + release + "/" + dataset + "/" + step + ".json";
+    return "control/receipts/" + release + "/" + dataset + "/" + step + ".json";
   }
 
   public static String extractedCsvKey(String id, String dataset) {
-    return SCANNED_PREFIX + UUID.fromString(id) + "/" + dataset + ".csv";
+    return "landing/extracted/" + UUID.fromString(id) + "/" + dataset + ".csv";
   }
 
   public static String downloadZipKey(String id, String dataset) {
-    return SCANNED_PREFIX + UUID.fromString(id) + "/" + dataset + ".zip";
+    return "landing/raw/" + UUID.fromString(id) + "/" + dataset + ".zip";
   }
 
   public JsonNode receipt(String bucket, String id, String dataset, String step) throws Exception {

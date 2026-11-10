@@ -1,23 +1,22 @@
 package uk.gov.companieshouse.addresslookup.lambda.download.service;
 
+import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.*;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
+
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
+import java.time.Instant;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
-import uk.gov.companieshouse.release.model.Dataset;
-import uk.gov.companieshouse.release.model.DatasetCatalog;
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
-
-import java.time.Instant;
-import java.util.Map;
-
-import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.*;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
+import uk.gov.companieshouse.release.model.Dataset;
+import uk.gov.companieshouse.release.model.DatasetCatalog;
 
 @Component
 public final class DownloadService {
@@ -142,7 +141,9 @@ public final class DownloadService {
 
     // Restricts S3 reads to canonical acquisition manifests.
     private static void validatePlanKey(String planKey) {
-        check(planKey.matches("acquisitions/\\d{4}-\\d{2}-\\d{2}/[0-9a-fA-F-]{36}\\.json"), "Invalid plan key");
+    check(
+        planKey.matches("control/acquisitions/\\d{4}-\\d{2}-\\d{2}/[0-9a-fA-F-]{36}\\.json"),
+        "Invalid plan key");
     }
 
     // A missing plan fails the invocation. The plan key has already passed format validation.

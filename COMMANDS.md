@@ -146,8 +146,12 @@ new or changed local seed files are packaged and applied by Flyway before
 lookups. They do not reset the database. Startup or build failures prevent
 the queries. Unlike `make start`, they do not reuse an already healthy API.
 
-The 14 Cardiff lookups use synthetic local fixtures, including historical
-`CF10 1PX`; they do not assert that these are real or current postal addresses.
+The GB regional seed contains 664 real CSV records, including 266 for
+13 Cardiff postcodes and `KT13 8GL`; the ISL regional seed contains 273.
+`CF10 1PX` remains in the requested test selection
+but currently has no source records; Java integration tests check its empty
+result. `make test-postcode POSTCODE=CF101PX` fails its non-empty-result
+check rather than inventing an address.
 
 ```bash
 make start

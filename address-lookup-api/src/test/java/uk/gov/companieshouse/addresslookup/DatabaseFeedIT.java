@@ -176,7 +176,7 @@ class DatabaseFeedIT {
             "matchdate",
             "matchmethod",
             "matchingorganisation");
-    private static final Set<String> HAPPY_PATH_POSTCODES = Stream.concat(
+    private static final Set<String> REQUESTED_POSTCODES = Stream.concat(
             Stream.of(
                     "WF27QD",
                     "AB101AU",
@@ -239,6 +239,14 @@ class DatabaseFeedIT {
         Flyway changedSeedFlyway = flyway(databaseRoot.resolve("migrations"), tempSeeds);
         assertEquals(seedCount, changedSeedFlyway.migrate().migrationsExecuted);
         changedSeedFlyway.validate();
+
+        Files.writeString(tempSeeds.resolve("R__seed_additional_postcode.sql"),
+                "SELECT 1;\n", StandardOpenOption.CREATE_NEW);
+        Path expandedSeeds = Files.createDirectory(tempSeeds.resolve("expanded"));
+        copySeedsWithChangedChecksums(tempSeeds, expandedSeeds);
+        Flyway expandedSeedFlyway = flyway(databaseRoot.resolve("migrations"), expandedSeeds);
+        assertEquals(seedCount + 1, expandedSeedFlyway.migrate().migrationsExecuted);
+        expandedSeedFlyway.validate();
 
         for (String table : TABLES) {
             assertEquals(localRowCounts.get(table), rowCount(table, "local"));
@@ -456,23 +464,30 @@ class DatabaseFeedIT {
     }
 
     private static void assertLocalFixtures() throws SQLException {
-        assertEquals(15, rowCount(TABLES.get(0), "local-synthetic-cardiff"));
+        assertEquals(694, rowCount(TABLES.get(0), "local"));
+        assertEquals(273, rowCount(TABLES.get(1), "local"));
         assertEquals(30, scenarioPostcodeRowCount());
         try (Connection connection = connection()) {
-            for (String postcode : HAPPY_PATH_POSTCODES) {
+            for (String postcode : REQUESTED_POSTCODES) {
                 try (PreparedStatement statement = connection.prepareStatement(
                         "SELECT count(*) FROM address_lookup.address_lookup "
                                 + "WHERE upper(replace(postcode, ' ', '')) = ?")) {
                     statement.setString(1, postcode);
                     try (ResultSet result = statement.executeQuery()) {
                         assertTrue(result.next());
-                        assertTrue(result.getLong(1) > 0, "Missing postcode fixture " + postcode);
+                        if ("CF101PX".equals(postcode)) {
+                            assertEquals(0, result.getLong(1), "No source records for " + postcode);
+                        } else {
+                            assertTrue(result.getLong(1) > 0, "Missing postcode fixture " + postcode);
+                        }
                     }
                 }
             }
             assertTrue(countSource(connection, "GB") > 0, "No GB view rows");
             assertTrue(countSource(connection, "ISL") > 0, "No ISL view rows");
             assertViewSourceForPostcode(connection, "WF27QD", "GB");
+            assertViewSourceForPostcode(connection, "CF143AT", "GB");
+            assertViewSourceForPostcode(connection, "KT138GL", "GB");
             assertViewSourceForPostcode(connection, "GY79AD", "ISL");
             assertEquals(0, countInvalidSourceIds(connection));
             assertRegionGeometry(connection, TABLES.get(0), 27700, true);
@@ -700,7 +715,12 @@ class DatabaseFeedIT {
             List<Path> seeds = files
                     .filter(path -> path.getFileName().toString().endsWith(".sql"))
                     .toList();
-            assertTrue(seeds.size() >= 3, "Expected dataset seeds and synthetic fixtures");
+            assertTrue(seeds.contains(localSeeds.resolve("R__seed_add_gb_royalmailaddress.sql")),
+                    "Expected the GB seed migration");
+            assertTrue(seeds.contains(localSeeds.resolve("R__seed_add_isl_royalmailaddress.sql")),
+                    "Expected the ISL seed migration");
+            assertFalse(seeds.contains(localSeeds.resolve("R__seed_synthetic_cardiff_addresses.sql")),
+                    "The retired Cardiff seed must not be present");
             for (Path seed : seeds) {
                 Path copy = target.resolve(seed.getFileName());
                 Files.copy(seed, copy);

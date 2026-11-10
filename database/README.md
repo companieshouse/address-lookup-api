@@ -42,12 +42,22 @@ does not create `flyway_schema_history`. The separate production migration
 runner is managed outside this feed and checkout. Do not treat the presence of
 SQL here as proof that an external database release was deployed.
 
-The core local repeatable seeds cover all ten current happy-path API postcode
-fixtures. `R__seed_add_gb_royalmailaddress.sql` also contains the source-accurate
-GB records for E13 9JU, PO33 4PL, IG9 5AZ, WC1N 1JP and N1 6AR. The
-source-accurate seeds retain `country = 'Scotland'` for GB UDPRN 19 and
+The two local repeatable seeds contain 694 GB and 273 ISL records. The GB seed
+includes 266 Cardiff/Weybridge records and 30 records for E13 9JU, PO33 4PL,
+IG9 5AZ, WC1N 1JP and N1 6AR. No separate Cardiff seed is used. The core
+fixtures cover the current happy-path API postcodes; `CF10 1PX` remains an
+explicit zero-result test postcode. Both regional seeds replace only their
+`local` rows on reapplication, preserving other releases. The source-accurate
+seeds retain `country = 'Scotland'` for GB UDPRN 19 and
 `country = 'Channel Islands'` for ISL UDPRN 10403188. These replace the earlier
 synthetic NULL-country examples; the schema still permits NULL countries.
+
+When switching from the former three-seed layout, run `make clean` before
+building so obsolete SQL is removed from Maven's resource output. If a local
+database has already applied the removed Cardiff repeatable, recreate that
+disposable database with `make db-reset CONFIRM=address_lookup` rather than
+repairing Flyway history. This reset deletes the local `address_lookup`
+database and its data; do not run it against a shared database.
 
 The `os_ingest.promote_full` procedure is not part of this initial feed phase.
 Ian Mclaughlin clarified on 2026-10-13 that it is intended to promote a FULL

@@ -5,9 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import com.amazonaws.services.lambda.runtime.Context;
-import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,8 +13,10 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
-import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
 import uk.gov.companieshouse.addresslookup.lambda.unzip.service.ExtractionService;
+import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
+
+import java.util.Map;
 
 @ExtendWith(MockitoExtension.class)
 class HandlerTest {
@@ -29,22 +29,16 @@ class HandlerTest {
 
     private Handler handler;
 
-  private static final Map<String, Object> TEST_EVENT =
-      Map.of(
-          "detail",
-          Map.of(
-              "schemaVersion",
-              "1.0",
-              "releaseId",
-              "12345678-1234-1234-1234-123456789abc",
-              "dataset",
-              "add_gb_royalmailaddress",
-              "object",
-              Map.of(
-                  "bucket", "source",
-                  "key",
-                      "landing/raw/12345678-1234-1234-1234-123456789abc/add_gb_royalmailaddress.zip",
-                  "versionId", "zip-version")));
+    private static final Map<String, Object> TEST_EVENT = Map.of("detail",
+            Map.of("schemaVersion", "1.0",
+            "releaseId", "12345678-1234-1234-1234-123456789abc",
+            "dataset", "add_gb_royalmailaddress",
+            "object", Map.of(
+                    "bucket", "source",
+                    "key", "Scanned/12345678-1234-1234-1234-123456789abc/add_gb_royalmailaddress.zip",
+                    "versionId", "zip-version")
+    )
+    );
     private static final String TEST_RESPONSE = "RECONCILED";
 
     @BeforeEach

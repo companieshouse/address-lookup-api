@@ -1,11 +1,18 @@
 package uk.gov.companieshouse.addresslookup.lambda.unzip.service;
 
-import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.*;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
-
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.jspecify.annotations.NonNull;
+import org.springframework.stereotype.Component;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
+import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
+import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
+import uk.gov.companieshouse.release.model.DatasetCatalog;
+
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -15,20 +22,15 @@ import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipInputStream;
+
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
-import org.jspecify.annotations.NonNull;
-import org.springframework.stereotype.Component;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
-import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
-import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
-import uk.gov.companieshouse.release.model.DatasetCatalog;
+
+import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.*;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 /**
  * Red-zone extraction reads only the exact clean ZIP version.
@@ -98,7 +100,8 @@ public final class ExtractionService {
         String zipVersion = required(scanObject, "versionId");
 
         check(scanBucket.equals(properties.sourceBucket()), "Unexpected ZIP bucket");
-    check(s3Key.equals(ReleaseStore.downloadZipKey(releaseId, table.name())), "Unexpected ZIP key");
+        check(s3Key.equals("Scanned/" + releaseId + "/" + table.name() + ".zip"),
+                "Unexpected ZIP key");
 
         var store = new ReleaseStore(s3);
         String checked = properties.scannedBucket();

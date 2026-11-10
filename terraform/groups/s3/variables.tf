@@ -10,16 +10,6 @@ variable "environment" {
   description = "The environment name to be used when creating AWS resources"
 }
 
-variable "break_glass_role_arn" {
-  type        = string
-  description = "Approved break-glass IAM role ARN; its owner attaches the output read policy and manages audited access"
-
-  validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", var.break_glass_role_arn))
-    error_message = "Supply the approved IAM role ARN, not an assumed-role session ARN."
-  }
-}
-
 # ---------------- OPTIONAL VARIABLES ----------------
 variable "aws_region" {
   type        = string
@@ -29,22 +19,30 @@ variable "aws_region" {
 
 variable "landing_retention_days" {
   type        = number
-  description = "Days before current and noncurrent versions under landing/raw/ and landing/extracted/ expire"
+  description = "Days before objects under raw/ and extracted/ (and in Quarantine) expire. To be agreed in ALS-102"
   default     = 30
+}
 
-  validation {
-    condition     = var.landing_retention_days >= 1 && floor(var.landing_retention_days) == var.landing_retention_days
-    error_message = "Landing retention must be a positive whole number of days."
-  }
+variable "noncurrent_retention_days" {
+  type        = number
+  description = "Days before noncurrent object versions under expiring prefixes are permanently deleted"
+  default     = 30
 }
 
 variable "audit_retention_days" {
   type        = number
-  description = "Days before current and noncurrent manifest versions under control/acquisitions/ expire"
+  description = "Days before objects under sources/acquisitions/ expire; kept longer than landing data for audit. To be agreed in ALS-102"
   default     = 365
+}
 
-  validation {
-    condition     = var.audit_retention_days >= 1 && floor(var.audit_retention_days) == var.audit_retention_days
-    error_message = "Audit retention must be a positive whole number of days."
-  }
+variable "quarantine_lambda_role_name" {
+  type        = string
+  description = "Name of the Quarantine Lambda's IAM role; the only principal allowed to write to the Quarantine bucket"
+  default     = "address-lookup-quarantine-lambda"
+}
+
+variable "break_glass_role_name" {
+  type        = string
+  description = "Name of the break-glass IAM role; the only principal allowed to read the Quarantine bucket"
+  default     = "address-lookup-quarantine-break-glass"
 }

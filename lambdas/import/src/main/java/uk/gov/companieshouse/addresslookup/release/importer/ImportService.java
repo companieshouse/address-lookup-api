@@ -1,9 +1,6 @@
 package uk.gov.companieshouse.addresslookup.release.importer;
 
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
-
 import com.amazonaws.services.lambda.runtime.Context;
-import java.util.*;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReconciliationCursor;
@@ -14,11 +11,15 @@ import uk.gov.companieshouse.addresslookup.releasecore.service.PromotionService;
 import uk.gov.companieshouse.addresslookup.releasecore.service.ReleaseRegistration;
 import uk.gov.companieshouse.addresslookup.releasecore.state.Release;
 import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseRepository;
-import uk.gov.companieshouse.logging.Logger;
-import uk.gov.companieshouse.logging.LoggerFactory;
 import uk.gov.companieshouse.release.model.Dataset;
 import uk.gov.companieshouse.release.model.ObjectReference;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
+
+import java.util.*;
+
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 /**
  * Events are wake-ups only; persisted immutable descriptions and clean evidence authorize import.
@@ -53,7 +54,7 @@ public final class ImportService {
     String bucket = properties.scannedBucket();
     return reconcile(
         new ReleaseStore(s3),
-        new ReconciliationCursor(s3, bucket, "control/acquisitions/", "imports"),
+        new ReconciliationCursor(s3, bucket, "manifests/", "imports"),
         bucket,
         properties.region(),
         context);
@@ -82,10 +83,11 @@ public final class ImportService {
         var existing = releases.findById(id);
         if (existing.isPresent() && existing.get().getStatus() != Release.Status.PROCESSING)
           continue;
+        if (!store.isClean(bucket, key, null)) continue;
         var node = store.read(bucket, key);
         var manifest = ReleaseManifest.read(node);
         check(
-            key.equals("control/acquisitions/" + manifest.target() + "/" + manifest.id() + ".json"),
+            key.equals("manifests/" + manifest.target() + "/" + manifest.id() + ".json"),
             "Manifest key mismatch");
         registration.register(
             manifest, key, sha(node.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
@@ -157,7 +159,7 @@ public final class ImportService {
       DatasetImportService importer,
       String region)
       throws Exception {
-    String evidenceKey = "control/ready/" + manifest.id() + "/" + dataset.datasetName() + ".json";
+    String evidenceKey = "ready/" + manifest.id() + "/" + dataset.datasetName() + ".json";
     var ref = store.read(bucket, evidenceKey);
     if (ref == null) return false;
     var object = ObjectReference.read(ref);
@@ -170,7 +172,12 @@ public final class ImportService {
   static void validateReference(ReleaseManifest manifest, Dataset dataset, ObjectReference ref) {
     check(
         ref.key()
-            .equals(ReleaseStore.extractedCsvKey(manifest.id().toString(), dataset.datasetName())),
+            .matches(
+                "quarantine/csv/"
+                    + manifest.id()
+                    + "/"
+                    + dataset.datasetName()
+                    + "/[a-f0-9-]{36}\\.csv"),
         "CSV must belong to release and dataset");
   }
 }

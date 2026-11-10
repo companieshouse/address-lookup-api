@@ -1,22 +1,23 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.util;
 
+import uk.gov.companieshouse.release.model.Dataset;
+
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import uk.gov.companieshouse.release.model.Dataset;
 
-/** Shared S3 key layout for acquisition metadata and landing payloads. */
+/** Shared S3 key layout for scanned ZIPs, receipts, manifests and extracted CSVs. */
 public class KeyLayout {
   private static final String UUID =
       "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
   private static final Pattern OBJECT =
+      Pattern.compile("^(zips|csv)/(\\w+-\\w+)/([a-z0-9_]+)\\.(zip|csv)$");
+  private static final Pattern SCANNED_OBJECT =
       Pattern.compile(
-          "^landing/(raw|extracted)/(" + UUID + "|\\w+-\\w+)/([a-z0-9_]+)\\.(zip|csv)$");
-  private static final Pattern RECEIPT =
-      Pattern.compile("^control/receipts/(" + UUID + ")/([a-z0-9_]+)/download\\.json$");
+          "^Scanned/(" + UUID + ")/([a-z0-9_]+)\\.(zip|receipt\\.json)$");
   private static final Pattern MANIFEST =
-      Pattern.compile("^control/acquisitions/(\\d{4}-\\d{2}-\\d{2})/(" + UUID + ")\\.json$");
+      Pattern.compile("^acquisitions/(\\d{4}-\\d{2}-\\d{2})/(" + UUID + ")\\.json$");
 
   private KeyLayout() {}
 
@@ -33,11 +34,13 @@ public class KeyLayout {
   public record ObjectKey(String releaseId, Dataset dataset, FileType fileType) {}
 
   public static String zipKey(String releaseId, Dataset dataset) {
-    return "landing/raw/" + releaseId + "/" + dataset.datasetName() + ".zip";
+    String scannedKey = "Scanned/" + releaseId + "/" + dataset.datasetName() + ".zip";
+    if (SCANNED_OBJECT.matcher(scannedKey).matches()) return scannedKey;
+    return "zips/" + releaseId + "/" + dataset.datasetName() + ".zip";
   }
 
   public static String csvKey(String releaseId, Dataset dataset) {
-    return "landing/extracted/" + releaseId + "/" + dataset.datasetName() + ".csv";
+    return "csv/" + releaseId + "/" + dataset.datasetName() + ".csv";
   }
 
   /**
@@ -54,14 +57,16 @@ public class KeyLayout {
       }
       return new ObjectKey(manifest.group(2), null, FileType.MANIFEST);
     }
-    Matcher receipt = RECEIPT.matcher(key);
-    if (receipt.matches()) {
-      return new ObjectKey(receipt.group(1), Dataset.named(receipt.group(2)), FileType.RECEIPT);
+    Matcher scanned = SCANNED_OBJECT.matcher(key);
+    if (scanned.matches()) {
+      return new ObjectKey(
+          scanned.group(1), Dataset.named(scanned.group(2)),
+          "zip".equals(scanned.group(3)) ? FileType.ZIP : FileType.RECEIPT);
     }
     Matcher m = OBJECT.matcher(key);
     if (!m.matches()) throw new IllegalArgumentException("Invalid object key");
-    boolean zipKey = "zip".equals(m.group(4)) && "raw".equals(m.group(1));
-    boolean csvKey = "csv".equals(m.group(4)) && "extracted".equals(m.group(1));
+    boolean zipKey = "zip".equals(m.group(4)) && "zips".equals(m.group(1));
+    boolean csvKey = "csv".equals(m.group(4)) && "csv".equals(m.group(1));
     if (!zipKey && !csvKey) {
       throw new IllegalArgumentException("Invalid object key");
     }

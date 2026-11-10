@@ -22,13 +22,18 @@ provider "aws" {
 }
 
 resource "aws_s3_bucket" "this" {
-  bucket = "${local.name_prefix}-acquisition-${data.aws_caller_identity.current.account_id}"
-  tags   = local.tags
+  for_each = local.buckets
+
+  bucket = each.value.name
+
+  tags = merge(module.iac_tags.tags, module.owner_tags.tags, { Purpose = each.key })
 }
 
 # Extraction and Upload pin to object versionId, so versioning is required.
 resource "aws_s3_bucket_versioning" "this" {
-  bucket = aws_s3_bucket.this.id
+  for_each = local.buckets
+
+  bucket = aws_s3_bucket.this[each.key].id
 
   versioning_configuration {
     status = "Enabled"
@@ -36,7 +41,9 @@ resource "aws_s3_bucket_versioning" "this" {
 }
 
 resource "aws_s3_bucket_public_access_block" "this" {
-  bucket = aws_s3_bucket.this.id
+  for_each = local.buckets
+
+  bucket = aws_s3_bucket.this[each.key].id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -45,7 +52,9 @@ resource "aws_s3_bucket_public_access_block" "this" {
 }
 
 resource "aws_s3_bucket_ownership_controls" "this" {
-  bucket = aws_s3_bucket.this.id
+  for_each = local.buckets
+
+  bucket = aws_s3_bucket.this[each.key].id
 
   rule {
     object_ownership = "BucketOwnerEnforced"
@@ -53,7 +62,9 @@ resource "aws_s3_bucket_ownership_controls" "this" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
-  bucket = aws_s3_bucket.this.id
+  for_each = local.buckets
+
+  bucket = aws_s3_bucket.this[each.key].id
 
   rule {
     apply_server_side_encryption_by_default {
@@ -63,48 +74,111 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
 }
 
 resource "aws_s3_bucket_policy" "this" {
-  bucket = aws_s3_bucket.this.id
-  policy = data.aws_iam_policy_document.bucket.json
+  for_each = local.buckets
+
+  bucket = aws_s3_bucket.this[each.key].id
+  policy = data.aws_iam_policy_document.bucket[each.key].json
 
   depends_on = [aws_s3_bucket_public_access_block.this]
 }
 
-resource "aws_s3_bucket_lifecycle_configuration" "this" {
-  bucket = aws_s3_bucket.this.id
+# Landing: raw/ and extracted/ expire after var.landing_retention_days.
+resource "aws_s3_bucket_lifecycle_configuration" "landing" {
+  bucket = aws_s3_bucket.this["landing"].id
 
-  lifecycle {
-    precondition {
-      condition     = var.audit_retention_days > var.landing_retention_days
-      error_message = "Acquisition manifests must be retained longer than landing payloads."
+  rule {
+    id     = "expire-raw"
+    status = "Enabled"
+
+    filter {
+      prefix = "raw/"
+    }
+
+    expiration {
+      days = var.landing_retention_days
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = var.noncurrent_retention_days
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
     }
   }
 
-  dynamic "rule" {
-    for_each = {
-      raw          = { prefix = "landing/raw/", days = var.landing_retention_days }
-      extracted    = { prefix = "landing/extracted/", days = var.landing_retention_days }
-      acquisitions = { prefix = "control/acquisitions/", days = var.audit_retention_days }
+  rule {
+    id     = "expire-extracted"
+    status = "Enabled"
+
+    filter {
+      prefix = "extracted/"
     }
 
-    content {
-      id     = "expire-${rule.key}"
-      status = "Enabled"
+    expiration {
+      days = var.landing_retention_days
+    }
 
-      filter {
-        prefix = rule.value.prefix
-      }
+    noncurrent_version_expiration {
+      noncurrent_days = var.noncurrent_retention_days
+    }
 
-      expiration {
-        days = rule.value.days
-      }
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
 
-      noncurrent_version_expiration {
-        noncurrent_days = rule.value.days
-      }
+  depends_on = [aws_s3_bucket_versioning.this]
+}
 
-      abort_incomplete_multipart_upload {
-        days_after_initiation = 7
-      }
+# Control: sources/acquisitions/ is kept longer for audit.
+resource "aws_s3_bucket_lifecycle_configuration" "control" {
+  bucket = aws_s3_bucket.this["control"].id
+
+  rule {
+    id     = "expire-acquisition-sources"
+    status = "Enabled"
+
+    filter {
+      prefix = "sources/acquisitions/"
+    }
+
+    expiration {
+      days = var.audit_retention_days
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = var.audit_retention_days
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.this]
+}
+
+# Quarantine holds objects awaiting scan or failed scan; expire them like landing data.
+resource "aws_s3_bucket_lifecycle_configuration" "quarantine" {
+  bucket = aws_s3_bucket.this["quarantine"].id
+
+  rule {
+    id     = "expire-quarantine"
+    status = "Enabled"
+
+    filter {}
+
+    expiration {
+      days = var.landing_retention_days
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = var.noncurrent_retention_days
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
     }
   }
 

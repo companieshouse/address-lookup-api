@@ -1,35 +1,13 @@
 package uk.gov.companieshouse.addresslookup.lambda.download.service;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
-
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.LoggerContext;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.read.ListAppender;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import java.io.ByteArrayInputStream;
-import java.lang.reflect.Proxy;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.time.Duration;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HexFormat;
-import java.util.List;
-import java.util.Map;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -42,13 +20,36 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
 import uk.gov.companieshouse.addresslookup.lambda.shared.testsupport.FakeS3;
 import uk.gov.companieshouse.logging.StructuredLogger;
 
+import java.io.ByteArrayInputStream;
+import java.lang.reflect.Proxy;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+
 @ExtendWith(MockitoExtension.class)
 final class DownloadServiceTest {
     private static final Logger STRUCTURED_LOGGER =
             (Logger) LoggerFactory.getLogger(StructuredLogger.class);
     private static final String BUCKET = "source-bucket";
-  private static final String PLAN_KEY =
-      "control/acquisitions/2026-05-16/4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json";
+    private static final String PLAN_KEY =
+            "acquisitions/2026-05-16/4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json";
     private static final String RELEASE_ID = "4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56";
     private static final String DATASET = "add_gb_royalmailaddress";
     @Mock
@@ -66,13 +67,13 @@ final class DownloadServiceTest {
 
         assertEquals("ZIP_SCAN", service.download(event(), context()));
 
-    String expectedZipKey = "landing/raw/" + RELEASE_ID + "/" + DATASET + ".zip";
+        String expectedZipKey = "Scanned/" + RELEASE_ID + "/" + DATASET + ".zip";
         verify(os).download(expectedUrl);
         assertEquals(List.of(expectedZipKey), s3.completedKeys);
         assertTrue(s3.completedKeys.stream().noneMatch(k -> k.contains("add_gb_builtaddress")));
-    assertEquals(
-        "control/receipts/" + RELEASE_ID + "/" + DATASET + "/download.json",
-        ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download"));
+        assertEquals(
+                "Scanned/" + RELEASE_ID + "/" + DATASET + ".receipt.json",
+                ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download"));
         assertTrue(s3.objects.containsKey(ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download")));
         JsonNode receipt =
                 JSON.readTree(s3.objects.get(ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download")));
@@ -86,10 +87,7 @@ final class DownloadServiceTest {
         assertEquals("DOWNLOADED", receipt.path("status").asText());
         assertFalse(receipt.path("downloadedAt").asText().isBlank());
         assertEquals(expectedUrl, receipt.path("sourceUrl").asText());
-    String checksumKey =
-        "control/checksums/raw/"
-            + sha256(expectedZipKey.getBytes(StandardCharsets.UTF_8))
-            + ".json";
+        String checksumKey = "metadata/checksums/" + sha256(expectedZipKey.getBytes(StandardCharsets.UTF_8)) + ".json";
         JsonNode evidence = JSON.readTree(s3.objects.get(checksumKey));
         assertEquals(BUCKET, evidence.path("bucket").asText());
         assertEquals(expectedZipKey, evidence.path("key").asText());
@@ -177,9 +175,7 @@ final class DownloadServiceTest {
     @Test
     void rejectsCommandWithInvalidPlanKeyFormatBeforeReadingS3() throws Exception {
         var event = event();
-    event.put(
-        "detail",
-        Map.of("planKey", "control/acquisitions/not-a-date/not-a-uuid.json", "dataset", DATASET));
+        event.put("detail", Map.of("planKey", "acquisitions/not-a-date/not-a-uuid.json", "dataset", DATASET));
 
         assertRejected(event, "Invalid plan key");
     }
@@ -294,9 +290,7 @@ final class DownloadServiceTest {
         String receiptKey = ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download");
         byte[] original = "{\"status\":\"ORIGINAL\"}".getBytes(StandardCharsets.UTF_8);
         s3.objects.put(receiptKey, original);
-    var upload =
-        new StreamingS3.Uploaded(
-            "landing/raw/" + RELEASE_ID + "/" + DATASET + ".zip", "v1", "sha", "md5", 1L);
+        var upload = new StreamingS3.Uploaded("Scanned/" + RELEASE_ID + "/" + DATASET + ".zip", "v1", "sha", "md5", 1L);
 
         // A 412 from the conditional create is tolerated and the existing receipt stays untouched.
         new ReleaseStore(s3.client())
@@ -337,7 +331,7 @@ final class DownloadServiceTest {
             var service = new DownloadService(s3.client(), os, properties());
 
             assertEquals("ZIP_SCAN", service.download(event, context()));
-      assertEquals(List.of("landing/raw/" + RELEASE_ID + "/" + dataset + ".zip"), s3.completedKeys);
+            assertEquals(List.of("Scanned/" + RELEASE_ID + "/" + dataset + ".zip"), s3.completedKeys);
             assertTrue(s3.objects.containsKey(ReleaseStore.receiptKey(RELEASE_ID, dataset, "download")));
             assertTrue(s3.objects.keySet().stream().noneMatch(k -> k.endsWith(".download-attempt.json")));
         }
@@ -398,30 +392,20 @@ final class DownloadServiceTest {
     void existingReceiptMakesDownloadIdempotent() throws Exception {
         var s3 = new FakeS3();
         s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
-    s3.objects.put(
-        ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download"),
-        JSON.writeValueAsBytes(
-            Map.of(
-                "releaseId",
-                RELEASE_ID,
-                "dataset",
-                DATASET,
-                "fileName",
-                DATASET + ".zip",
-                "s3Key",
-                "landing/raw/" + RELEASE_ID + "/" + DATASET + ".zip",
-                "downloadedBytes",
-                1,
-                "calculatedMd5",
-                "17db768ba6b7a85c5e34d5e200930ff5",
-                "expectedMd5",
-                "17db768ba6b7a85c5e34d5e200930ff5",
-                "status",
-                "DOWNLOADED",
-                "downloadedAt",
-                "2026-05-16T09:15:23Z",
-                "sourceUrl",
-                "https://api.os.uk/example")));
+        s3.objects.put(
+                ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download"),
+                JSON.writeValueAsBytes(
+                        Map.of(
+                                "releaseId", RELEASE_ID,
+                                "dataset", DATASET,
+                                "fileName", DATASET + ".zip",
+                                "s3Key", "Scanned/" + RELEASE_ID + "/" + DATASET + ".zip",
+                                "downloadedBytes", 1,
+                                "calculatedMd5", "17db768ba6b7a85c5e34d5e200930ff5",
+                                "expectedMd5", "17db768ba6b7a85c5e34d5e200930ff5",
+                                "status", "DOWNLOADED",
+                                "downloadedAt", "2026-05-16T09:15:23Z",
+                                "sourceUrl", "https://api.os.uk/example")));
         var service = new DownloadService(s3.client(), os, properties());
 
         assertEquals("SKIPPED", service.download(event(), context()));

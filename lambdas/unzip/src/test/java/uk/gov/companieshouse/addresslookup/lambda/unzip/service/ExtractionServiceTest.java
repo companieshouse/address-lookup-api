@@ -9,6 +9,13 @@ import static org.mockito.Mockito.*;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
+import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -19,11 +26,8 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.AbortableInputStream;
@@ -41,20 +45,17 @@ import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
-import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.Tag;
 import software.amazon.awssdk.services.s3.model.UploadPartResponse;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
-import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.release.model.DatasetCatalog;
 
 @ExtendWith(MockitoExtension.class)
 final class ExtractionServiceTest {
     private static final String DATASET = "add_gb_royalmailaddress";
     private static final String ID = "12345678-1234-1234-1234-123456789abc";
-  private static final String ZIP_KEY = "landing/raw/" + ID + "/" + DATASET + ".zip";
+    private static final String ZIP_KEY = "Scanned/" + ID + "/" + DATASET + ".zip";
     private static final String RECEIPT_KEY = ReleaseStore.receiptKey(ID, DATASET, "extract");
     private static final String SOURCE = "source";
     private static final String CHECKED = "checked";
@@ -279,7 +280,7 @@ final class ExtractionServiceTest {
         JsonNode receipt = capturedReceipt();
         assertEquals(ID, receipt.path("releaseId").asText());
         assertEquals(DATASET, receipt.path("dataset").asText());
-    assertEquals("landing/extracted/" + ID + "/" + DATASET + ".csv", receipt.path("key").asText());
+        assertEquals("Scanned/" + ID + "/" + DATASET + ".csv", receipt.path("key").asText());
         assertEquals("csv-version", receipt.path("version").asText());
         assertTrue(receipt.path("sha256").asText().matches("[a-f0-9]{64}"));
         assertEquals("zip-version", receipt.path("zipVersion").asText());
@@ -515,7 +516,7 @@ final class ExtractionServiceTest {
             failReceiptOnce = false;
             throw S3Exception.builder().statusCode(503).message("S3 unavailable").build();
         }
-    if (failEvidenceOnce && request.key().startsWith("control/checksums/extracted/")) {
+        if (failEvidenceOnce && request.key().startsWith("metadata/checksums/")) {
             failEvidenceOnce = false;
             throw S3Exception.builder().statusCode(503).message("S3 unavailable").build();
         }

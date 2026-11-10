@@ -1,12 +1,13 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
-
-import java.util.Optional;
-import java.util.UUID;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
+
+import java.util.Optional;
+import java.util.UUID;
+
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 /** A listing position, not processing state. Every retained key is revisited on the next sweep. */
 public final class ReconciliationCursor {
@@ -19,7 +20,7 @@ public final class ReconciliationCursor {
     this.s3 = s3;
     this.bucket = bucket;
     this.prefix = prefix;
-    this.cursorKey = "control/reconciliation/" + name + ".json";
+    this.cursorKey = "reconciliation/" + name + ".json";
   }
 
   /**

@@ -1,17 +1,5 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
-
-import java.nio.charset.StandardCharsets;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -23,9 +11,22 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
 import uk.gov.companieshouse.addresslookup.lambda.shared.testsupport.FakeS3;
 
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+
 final class ReleaseStoreTest {
     private static final String BUCKET = "source-bucket";
-  private static final String KEY = "landing/raw/zip.zip";
+    private static final String KEY = "Scanned/zip.zip";
     private static final String ID = "4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56";
     private static final String DATASET = "add_gb_royalmailaddress";
 
@@ -34,7 +35,7 @@ final class ReleaseStoreTest {
 
     @Test
     void readReturnsNullWhenKeyDoesNotExist() throws Exception {
-    assertNull(store.read(BUCKET, "control/acquisitions/missing.json"));
+        assertNull(store.read(BUCKET, "acquisitions/missing.json"));
     }
 
     @Test
@@ -196,24 +197,19 @@ final class ReleaseStoreTest {
     void planKeyIsBuiltFromTargetAndReleaseId() {
         var plan = JSON.createObjectNode().put("target", "2026-05-16").put("releaseId", ID);
 
-    assertEquals("control/acquisitions/2026-05-16/" + ID + ".json", ReleaseStore.planKey(plan));
+        assertEquals("acquisitions/2026-05-16/" + ID + ".json", ReleaseStore.planKey(plan));
     }
 
     @Test
     void receiptKeyDiffersForDownloadAndOtherSteps() {
-    assertEquals(
-        "control/receipts/" + ID + "/" + DATASET + "/download.json",
-        ReleaseStore.receiptKey(ID, DATASET, "download"));
-    assertEquals(
-        "control/receipts/" + ID + "/" + DATASET + "/extract.json",
-        ReleaseStore.receiptKey(ID, DATASET, "extract"));
+        assertEquals("Scanned/" + ID + "/" + DATASET + ".receipt.json", ReleaseStore.receiptKey(ID, DATASET, "download"));
+        assertEquals("control/" + ID + "/" + DATASET + "/extract.json", ReleaseStore.receiptKey(ID, DATASET, "extract"));
         assertThrows(IllegalArgumentException.class, () -> ReleaseStore.receiptKey("not-a-uuid", DATASET, "download"));
     }
 
     @Test
     void downloadZipKeyUsesScannedPrefix() {
-    assertEquals(
-        "landing/raw/" + ID + "/" + DATASET + ".zip", ReleaseStore.downloadZipKey(ID, DATASET));
+        assertEquals("Scanned/" + ID + "/" + DATASET + ".zip", ReleaseStore.downloadZipKey(ID, DATASET));
     }
 
     @Test

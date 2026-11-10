@@ -1,12 +1,6 @@
 package uk.gov.companieshouse.addresslookup.lambda.scan.service;
 
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
-
 import com.fasterxml.jackson.databind.JsonNode;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 import org.springframework.stereotype.Component;
 import uk.gov.companieshouse.addresslookup.lambda.scan.InvalidReason;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
@@ -16,6 +10,13 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.FileType
 import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.ObjectKey;
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 
 /**
  * Stateless router for GuardDuty scan results. It never touches S3 or stores state; duplicate
@@ -103,8 +104,7 @@ public final class ScanResultsService {
         || !DETAIL_TYPE.equals(text(input, "detail-type"))) {
       return new Validation(parsed, InvalidReason.UNEXPECTED_SOURCE_OR_DETAIL_TYPE);
     }
-    if (parsed == null || (parsed.fileType() != FileType.ZIP && parsed.fileType() != FileType.CSV))
-      return new Validation(parsed, InvalidReason.INVALID_OBJECT_KEY);
+    if (parsed == null) return new Validation(null, InvalidReason.INVALID_OBJECT_KEY);
     if (versionId == null) return new Validation(parsed, InvalidReason.MISSING_VERSION_ID);
     String expectedBucket = parsed.fileType() == FileType.CSV ? cleanBucket : ingestBucket;
     return new Validation(

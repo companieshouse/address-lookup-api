@@ -191,6 +191,7 @@ class DatabaseFeedIT {
                     "CF143AT", "CF146RP", "CF239XN", "CF243DJ",
                     "CF102BY", "CF245HB", "CF101FG", "CF102EF",
                     "CF101GA", "CF102HQ", "CF101PX", "CF102DP",
+                    "E139JU", "PO334PL", "IG95AZ", "WC1N1JP", "N16AR",
                     "CF118TA", "CF145XW", "KT138GL"),
             BorderPostcodeFixtures.compactPostcodes().stream())
             .collect(Collectors.toUnmodifiableSet());
@@ -463,8 +464,9 @@ class DatabaseFeedIT {
     }
 
     private static void assertLocalFixtures() throws SQLException {
-        assertEquals(664, rowCount(TABLES.get(0), "local"));
+        assertEquals(694, rowCount(TABLES.get(0), "local"));
         assertEquals(273, rowCount(TABLES.get(1), "local"));
+        assertEquals(30, scenarioPostcodeRowCount());
         try (Connection connection = connection()) {
             for (String postcode : REQUESTED_POSTCODES) {
                 try (PreparedStatement statement = connection.prepareStatement(
@@ -492,6 +494,23 @@ class DatabaseFeedIT {
             assertRegionGeometry(connection, TABLES.get(1), 4258, false);
             assertCountryFixture(connection, TABLES.get(0), 19, "Scotland");
             assertCountryFixture(connection, TABLES.get(1), 10403188, "Channel Islands");
+        }
+    }
+
+    private static long scenarioPostcodeRowCount() throws SQLException {
+        List<String> postcodes = List.of("E139JU", "PO334PL", "IG95AZ", "WC1N1JP", "N16AR");
+        try (Connection connection = connection();
+                PreparedStatement statement = connection.prepareStatement(
+                        "SELECT count(*) FROM os_data.add_gb_royalmailaddress_v2 "
+                                + "WHERE release_id = 'local' "
+                                + "AND upper(replace(postcode, ' ', '')) IN (?, ?, ?, ?, ?)")) {
+            for (int index = 0; index < postcodes.size(); index++) {
+                statement.setString(index + 1, postcodes.get(index));
+            }
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                return result.getLong(1);
+            }
         }
     }
 

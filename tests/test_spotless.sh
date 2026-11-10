@@ -6,6 +6,7 @@ work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 mkdir -p "$work_dir/project/scripts" "$work_dir/project/nested path" "$work_dir/bin"
 cp "$root/scripts/spotless.sh" "$work_dir/project/scripts/"
+cp "$root/scripts/SpotlessPom.java" "$work_dir/project/scripts/"
 cp "$root/pom.xml" "$work_dir/project/"
 cat >"$work_dir/bin/mvn" <<'STUB'
 #!/usr/bin/env bash
@@ -19,6 +20,7 @@ while (( $# )); do
     shift
 done
 [[ -f "$pom" ]] || exit 9
+java "$POM_TEST_SOURCE" "$pom" "$SOURCE_POM"
 while IFS= read -r -d '' file; do
     sed 's/[[:blank:]]*$//' "$file" >"$file.formatted"
     mv "$file.formatted" "$file"
@@ -36,6 +38,8 @@ chmod +x "$work_dir/bin/mvn"
 export PATH="$work_dir/bin:$PATH"
 export FILE="" FORMATTER_FAIL=0
 export EDIT_FILE=""
+export SOURCE_POM="$root/pom.xml"
+export POM_TEST_SOURCE="$root/tests/SpotlessPomTest.java"
 cd "$work_dir/project"
 
 pass=0

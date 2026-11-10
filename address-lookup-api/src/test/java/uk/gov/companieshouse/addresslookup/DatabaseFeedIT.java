@@ -239,6 +239,14 @@ class DatabaseFeedIT {
         assertEquals(seedCount, changedSeedFlyway.migrate().migrationsExecuted);
         changedSeedFlyway.validate();
 
+        Files.writeString(tempSeeds.resolve("R__seed_additional_postcode.sql"),
+                "SELECT 1;\n", StandardOpenOption.CREATE_NEW);
+        Path expandedSeeds = Files.createDirectory(tempSeeds.resolve("expanded"));
+        copySeedsWithChangedChecksums(tempSeeds, expandedSeeds);
+        Flyway expandedSeedFlyway = flyway(databaseRoot.resolve("migrations"), expandedSeeds);
+        assertEquals(seedCount + 1, expandedSeedFlyway.migrate().migrationsExecuted);
+        expandedSeedFlyway.validate();
+
         for (String table : TABLES) {
             assertEquals(localRowCounts.get(table), rowCount(table, "local"));
             assertEquals(1, rowCount(table, "preserve-test"));
@@ -688,7 +696,12 @@ class DatabaseFeedIT {
             List<Path> seeds = files
                     .filter(path -> path.getFileName().toString().endsWith(".sql"))
                     .toList();
-            assertEquals(2, seeds.size(), "Expected only the GB and ISL seed migrations");
+            assertTrue(seeds.contains(localSeeds.resolve("R__seed_add_gb_royalmailaddress.sql")),
+                    "Expected the GB seed migration");
+            assertTrue(seeds.contains(localSeeds.resolve("R__seed_add_isl_royalmailaddress.sql")),
+                    "Expected the ISL seed migration");
+            assertFalse(seeds.contains(localSeeds.resolve("R__seed_synthetic_cardiff_addresses.sql")),
+                    "The retired Cardiff seed must not be present");
             for (Path seed : seeds) {
                 Path copy = target.resolve(seed.getFileName());
                 Files.copy(seed, copy);

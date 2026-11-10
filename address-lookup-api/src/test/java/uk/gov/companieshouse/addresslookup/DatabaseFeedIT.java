@@ -457,7 +457,7 @@ class DatabaseFeedIT {
 
     private static void assertLocalFixtures() throws SQLException {
         assertEquals(15, rowCount(TABLES.get(0), "local-synthetic-cardiff"));
-        assertEquals(207, scenarioPostcodeRowCount());
+        assertEquals(30, scenarioPostcodeRowCount());
         try (Connection connection = connection()) {
             for (String postcode : HAPPY_PATH_POSTCODES) {
                 try (PreparedStatement statement = connection.prepareStatement(

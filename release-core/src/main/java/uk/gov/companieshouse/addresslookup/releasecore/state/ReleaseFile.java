@@ -1,11 +1,10 @@
 package uk.gov.companieshouse.addresslookup.releasecore.state;
 
 import jakarta.persistence.*;
-import uk.gov.companieshouse.release.model.Dataset;
-import uk.gov.companieshouse.release.model.SupplyType;
-
 import java.time.Instant;
 import java.util.UUID;
+import uk.gov.companieshouse.release.model.Dataset;
+import uk.gov.companieshouse.release.model.SupplyType;
 
 @Entity
 @Table(
@@ -13,8 +12,7 @@ import java.util.UUID;
     schema = "os_control",
     uniqueConstraints = @UniqueConstraint(columnNames = {"release_id", "dataset"}))
 public class ReleaseFile {
-  @Id
-  private UUID id;
+  @Id private UUID id;
 
   @Column(name = "release_id", nullable = false)
   private UUID releaseId;

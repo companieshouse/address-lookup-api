@@ -1,13 +1,12 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.*;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 import java.util.Optional;
 import java.util.UUID;
-
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.*;
 
 /** A listing position, not processing state. Every retained key is revisited on the next sweep. */
 public final class ReconciliationCursor {

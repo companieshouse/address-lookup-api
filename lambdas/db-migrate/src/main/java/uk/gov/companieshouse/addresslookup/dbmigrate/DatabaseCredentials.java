@@ -1,15 +1,14 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
+import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.CREDENTIALS_INVALID;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
-
-import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.CREDENTIALS_INVALID;
 
 /**
  * Schema-owner credentials, as JSON in the Parameter Store parameter. Accepts the RDS secret
@@ -17,14 +16,20 @@ import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.C
  */
 public record DatabaseCredentials(String jdbcUrl, String username, String password) {
   private static final ObjectMapper JSON = new ObjectMapper();
+
   /** The {@code user:password@} part of {@code jdbc:postgresql://user:password@host/db}. */
   private static final Pattern USER_INFO = Pattern.compile("//[^/]*@");
+
   private static final int DEFAULT_POSTGRES_PORT = 5432;
+
   /** The driver lets these URL properties override the username and password passed to it. */
   private static final Set<String> CREDENTIAL_PROPERTIES = Set.of("user", "password");
+
   private static final String SSL_MODE_PROPERTY = "sslmode";
+
   /** Without one of these the driver may connect without TLS. */
-  private static final Set<String> ENCRYPTED_SSL_MODES = Set.of("require", "verify-ca", "verify-full");
+  private static final Set<String> ENCRYPTED_SSL_MODES =
+      Set.of("require", "verify-ca", "verify-full");
 
   public static DatabaseCredentials fromJson(String dbCredentialsJson) {
     JsonNode dbCredentialsJsonNode;
@@ -35,7 +40,8 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
       throw new MigrationException(CREDENTIALS_INVALID, "Database credentials are not valid JSON");
     }
     if (dbCredentialsJsonNode == null || !dbCredentialsJsonNode.isObject())
-      throw new MigrationException(CREDENTIALS_INVALID, "Database credentials must be a JSON object");
+      throw new MigrationException(
+          CREDENTIALS_INVALID, "Database credentials must be a JSON object");
     String url =
         dbCredentialsJsonNode.hasNonNull("jdbcUrl")
             ? getTextValueFromJsonField(dbCredentialsJsonNode, "jdbcUrl")
@@ -48,7 +54,8 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
       throw new MigrationException(CREDENTIALS_INVALID, "jdbcUrl must be a PostgreSQL JDBC URL");
     // The username and password have their own fields, so they must not be in the URL.
     if (url.contains("@"))
-      throw new MigrationException(CREDENTIALS_INVALID, "jdbcUrl must not contain a username or password");
+      throw new MigrationException(
+          CREDENTIALS_INVALID, "jdbcUrl must not contain a username or password");
     validateUrlProperties(url);
     return new DatabaseCredentials(
         url,
@@ -72,7 +79,8 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
         String name = decodeUrlComponent(nameAndValue[0]);
         String value = nameAndValue.length > 1 ? decodeUrlComponent(nameAndValue[1]) : "";
         if (CREDENTIAL_PROPERTIES.contains(name.strip().toLowerCase(Locale.ROOT)))
-          throw new MigrationException(CREDENTIALS_INVALID, "jdbcUrl must not contain a username or password");
+          throw new MigrationException(
+              CREDENTIALS_INVALID, "jdbcUrl must not contain a username or password");
         if (nameAndValue[0].equals(SSL_MODE_PROPERTY)) sslMode = value;
       }
     }
@@ -86,7 +94,8 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
       return URLDecoder.decode(component, StandardCharsets.UTF_8);
     } catch (IllegalArgumentException e) {
       // The decoder message quotes the input, which may contain a secret.
-      throw new MigrationException(CREDENTIALS_INVALID, "jdbcUrl contains malformed percent-encoding");
+      throw new MigrationException(
+          CREDENTIALS_INVALID, "jdbcUrl contains malformed percent-encoding");
     }
   }
 
@@ -96,8 +105,10 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
    * @throws MigrationException CREDENTIALS_INVALID if the field is missing, not text or blank
    */
   private static String getTextValueFromJsonField(JsonNode dbCredentialsJsonNode, String field) {
-    if (!dbCredentialsJsonNode.path(field).isTextual() || dbCredentialsJsonNode.path(field).asText().isBlank())
-      throw new MigrationException(CREDENTIALS_INVALID, "Database credentials are missing " + field);
+    if (!dbCredentialsJsonNode.path(field).isTextual()
+        || dbCredentialsJsonNode.path(field).asText().isBlank())
+      throw new MigrationException(
+          CREDENTIALS_INVALID, "Database credentials are missing " + field);
     return dbCredentialsJsonNode.path(field).asText();
   }
 

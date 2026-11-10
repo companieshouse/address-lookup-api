@@ -16,33 +16,30 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers
 @AutoConfigureMockMvc
 @SpringBootTest(
-        classes = Application.class,
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {
-                "spring.docker.compose.enabled=false",
-                "FLYWAY_ENABLED=false",
-                "spring.flyway.enabled=true",
-                "spring.flyway.locations=classpath:db/migrations,classpath:db/local"
-        })
+    classes = Application.class,
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = {
+      "spring.docker.compose.enabled=false",
+      "FLYWAY_ENABLED=false",
+      "spring.flyway.enabled=true",
+      "spring.flyway.locations=classpath:db/migrations,classpath:db/local"
+    })
 public abstract class AddressTestBaseIT {
-    
-    @SuppressWarnings("resource")
-    @Container
-    private static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer(
-                    DockerImageName.parse("postgis/postgis:18-3.6")
-                            .asCompatibleSubstituteFor("postgres"))
-                    .withCreateContainerCmdModifier(
-                            command -> command.withPlatform("linux/amd64"));
 
-    @DynamicPropertySource
-    static void registerDataSourceProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
-        registry.add("spring.datasource.driver-class-name", POSTGRES::getDriverClassName);
-    }
+  @SuppressWarnings("resource")
+  @Container
+  private static final PostgreSQLContainer POSTGRES =
+      new PostgreSQLContainer(
+              DockerImageName.parse("postgis/postgis:18-3.6").asCompatibleSubstituteFor("postgres"))
+          .withCreateContainerCmdModifier(command -> command.withPlatform("linux/amd64"));
 
-    @Autowired
-    protected MockMvc mockMvc;
+  @DynamicPropertySource
+  static void registerDataSourceProperties(DynamicPropertyRegistry registry) {
+    registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+    registry.add("spring.datasource.username", POSTGRES::getUsername);
+    registry.add("spring.datasource.password", POSTGRES::getPassword);
+    registry.add("spring.datasource.driver-class-name", POSTGRES::getDriverClassName);
+  }
+
+  @Autowired protected MockMvc mockMvc;
 }

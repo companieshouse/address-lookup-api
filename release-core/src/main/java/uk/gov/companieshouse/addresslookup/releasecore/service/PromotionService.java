@@ -1,5 +1,7 @@
 package uk.gov.companieshouse.addresslookup.releasecore.service;
 
+import java.util.Objects;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uk.gov.companieshouse.addresslookup.releasecore.aurora.AuroraOperations;
@@ -8,9 +10,6 @@ import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseFileReposito
 import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseRepository;
 import uk.gov.companieshouse.addresslookup.releasecore.state.WatermarkRepository;
 import uk.gov.companieshouse.release.model.Dataset;
-
-import java.util.Objects;
-import java.util.UUID;
 
 @Service
 public class PromotionService {

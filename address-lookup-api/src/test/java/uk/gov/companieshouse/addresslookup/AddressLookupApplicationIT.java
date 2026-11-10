@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static uk.gov.companieshouse.logging.util.LogContextProperties.REQUEST_ID;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,62 +23,58 @@ import org.testcontainers.utility.DockerImageName;
 
 @AutoConfigureMockMvc
 @SpringBootTest(
-        classes = Application.class,
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "spring.docker.compose.enabled=false")
+    classes = Application.class,
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = "spring.docker.compose.enabled=false")
 @Testcontainers
 class AddressLookupApplicationIT {
 
-    @SuppressWarnings("resource")
-    @Container
-    private static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer(
-                    DockerImageName.parse("postgis/postgis:18-3.6")
-                            .asCompatibleSubstituteFor("postgres"))
-                    .withCreateContainerCmdModifier(
-                            command -> command.withPlatform("linux/amd64"));
+  @SuppressWarnings("resource")
+  @Container
+  private static final PostgreSQLContainer POSTGRES =
+      new PostgreSQLContainer(
+              DockerImageName.parse("postgis/postgis:18-3.6").asCompatibleSubstituteFor("postgres"))
+          .withCreateContainerCmdModifier(command -> command.withPlatform("linux/amd64"));
 
-    @Autowired
-    protected MockMvc mockMvc;
+  @Autowired protected MockMvc mockMvc;
 
-    @Autowired
-    private WebApplicationContext context;
+  @Autowired private WebApplicationContext context;
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
+  @Autowired private JdbcTemplate jdbcTemplate;
 
-    @DynamicPropertySource
-    static void registerDataSourceProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
-        registry.add("spring.datasource.driver-class-name", POSTGRES::getDriverClassName);
-    }
+  @DynamicPropertySource
+  static void registerDataSourceProperties(DynamicPropertyRegistry registry) {
+    registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+    registry.add("spring.datasource.username", POSTGRES::getUsername);
+    registry.add("spring.datasource.password", POSTGRES::getPassword);
+    registry.add("spring.datasource.driver-class-name", POSTGRES::getDriverClassName);
+  }
 
-    @Test
-    void shouldLoadApplicationContext() {
-        assertNotNull(context);
-    }
+  @Test
+  void shouldLoadApplicationContext() {
+    assertNotNull(context);
+  }
 
-    /**
-     * Confirms that the unset Flyway flag does not create schema history.
-     */
-    @Test
-    void shouldNotCreateFlywayHistoryWhenLegacyFlagIsUnset() {
-        Integer historyTables = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM information_schema.tables "
-                        + "WHERE table_schema = 'public' AND table_name = 'flyway_schema_history'",
-                Integer.class);
+  /**
+   * Confirms that the unset Flyway flag does not create schema history.
+   */
+  @Test
+  void shouldNotCreateFlywayHistoryWhenLegacyFlagIsUnset() {
+    Integer historyTables =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM information_schema.tables "
+                + "WHERE table_schema = 'public' AND table_name = 'flyway_schema_history'",
+            Integer.class);
 
-        assertNotNull(historyTables);
-        assertEquals(0, historyTables);
-    }
+    assertNotNull(historyTables);
+    assertEquals(0, historyTables);
+  }
 
-    @Test
-    void shouldReturn200FromGetHealthEndpoint() throws Exception {
-        this.mockMvc.perform(get("/address-lookup-api/healthcheck")
-                        .header(REQUEST_ID.value(), "request_id"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("UP"));
-    }
+  @Test
+  void shouldReturn200FromGetHealthEndpoint() throws Exception {
+    this.mockMvc
+        .perform(get("/address-lookup-api/healthcheck").header(REQUEST_ID.value(), "request_id"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("UP"));
+  }
 }

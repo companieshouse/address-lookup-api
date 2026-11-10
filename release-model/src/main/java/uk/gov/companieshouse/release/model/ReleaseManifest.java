@@ -2,7 +2,6 @@ package uk.gov.companieshouse.release.model;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
-
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.EnumMap;
@@ -13,9 +12,15 @@ import java.util.Set;
 import java.util.UUID;
 
 /** Validated immutable metadata; the original JSON text preserves release identity and digest. */
-public record ReleaseManifest(UUID id, SupplyType type, LocalDate previous, LocalDate target,
-                                    String dataPackageId, String versionId,
-                                    Map<Dataset, FileMetadata> files, String document) {
+public record ReleaseManifest(
+    UUID id,
+    SupplyType type,
+    LocalDate previous,
+    LocalDate target,
+    String dataPackageId,
+    String versionId,
+    Map<Dataset, FileMetadata> files,
+    String document) {
 
   private static final String RELEASE_ID = "releaseId";
   private static final String MODE = "mode";
@@ -24,14 +29,15 @@ public record ReleaseManifest(UUID id, SupplyType type, LocalDate previous, Loca
   private static final String DATA_PACKAGE_ID = "dataPackageId";
   private static final String VERSION_ID = "versionId";
 
-  private static final Set<String> ALLOWED_FIELDS = new HashSet<>(List.of(RELEASE_ID, MODE, PREVIOUS_DATE, TARGET_DATE,
-          DATA_PACKAGE_ID, VERSION_ID));
+  private static final Set<String> ALLOWED_FIELDS =
+      new HashSet<>(
+          List.of(RELEASE_ID, MODE, PREVIOUS_DATE, TARGET_DATE, DATA_PACKAGE_ID, VERSION_ID));
 
   static {
     Arrays.stream(Dataset.values()).forEach(ReleaseManifest::addDatasetName);
   }
 
-  private static void addDatasetName (Dataset dataset) {
+  private static void addDatasetName(Dataset dataset) {
     ALLOWED_FIELDS.add(dataset.datasetName());
   }
 
@@ -84,7 +90,8 @@ public record ReleaseManifest(UUID id, SupplyType type, LocalDate previous, Loca
         files.put(dataset, new FileMetadata(order, extractZip(file)));
       }
     }
-    return new ReleaseManifest(id, type, previous, target, dataPackageId, versionId, files, node.toString());
+    return new ReleaseManifest(
+        id, type, previous, target, dataPackageId, versionId, files, node.toString());
   }
 
   public OrderSummary summary(Dataset dataset) {
@@ -122,13 +129,13 @@ public record ReleaseManifest(UUID id, SupplyType type, LocalDate previous, Loca
   private static JsonNode extractSummaryFromFile(JsonNode file) {
     JsonNode summary = file.path("summary");
     if (!summary.path("recordCount").isIntegralNumber()
-            || !summary.path("recordCount").canConvertToLong())
+        || !summary.path("recordCount").canConvertToLong())
       throw new IllegalArgumentException("Invalid recordCount");
     return summary;
   }
 
-  private static OrderSummary extractOrderSummary(JsonNode summary, Dataset dataset, SupplyType type,
-                                                  LocalDate previous, LocalDate target) {
+  private static OrderSummary extractOrderSummary(
+      JsonNode summary, Dataset dataset, SupplyType type, LocalDate previous, LocalDate target) {
     OrderSummary order;
 
     try {
@@ -145,8 +152,6 @@ public record ReleaseManifest(UUID id, SupplyType type, LocalDate previous, Loca
       throw new IllegalArgumentException("Invalid ZIP MD5");
     JsonNode zip = file.path("zip");
     return new Zip(
-            text(zip, "md5"),
-            zip.path("fileName").asText(null),
-            zip.path("url").asText(null));
+        text(zip, "md5"), zip.path("fileName").asText(null), zip.path("url").asText(null));
   }
 }

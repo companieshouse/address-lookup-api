@@ -4,138 +4,136 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import org.hibernate.annotations.Immutable;
-
 import java.math.BigDecimal;
+import org.hibernate.annotations.Immutable;
 
 @Entity
 @Immutable
 @Table(name = "address_lookup", schema = "address_lookup")
 public class RoyalMailAddressLookup {
 
-    @Id
-    private String id;
+  @Id private String id;
 
-    @Column(name = "address_source")
-    private String addressSource;
+  @Column(name = "address_source")
+  private String addressSource;
 
-    private Integer udprn;
+  private Integer udprn;
 
-    @Column(name = "organisationname")
-    private String organisationName;
+  @Column(name = "organisationname")
+  private String organisationName;
 
-    @Column(name = "departmentname")
-    private String departmentName;
+  @Column(name = "departmentname")
+  private String departmentName;
 
-    @Column(name = "subbuildingname")
-    private String subBuildingName;
+  @Column(name = "subbuildingname")
+  private String subBuildingName;
 
-    @Column(name = "buildingname")
-    private String buildingName;
+  @Column(name = "buildingname")
+  private String buildingName;
 
-    @Column(name = "buildingnumber")
-    private Integer buildingNumber;
+  @Column(name = "buildingnumber")
+  private Integer buildingNumber;
 
-    @Column(name = "dependentthoroughfare")
-    private String dependentThoroughfare;
+  @Column(name = "dependentthoroughfare")
+  private String dependentThoroughfare;
 
-    private String thoroughfare;
+  private String thoroughfare;
 
-    @Column(name = "doubledependentlocality")
-    private String doubleDependentLocality;
+  @Column(name = "doubledependentlocality")
+  private String doubleDependentLocality;
 
-    @Column(name = "dependentlocality")
-    private String dependentLocality;
+  @Column(name = "dependentlocality")
+  private String dependentLocality;
 
-    @Column(name = "posttown")
-    private String postTown;
+  @Column(name = "posttown")
+  private String postTown;
 
-    private String postcode;
+  private String postcode;
 
-    @Column(name = "deliverypointsuffix")
-    private String deliveryPointSuffix;
+  @Column(name = "deliverypointsuffix")
+  private String deliveryPointSuffix;
 
-    private Long uprn;
+  private Long uprn;
 
-    private BigDecimal latitude;
+  private BigDecimal latitude;
 
-    private BigDecimal longitude;
+  private BigDecimal longitude;
 
-    private String country;
+  private String country;
 
-    public String getId() {
-        return id;
-    }
+  public String getId() {
+    return id;
+  }
 
-    public String getAddressSource() {
-        return addressSource;
-    }
+  public String getAddressSource() {
+    return addressSource;
+  }
 
-    public Integer getUdprn() {
-        return udprn;
-    }
+  public Integer getUdprn() {
+    return udprn;
+  }
 
-    public String getOrganisationName() {
-        return organisationName;
-    }
+  public String getOrganisationName() {
+    return organisationName;
+  }
 
-    public String getDepartmentName() {
-        return departmentName;
-    }
+  public String getDepartmentName() {
+    return departmentName;
+  }
 
-    public String getSubBuildingName() {
-        return subBuildingName;
-    }
+  public String getSubBuildingName() {
+    return subBuildingName;
+  }
 
-    public String getBuildingName() {
-        return buildingName;
-    }
+  public String getBuildingName() {
+    return buildingName;
+  }
 
-    public Integer getBuildingNumber() {
-        return buildingNumber;
-    }
+  public Integer getBuildingNumber() {
+    return buildingNumber;
+  }
 
-    public String getDependentThoroughfare() {
-        return dependentThoroughfare;
-    }
+  public String getDependentThoroughfare() {
+    return dependentThoroughfare;
+  }
 
-    public String getThoroughfare() {
-        return thoroughfare;
-    }
+  public String getThoroughfare() {
+    return thoroughfare;
+  }
 
-    public String getDoubleDependentLocality() {
-        return doubleDependentLocality;
-    }
+  public String getDoubleDependentLocality() {
+    return doubleDependentLocality;
+  }
 
-    public String getDependentLocality() {
-        return dependentLocality;
-    }
+  public String getDependentLocality() {
+    return dependentLocality;
+  }
 
-    public String getPostTown() {
-        return postTown;
-    }
+  public String getPostTown() {
+    return postTown;
+  }
 
-    public String getPostcode() {
-        return postcode;
-    }
+  public String getPostcode() {
+    return postcode;
+  }
 
-    public String getDeliveryPointSuffix() {
-        return deliveryPointSuffix;
-    }
+  public String getDeliveryPointSuffix() {
+    return deliveryPointSuffix;
+  }
 
-    public Long getUprn() {
-        return uprn;
-    }
+  public Long getUprn() {
+    return uprn;
+  }
 
-    public BigDecimal getLatitude() {
-        return latitude;
-    }
+  public BigDecimal getLatitude() {
+    return latitude;
+  }
 
-    public BigDecimal getLongitude() {
-        return longitude;
-    }
+  public BigDecimal getLongitude() {
+    return longitude;
+  }
 
-    public String getCountry() {
-        return country;
-    }
+  public String getCountry() {
+    return country;
+  }
 }

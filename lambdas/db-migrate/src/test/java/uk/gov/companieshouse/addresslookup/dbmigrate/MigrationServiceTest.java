@@ -1,23 +1,5 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.sql.Connection;
-import java.util.HexFormat;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Supplier;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -32,12 +14,30 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.sql.Connection;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
 /** Ordering guarantees that need no database: what is checked before anything is touched. */
 @ExtendWith(MockitoExtension.class)
 class MigrationServiceTest {
 
   private static final String SNAPSHOT_BUCKET = "snapshot-bucket";
-  private static final String DB_CREDENTIALS_PARAMETER_PATH = "/address-lookup/test/db/schema-owner";
+  private static final String DB_CREDENTIALS_PARAMETER_PATH =
+      "/address-lookup/test/db/schema-owner";
   private static final String SNAPSHOT_KEY = "address-lookup/db-schema-snapshots/x.zip";
   private static final String VERSION_ID = "v1";
   private static final DatabaseCredentials DB_CREDENTIALS =
@@ -58,14 +58,16 @@ class MigrationServiceTest {
 
   private MigrationService buildService(boolean allowRepair) {
     var migrationConfig =
-        new MigrationConfig(SNAPSHOT_BUCKET, DB_CREDENTIALS_PARAMETER_PATH, allowRepair, "10s", 1_000_000, 100);
+        new MigrationConfig(
+            SNAPSHOT_BUCKET, DB_CREDENTIALS_PARAMETER_PATH, allowRepair, "10s", 1_000_000, 100);
     return new MigrationService(
         migrationConfig, s3BundlesSource, dbCredentialsSource, dbConnectionFactory, flywayRunner);
   }
 
   @Test
   void checksumMismatchFailsBeforeCredentialsOrDatabase() throws Exception {
-    byte[] snapshot = SnapshotZipExtractorTest.buildZipBytes(Map.of("migrations/V1__x.sql", "SELECT 1;"));
+    byte[] snapshot =
+        SnapshotZipExtractorTest.buildZipBytes(Map.of("migrations/V1__x.sql", "SELECT 1;"));
     when(s3BundlesSource.open(SNAPSHOT_BUCKET, SNAPSHOT_KEY, VERSION_ID))
         .thenReturn(new ByteArrayInputStream(snapshot));
     var request = new MigrationRequest(Command.MIGRATE, SNAPSHOT_KEY, VERSION_ID, "0".repeat(64));
@@ -88,10 +90,13 @@ class MigrationServiceTest {
 
   @Test
   void invalidDbConnectionFailsAsDatabaseUnavailableAndIsClosed() throws Exception {
-    byte[] snapshot = SnapshotZipExtractorTest.buildZipBytes(Map.of("migrations/V1__x.sql", "SELECT 1;"));
-    String snapshotSha256 = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(snapshot));
+    byte[] snapshot =
+        SnapshotZipExtractorTest.buildZipBytes(Map.of("migrations/V1__x.sql", "SELECT 1;"));
+    String snapshotSha256 =
+        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(snapshot));
     var request = new MigrationRequest(Command.MIGRATE, SNAPSHOT_KEY, VERSION_ID, snapshotSha256);
-    var dbCredentials = new DatabaseCredentials("jdbc:postgresql://localhost:5432/db", "user", "secret");
+    var dbCredentials =
+        new DatabaseCredentials("jdbc:postgresql://localhost:5432/db", "user", "secret");
     when(s3BundlesSource.open(SNAPSHOT_BUCKET, SNAPSHOT_KEY, VERSION_ID))
         .thenReturn(new ByteArrayInputStream(snapshot));
     when(dbCredentialsSource.get(DB_CREDENTIALS_PARAMETER_PATH)).thenReturn(dbCredentials);
@@ -113,7 +118,11 @@ class MigrationServiceTest {
     when(flywayRunner.run(eq(Command.MIGRATE), any(Path.class), any(), eq("10s")))
         .thenReturn(
             new FlywayRunner.Outcome(
-                "2026.004", List.of(), List.of("V2026.003__a.sql", "V2026.004__b.sql"), List.of(), List.of()));
+                "2026.004",
+                List.of(),
+                List.of("V2026.003__a.sql", "V2026.004__b.sql"),
+                List.of(),
+                List.of()));
 
     var result = service.handle(request);
 
@@ -127,20 +136,28 @@ class MigrationServiceTest {
     assertTrue((Long) result.get("durationMs") >= 0);
     assertEquals(
         Map.of(
-            "bucket", SNAPSHOT_BUCKET,
-            "key", SNAPSHOT_KEY,
-            "versionId", VERSION_ID,
-            "sha256", calculateSha256Hex(snapshotZipBytes),
-            "bytes", (long) snapshotZipBytes.length,
-            "files", 1),
+            "bucket",
+            SNAPSHOT_BUCKET,
+            "key",
+            SNAPSHOT_KEY,
+            "versionId",
+            VERSION_ID,
+            "sha256",
+            calculateSha256Hex(snapshotZipBytes),
+            "bytes",
+            (long) snapshotZipBytes.length,
+            "files",
+            1),
         result.get("snapshot"));
   }
 
   @Test
-  void infoReportsThePendingScriptFileNamesAndNullSchemaVersionOnAnEmptyDatabase() throws Exception {
+  void infoReportsThePendingScriptFileNamesAndNullSchemaVersionOnAnEmptyDatabase()
+      throws Exception {
     var request = stubFlowUpToFlyway(Command.INFO, buildSnapshotZipBytes());
     when(flywayRunner.run(eq(Command.INFO), any(Path.class), any(), eq("10s")))
-        .thenReturn(new FlywayRunner.Outcome(null, List.of("V1__x.sql"), List.of(), List.of(), List.of()));
+        .thenReturn(
+            new FlywayRunner.Outcome(null, List.of("V1__x.sql"), List.of(), List.of(), List.of()));
 
     var result = service.handle(request);
 
@@ -155,7 +172,8 @@ class MigrationServiceTest {
   void validateReportsValidAndThePendingScriptFileNames() throws Exception {
     var request = stubFlowUpToFlyway(Command.VALIDATE, buildSnapshotZipBytes());
     when(flywayRunner.run(eq(Command.VALIDATE), any(Path.class), any(), eq("10s")))
-        .thenReturn(new FlywayRunner.Outcome("1", List.of("V2__y.sql"), List.of(), List.of(), List.of()));
+        .thenReturn(
+            new FlywayRunner.Outcome("1", List.of("V2__y.sql"), List.of(), List.of(), List.of()));
 
     var result = service.handle(request);
 
@@ -172,7 +190,11 @@ class MigrationServiceTest {
     when(flywayRunner.run(eq(Command.REPAIR), any(Path.class), any(), eq("10s")))
         .thenReturn(
             new FlywayRunner.Outcome(
-                "1", List.of(), List.of(), List.of("V1__x.sql"), List.of("Repaired Schema History table")));
+                "1",
+                List.of(),
+                List.of(),
+                List.of("V1__x.sql"),
+                List.of("Repaired Schema History table")));
 
     var result = repairEnabledService.handle(request);
 
@@ -186,18 +208,20 @@ class MigrationServiceTest {
   void flywayReceivesTheExtractedMigrationsAndAConnectionFromTheFactory() throws Exception {
     var request = stubFlowUpToFlyway(Command.MIGRATE, buildSnapshotZipBytes());
     when(flywayRunner.run(eq(Command.MIGRATE), any(Path.class), any(), eq("10s")))
-        .thenAnswer(
-            invocation -> {
-              Path migrationsDir = invocation.getArgument(1);
-              assertTrue(Files.isRegularFile(migrationsDir.resolve("V1__x.sql")));
-              return new FlywayRunner.Outcome("1", List.of(), List.of("V1__x.sql"), List.of(), List.of());
-            });
+        .thenAnswer(invocation -> {
+          Path migrationsDir = invocation.getArgument(1);
+          assertTrue(Files.isRegularFile(migrationsDir.resolve("V1__x.sql")));
+          return new FlywayRunner.Outcome(
+              "1", List.of(), List.of("V1__x.sql"), List.of(), List.of());
+        });
 
     service.handle(request);
 
     @SuppressWarnings("unchecked")
-    ArgumentCaptor<Supplier<Connection>> dbConnectionSupplierCaptor = ArgumentCaptor.forClass(Supplier.class);
-    verify(flywayRunner).run(eq(Command.MIGRATE), any(Path.class), dbConnectionSupplierCaptor.capture(), eq("10s"));
+    ArgumentCaptor<Supplier<Connection>> dbConnectionSupplierCaptor =
+        ArgumentCaptor.forClass(Supplier.class);
+    verify(flywayRunner)
+        .run(eq(Command.MIGRATE), any(Path.class), dbConnectionSupplierCaptor.capture(), eq("10s"));
     assertSame(dbConnection, dbConnectionSupplierCaptor.getValue().get());
   }
 
@@ -206,8 +230,10 @@ class MigrationServiceTest {
   @Test
   void missingSnapshotFailsAsBundleNotFoundBeforeCredentialsOrDatabase() {
     var request = new MigrationRequest(Command.MIGRATE, SNAPSHOT_KEY, VERSION_ID, "0".repeat(64));
-    var bundleNotFoundException = new MigrationException(MigrationException.Code.BUNDLE_NOT_FOUND, "missing");
-    when(s3BundlesSource.open(SNAPSHOT_BUCKET, SNAPSHOT_KEY, VERSION_ID)).thenThrow(bundleNotFoundException);
+    var bundleNotFoundException =
+        new MigrationException(MigrationException.Code.BUNDLE_NOT_FOUND, "missing");
+    when(s3BundlesSource.open(SNAPSHOT_BUCKET, SNAPSHOT_KEY, VERSION_ID))
+        .thenThrow(bundleNotFoundException);
 
     var thrownException = assertThrows(MigrationException.class, () -> service.handle(request));
 
@@ -218,11 +244,15 @@ class MigrationServiceTest {
   @Test
   void invalidCredentialsFailBeforeTheDatabaseIsOpened() throws Exception {
     byte[] snapshotZipBytes = buildSnapshotZipBytes();
-    var request = new MigrationRequest(Command.MIGRATE, SNAPSHOT_KEY, VERSION_ID, calculateSha256Hex(snapshotZipBytes));
-    var credentialsInvalidException = new MigrationException(MigrationException.Code.CREDENTIALS_INVALID, "bad");
+    var request =
+        new MigrationRequest(
+            Command.MIGRATE, SNAPSHOT_KEY, VERSION_ID, calculateSha256Hex(snapshotZipBytes));
+    var credentialsInvalidException =
+        new MigrationException(MigrationException.Code.CREDENTIALS_INVALID, "bad");
     when(s3BundlesSource.open(SNAPSHOT_BUCKET, SNAPSHOT_KEY, VERSION_ID))
         .thenReturn(new ByteArrayInputStream(snapshotZipBytes));
-    when(dbCredentialsSource.get(DB_CREDENTIALS_PARAMETER_PATH)).thenThrow(credentialsInvalidException);
+    when(dbCredentialsSource.get(DB_CREDENTIALS_PARAMETER_PATH))
+        .thenThrow(credentialsInvalidException);
 
     var thrownException = assertThrows(MigrationException.class, () -> service.handle(request));
 
@@ -233,8 +263,11 @@ class MigrationServiceTest {
   @Test
   void unreachableDatabaseFailsBeforeFlywayStarts() throws Exception {
     byte[] snapshotZipBytes = buildSnapshotZipBytes();
-    var request = new MigrationRequest(Command.MIGRATE, SNAPSHOT_KEY, VERSION_ID, calculateSha256Hex(snapshotZipBytes));
-    var databaseUnavailableException = new MigrationException(MigrationException.Code.DATABASE_UNAVAILABLE, "down");
+    var request =
+        new MigrationRequest(
+            Command.MIGRATE, SNAPSHOT_KEY, VERSION_ID, calculateSha256Hex(snapshotZipBytes));
+    var databaseUnavailableException =
+        new MigrationException(MigrationException.Code.DATABASE_UNAVAILABLE, "down");
     when(s3BundlesSource.open(SNAPSHOT_BUCKET, SNAPSHOT_KEY, VERSION_ID))
         .thenReturn(new ByteArrayInputStream(snapshotZipBytes));
     when(dbCredentialsSource.get(DB_CREDENTIALS_PARAMETER_PATH)).thenReturn(DB_CREDENTIALS);
@@ -249,7 +282,8 @@ class MigrationServiceTest {
   @Test
   void flywayFailureIsRethrownUnchanged() throws Exception {
     var request = stubFlowUpToFlyway(Command.MIGRATE, buildSnapshotZipBytes());
-    var migrationFailedException = new MigrationException(MigrationException.Code.MIGRATION_FAILED, "boom");
+    var migrationFailedException =
+        new MigrationException(MigrationException.Code.MIGRATION_FAILED, "boom");
     when(flywayRunner.run(eq(Command.MIGRATE), any(Path.class), any(), eq("10s")))
         .thenThrow(migrationFailedException);
 
@@ -264,7 +298,8 @@ class MigrationServiceTest {
   void tempWorkDirIsDeletedAfterASuccessfulRun() throws Exception {
     var request = stubFlowUpToFlyway(Command.MIGRATE, buildSnapshotZipBytes());
     when(flywayRunner.run(eq(Command.MIGRATE), any(Path.class), any(), eq("10s")))
-        .thenReturn(new FlywayRunner.Outcome("1", List.of(), List.of("V1__x.sql"), List.of(), List.of()));
+        .thenReturn(
+            new FlywayRunner.Outcome("1", List.of(), List.of("V1__x.sql"), List.of(), List.of()));
 
     service.handle(request);
 
@@ -293,13 +328,15 @@ class MigrationServiceTest {
   }
 
   /** Stubs everything that runs before Flyway, and returns the request that matches the snapshot. */
-  private MigrationRequest stubFlowUpToFlyway(Command command, byte[] snapshotZipBytes) throws Exception {
+  private MigrationRequest stubFlowUpToFlyway(Command command, byte[] snapshotZipBytes)
+      throws Exception {
     when(s3BundlesSource.open(SNAPSHOT_BUCKET, SNAPSHOT_KEY, VERSION_ID))
         .thenReturn(new ByteArrayInputStream(snapshotZipBytes));
     when(dbCredentialsSource.get(DB_CREDENTIALS_PARAMETER_PATH)).thenReturn(DB_CREDENTIALS);
     when(dbConnectionFactory.open(DB_CREDENTIALS)).thenReturn(dbConnection);
     when(dbConnection.isValid(anyInt())).thenReturn(true);
-    return new MigrationRequest(command, SNAPSHOT_KEY, VERSION_ID, calculateSha256Hex(snapshotZipBytes));
+    return new MigrationRequest(
+        command, SNAPSHOT_KEY, VERSION_ID, calculateSha256Hex(snapshotZipBytes));
   }
 
   /** The work directory is the parent of {@code root/migrations}, which is what Flyway is given. */

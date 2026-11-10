@@ -3,11 +3,9 @@ package uk.gov.companieshouse.addresslookup.lambda.shared.os;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sanitizeUrl;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import uk.gov.companieshouse.logging.Logger;
-import uk.gov.companieshouse.logging.LoggerFactory;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -16,7 +14,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
-
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
 
 /** API key is sent only to api.os.uk, never forwarded to the signed download host. */
 public final class OsClient {
@@ -27,10 +26,7 @@ public final class OsClient {
   private final Duration requestTimeout;
   private final ObjectMapper json;
 
-  public OsClient(
-      String key,
-      Duration connectTimeout,
-      Duration requestTimeout) {
+  public OsClient(String key, Duration connectTimeout, Duration requestTimeout) {
     this.key = key;
     this.requestTimeout = requestTimeout;
     this.json = JSON;
@@ -70,10 +66,9 @@ public final class OsClient {
       URI next = uri.resolve(r.headers().firstValue("location").orElseThrow());
       String sanitizedFromUrl = sanitizeUrl(uri.toString());
       String sanitizedToUrl = sanitizeUrl(next.toString());
-      LOG.info("OS download redirect followed",
-          Map.of("status", r.statusCode(),
-              "from", sanitizedFromUrl,
-              "to", sanitizedToUrl));
+      LOG.info(
+          "OS download redirect followed",
+          Map.of("status", r.statusCode(), "from", sanitizedFromUrl, "to", sanitizedToUrl));
       uri = next;
     }
     throw new IOException("Too many redirects");

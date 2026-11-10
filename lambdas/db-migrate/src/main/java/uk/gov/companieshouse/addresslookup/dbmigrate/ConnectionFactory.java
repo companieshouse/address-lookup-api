@@ -1,11 +1,11 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
+import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.DATABASE_UNAVAILABLE;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
-
-import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.DATABASE_UNAVAILABLE;
 
 /**
  * Opens schema-owner connections. Flyway asks for more than one per run (its schema history
@@ -15,6 +15,7 @@ import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.C
 public interface ConnectionFactory {
   /** Passed to the JDBC driver as a string property. */
   String CONNECT_TIMEOUT_SECONDS = "10";
+
   String APPLICATION_NAME = "address-lookup-db-migrate";
 
   Connection open(DatabaseCredentials credentials);
@@ -32,7 +33,11 @@ public interface ConnectionFactory {
         // The driver message and cause can include the full URL, so they are left out.
         throw new MigrationException(
             DATABASE_UNAVAILABLE,
-            "Cannot connect to " + credentials.sanitisedJdbcUrl() + " (SQLState " + e.getSQLState() + ")");
+            "Cannot connect to "
+                + credentials.sanitisedJdbcUrl()
+                + " (SQLState "
+                + e.getSQLState()
+                + ")");
       }
     };
   }

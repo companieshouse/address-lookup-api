@@ -51,7 +51,8 @@ public class AuroraOperations {
     verifyCount(dataset, type, id, rows);
   }
 
-  public void importLocal(Dataset dataset, SupplyType type, UUID id, InputStream csv, long rows)
+  /** Returns the number of rows now landed for the release, which equals {@code rows}. */
+  public long importLocal(Dataset dataset, SupplyType type, UUID id, InputStream csv, long rows)
       throws Exception {
     begin(dataset, type, id);
     String sql =
@@ -69,10 +70,10 @@ public class AuroraOperations {
                 throw new java.sql.SQLException("Local COPY failed", e);
               }
             });
-    verifyCount(dataset, type, id, rows);
+    return verifyCount(dataset, type, id, rows);
   }
 
-  private void verifyCount(Dataset dataset, SupplyType type, UUID id, long expected) {
+  private long verifyCount(Dataset dataset, SupplyType type, UUID id, long expected) {
     Long actual =
         jdbc.queryForObject(
             "SELECT count(*) FROM " + dataset.landing(type) + " WHERE release_id=?",
@@ -80,6 +81,7 @@ public class AuroraOperations {
             id);
     if (expected < 0 || actual == null || actual != expected)
       throw new IllegalArgumentException("OS recordCount mismatch: " + dataset.datasetName());
+    return actual;
   }
 
   public void prepare(Dataset dataset, SupplyType type, UUID id, LocalDate target) {

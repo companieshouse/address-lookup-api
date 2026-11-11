@@ -33,6 +33,16 @@ final class ReleaseStoreTest {
   private final ReleaseStore store = new ReleaseStore(s3.client());
 
   @Test
+  void isBlockedDetectsQuarantineMarkerForTheRelease() throws Exception {
+    assertFalse(store.isBlocked(BUCKET, ID));
+
+    s3.objects.put(ReleaseStore.blockedKey(ID), "{}".getBytes(StandardCharsets.UTF_8));
+
+    assertTrue(store.isBlocked(BUCKET, ID));
+    assertEquals("control/" + ID + "/BLOCKED.json", ReleaseStore.blockedKey(ID));
+  }
+
+  @Test
   void readReturnsNullWhenKeyDoesNotExist() throws Exception {
     assertNull(store.read(BUCKET, "acquisitions/missing.json"));
   }

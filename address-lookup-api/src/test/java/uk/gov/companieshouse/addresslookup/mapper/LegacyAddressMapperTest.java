@@ -3,21 +3,26 @@ package uk.gov.companieshouse.addresslookup.mapper;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import uk.gov.companieshouse.addresslookup.entity.RoyalMailAddressLookup;
 import uk.gov.companieshouse.addresslookup.model.LegacyAddress;
 
+@ExtendWith(MockitoExtension.class)
 class LegacyAddressMapperTest {
 
   private final LegacyAddressMapper mapper = Mappers.getMapper(LegacyAddressMapper.class);
 
+  @Mock
+  private RoyalMailAddressLookup address;
+
   @Test
   void premiseIncludesSubBuildingAndBuildingNumber() {
-    RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
     when(address.getSubBuildingName()).thenReturn("FLAT 1");
     when(address.getBuildingNumber()).thenReturn(16);
 
@@ -26,7 +31,6 @@ class LegacyAddressMapperTest {
 
   @Test
   void premiseUsesOnlyTheBuildingNumberWhenSubBuildingIsAbsent() {
-    RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
     when(address.getSubBuildingName()).thenReturn(null);
     when(address.getBuildingNumber()).thenReturn(14);
 
@@ -35,7 +39,6 @@ class LegacyAddressMapperTest {
 
   @Test
   void premiseUsesOnlyTheSubBuildingWhenBuildingNumberIsAbsent() {
-    RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
     when(address.getSubBuildingName()).thenReturn("FLAT 1");
     when(address.getBuildingNumber()).thenReturn(null);
 
@@ -43,21 +46,48 @@ class LegacyAddressMapperTest {
   }
 
   @Test
-  void premiseIncludesBuildingName() {
-    RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
+  void subBuildingAndBuildingNameWithoutNumberMovesBuildingNameToAddressLine1() {
+    when(address.getSubBuildingName()).thenReturn("FLAT 1");
+    when(address.getBuildingName()).thenReturn("SOVEREIGN HOUSE");
+    when(address.getBuildingNumber()).thenReturn(null);
+    when(address.getThoroughfare()).thenReturn("HIGH STREET");
+
+    LegacyAddress legacy = mapper.toLegacyAddress(address);
+
+    assertAll(
+        () -> assertEquals("FLAT 1", legacy.premise()),
+        () -> assertEquals("SOVEREIGN HOUSE HIGH STREET", legacy.addressLine1()));
+  }
+
+  @Test
+  void buildingNameWithoutSubBuildingOrNumberGoesToPremise() {
+    when(address.getBuildingName()).thenReturn("SOVEREIGN HOUSE");
+    when(address.getBuildingNumber()).thenReturn(null);
+    when(address.getThoroughfare()).thenReturn("HIGH STREET");
+
+    LegacyAddress legacy = mapper.toLegacyAddress(address);
+
+    assertAll(
+        () -> assertEquals("SOVEREIGN HOUSE", legacy.premise()),
+        () -> assertEquals("HIGH STREET", legacy.addressLine1()));
+  }
+
+  @Test
+  void subBuildingBuildingNameAndNumberMovesNumberToAddressLine1() {
     when(address.getSubBuildingName()).thenReturn("FLAT 1");
     when(address.getBuildingName()).thenReturn("SOVEREIGN HOUSE");
     when(address.getBuildingNumber()).thenReturn(16);
+    when(address.getThoroughfare()).thenReturn("HIGH STREET");
 
-    assertEquals("FLAT 1 SOVEREIGN HOUSE 16", mapper.toPremise(address));
-    when(address.getSubBuildingName()).thenReturn(null);
-    when(address.getBuildingNumber()).thenReturn(null);
-    assertEquals("SOVEREIGN HOUSE", mapper.toPremise(address));
+    LegacyAddress legacy = mapper.toLegacyAddress(address);
+
+    assertAll(
+        () -> assertEquals("FLAT 1 SOVEREIGN HOUSE", legacy.premise()),
+        () -> assertEquals("16 HIGH STREET", legacy.addressLine1()));
   }
 
   @Test
   void premiseIsEmptyWhenBothComponentsAreAbsent() {
-    RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
     when(address.getSubBuildingName()).thenReturn(null);
     when(address.getBuildingNumber()).thenReturn(null);
 
@@ -66,7 +96,6 @@ class LegacyAddressMapperTest {
 
   @Test
   void legacyAddressMappingIncludesPremise() {
-    RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
     when(address.getSubBuildingName()).thenReturn("FLAT 1");
     when(address.getBuildingNumber()).thenReturn(16);
 
@@ -75,8 +104,6 @@ class LegacyAddressMapperTest {
 
   @Test
   void legacyAddressMappingWithoutPremiseLeavesItNull() {
-    RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
-
     assertNull(mapper.toLegacyAddressWithoutPremise(address).premise());
   }
 
@@ -89,7 +116,6 @@ class LegacyAddressMapperTest {
 
   @Test
   void legacyAddressMappingJoinsThoroughfareAndLocalityLinesWithSpaces() {
-    RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
     when(address.getDependentThoroughfare()).thenReturn("MILL LANE");
     when(address.getThoroughfare()).thenReturn("HIGH STREET");
     when(address.getDoubleDependentLocality()).thenReturn("OLD TOWN");
@@ -107,8 +133,6 @@ class LegacyAddressMapperTest {
 
   @Test
   void legacyAddressLinesAreEmptyWhenComponentsAreAbsent() {
-    RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
-
     LegacyAddress legacy = mapper.toLegacyAddress(address);
 
     assertAll(

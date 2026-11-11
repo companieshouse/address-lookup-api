@@ -141,7 +141,7 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
         Arguments.of("BT100EQ", "BT10 0EQ", "GARRON CRESCENT", "BELFAST", "GB-NIR"),
         Arguments.of("BT513TU", "BT51 3TU", "GRANARY CLOSE", "COLERAINE", "GB-NIR"),
         Arguments.of("GY79AD", "GY7 9AD", "RUE DES HECHES", "GUERNSEY", "Channel Islands"),
-        Arguments.of("IM11BD", "IM1 1BD", "PRINCES STREET", "ISLE OF MAN", "Isle of Man"),
+        Arguments.of("IM11BD", "IM1 1BD", "2 PRINCES STREET", "ISLE OF MAN", "Isle of Man"),
         Arguments.of("JE27NA", "JE2 7NA", "LES GRANDS VAUX", "JERSEY", "Channel Islands"));
   }
 }

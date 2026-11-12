@@ -37,7 +37,7 @@ class AddressLookupServiceTest {
 
   @Test
   void lookupByPostcodeMapsTheRepositoryResults() {
-    when(repository.findByNormalizedPostcode("AB1 2CD")).thenReturn(List.of());
+    when(repository.findByNormalizedPostcode("AB12CD")).thenReturn(List.of());
     when(royalMailAddressMapper.toDtos(List.of())).thenReturn(List.of());
 
     assertEquals(List.of(), service.lookupByPostcode("AB1 2CD"));
@@ -46,10 +46,19 @@ class AddressLookupServiceTest {
   }
 
   @Test
+  void lookupNormalizesLowercasePostcodeWithSpaces() {
+    when(repository.findByNormalizedPostcode("WF27QD")).thenReturn(List.of());
+
+    assertEquals(List.of(), service.lookupLegacyAddressesByPostcode(" wf2 7qd "));
+
+    verify(repository).findByNormalizedPostcode("WF27QD");
+  }
+
+  @Test
   void lookupLegacyAddressesMapsEachRepositoryResult() {
     RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
     LegacyAddress expected = new LegacyAddress("AB1 2CD", "Address", null, null, "Town", "GB-ENG");
-    when(repository.findByNormalizedPostcode("AB1 2CD")).thenReturn(List.of(address));
+    when(repository.findByNormalizedPostcode("AB12CD")).thenReturn(List.of(address));
     when(legacyAddressMapper.toLegacyAddress(address)).thenReturn(expected);
 
     assertEquals(List.of(expected), service.lookupLegacyAddressesByPostcode("AB1 2CD"));
@@ -59,7 +68,7 @@ class AddressLookupServiceTest {
   void lookupLegacyAddressMapsTheFirstResult() {
     RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
     LegacyAddress expected = new LegacyAddress("AB1 2CD", "Address", null, null, "Town", "GB-ENG");
-    when(repository.findByNormalizedPostcode("AB1 2CD")).thenReturn(List.of(address));
+    when(repository.findByNormalizedPostcode("AB12CD")).thenReturn(List.of(address));
     when(legacyAddressMapper.toLegacyAddressWithoutPremise(address)).thenReturn(expected);
 
     assertEquals(Optional.of(expected), service.lookupLegacyAddressByPostcode("AB1 2CD"));
@@ -67,7 +76,7 @@ class AddressLookupServiceTest {
 
   @Test
   void lookupLegacyAddressReturnsEmptyWhenNoResultsExist() {
-    when(repository.findByNormalizedPostcode("AB1 2CD")).thenReturn(List.of());
+    when(repository.findByNormalizedPostcode("AB12CD")).thenReturn(List.of());
 
     assertEquals(Optional.empty(), service.lookupLegacyAddressByPostcode("AB1 2CD"));
   }
@@ -75,20 +84,20 @@ class AddressLookupServiceTest {
   @Test
   void retriesSerializationFailureOnceAndReturnsSuccessfulResult() {
     DataAccessException serializationFailure = dataAccessFailure("40001");
-    when(repository.findByNormalizedPostcode("AB1 2CD"))
+    when(repository.findByNormalizedPostcode("AB12CD"))
         .thenThrow(serializationFailure)
         .thenReturn(List.of());
 
     assertEquals(List.of(), service.lookupLegacyAddressesByPostcode("AB1 2CD"));
 
-    verify(repository, times(2)).findByNormalizedPostcode("AB1 2CD");
+    verify(repository, times(2)).findByNormalizedPostcode("AB12CD");
   }
 
   @Test
   void propagatesSecondSerializationFailureWithoutFurtherRetry() {
     DataAccessException firstFailure = dataAccessFailure("40001");
     DataAccessException secondFailure = dataAccessFailure("40001");
-    when(repository.findByNormalizedPostcode("AB1 2CD"))
+    when(repository.findByNormalizedPostcode("AB12CD"))
         .thenThrow(firstFailure)
         .thenThrow(secondFailure);
 
@@ -97,20 +106,20 @@ class AddressLookupServiceTest {
             DataAccessException.class, () -> service.lookupLegacyAddressesByPostcode("AB1 2CD"));
 
     assertSame(secondFailure, thrown);
-    verify(repository, times(2)).findByNormalizedPostcode("AB1 2CD");
+    verify(repository, times(2)).findByNormalizedPostcode("AB12CD");
   }
 
   @Test
   void doesNotRetryAnUnrelatedSqlState() {
     DataAccessException failure = dataAccessFailure("23505");
-    when(repository.findByNormalizedPostcode("AB1 2CD")).thenThrow(failure);
+    when(repository.findByNormalizedPostcode("AB12CD")).thenThrow(failure);
 
     DataAccessException thrown =
         assertThrows(
             DataAccessException.class, () -> service.lookupLegacyAddressesByPostcode("AB1 2CD"));
 
     assertSame(failure, thrown);
-    verify(repository, times(1)).findByNormalizedPostcode("AB1 2CD");
+    verify(repository, times(1)).findByNormalizedPostcode("AB12CD");
   }
 
   private static DataAccessException dataAccessFailure(String sqlState) {

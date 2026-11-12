@@ -56,16 +56,18 @@ class AddressesControllerIT extends AddressTestBaseIT {
   // ========================
 
   @ParameterizedTest
-  @ValueSource(
-      strings = {
-        "",
-        "   ",
-        "ZZ1 1ZZ",
-        "INVALID",
-        "A VERY LONG POSTCODE",
-        "INVALID@POSTCODE",
-        "CF101PX"
-      })
+  @ValueSource(strings = {"   ", "INVALID", "A VERY LONG POSTCODE", "INVALID@POSTCODE", "12345"})
+  void shouldReturnBadRequestForInvalidPostcode(String postcode) throws Exception {
+    this.mockMvc
+        .perform(
+            get("/address-lookup-api/addresses")
+                .queryParam("postcode", postcode)
+                .header(REQUEST_ID.value(), "request_id"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"ZZ1 1ZZ", "CF101PX"})
   void shouldReturnEmptyResultsForUnknownPostcode(String postcode) throws Exception {
     this.mockMvc
         .perform(

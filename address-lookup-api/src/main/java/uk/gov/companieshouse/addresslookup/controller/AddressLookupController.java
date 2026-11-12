@@ -11,6 +11,7 @@ import uk.gov.companieshouse.addresslookup.model.AddressLookupResponse;
 import uk.gov.companieshouse.addresslookup.model.LegacyAddress;
 import uk.gov.companieshouse.addresslookup.model.RoyalMailAddressDto;
 import uk.gov.companieshouse.addresslookup.service.AddressLookupService;
+import uk.gov.companieshouse.addresslookup.validation.PostcodeValidator;
 
 @RestController
 @RequestMapping("/address-lookup-api")
@@ -24,23 +25,32 @@ public class AddressLookupController {
 
   @GetMapping("/addresses")
   public AddressLookupResponse lookupAddress(@RequestParam("postcode") String postcode) {
+    validatePostcode(postcode);
     List<RoyalMailAddressDto> addresses = addressLookupService.lookupByPostcode(postcode);
     return new AddressLookupResponse(postcode, addresses.size(), addresses);
   }
 
   @GetMapping("/multiple-addresses")
   public List<LegacyAddress> lookupMultipleAddresses(@RequestParam("postcode") String postcode) {
-    if (postcode.isEmpty()) {
-      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Address not found");
-    }
-
+    validatePostcode(postcode);
     return addressLookupService.lookupLegacyAddressesByPostcode(postcode);
   }
 
   @GetMapping("/postcode")
   public LegacyAddress lookupPostcode(@RequestParam("postcode") String postcode) {
+    validatePostcode(postcode);
     return addressLookupService
         .lookupLegacyAddressByPostcode(postcode)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Address not found"));
+  }
+
+  private static void validatePostcode(String postcode) {
+    if (postcode.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Address not found");
+    }
+
+    if (!PostcodeValidator.isValid(postcode)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid postcode");
+    }
   }
 }

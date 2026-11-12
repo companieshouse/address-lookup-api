@@ -1,6 +1,14 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CompletedPart;
+import software.amazon.awssdk.services.s3.model.S3Exception;
+import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -11,13 +19,6 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.function.LongSupplier;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.CompletedPart;
-import software.amazon.awssdk.services.s3.model.S3Exception;
-import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport;
-import uk.gov.companieshouse.logging.Logger;
-import uk.gov.companieshouse.logging.LoggerFactory;
 
 /**
  * Bounded 256 MiB parts, with checksum validation before multipart completion.
@@ -252,7 +253,7 @@ public final class StreamingS3 {
     }
 
     String sha256Hex() {
-      return HexFormat.of().formatHex(sha256.digest());
+        return HexFormat.of().formatHex(sha256.digest());
     }
   }
 }

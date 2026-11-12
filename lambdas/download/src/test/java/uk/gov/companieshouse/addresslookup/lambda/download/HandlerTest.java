@@ -1,8 +1,8 @@
 package uk.gov.companieshouse.addresslookup.lambda.download;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.amazonaws.services.lambda.runtime.Context;
@@ -14,7 +14,10 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import uk.gov.companieshouse.addresslookup.lambda.download.service.DownloadService;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
 
 @ExtendWith(MockitoExtension.class)
@@ -70,6 +73,45 @@ class HandlerTest {
       assertTrue(e.getCause().getMessage().contains(EXCEPTION_TEXT));
     }
 
-    assertNull(response);
-  }
+    @Test
+    void shouldReturnResponseForSuccessfulDownload() throws Exception {
+
+        Mockito.when(service.download(TEST_EVENT, context))
+                .thenReturn(TEST_RESPONSE);
+
+        String response = handler.handleRequest(TEST_EVENT, context);
+
+        assertEquals(TEST_RESPONSE, response);
+    }
+
+    @Test
+    void shouldThrowExceptionForTransientFailureException() throws Exception {
+
+        final String EXCEPTION_TEXT = "Something went wrong!!";
+
+        Mockito.when(service.download(TEST_EVENT, context))
+                .thenThrow(new TransientFailureException(EXCEPTION_TEXT));
+
+        String response = null;
+
+        Exception exception = assertThrows(AwsServiceException.class, () -> handler.handleRequest(TEST_EVENT, context));
+
+        assertEquals("download failed; durable state allows retry", exception.getMessage());
+        assertTrue(exception.getCause().getMessage().contains(EXCEPTION_TEXT));
+
+        assertNull(response);
+    }
+
+    @Test
+    void shouldReturnFailureForPermanentFailureException() throws Exception {
+
+        final String EXCEPTION_TEXT = "Something went wrong!!";
+
+        Mockito.when(service.download(TEST_EVENT, context))
+                .thenThrow(new PermanentFailureException(EXCEPTION_TEXT));
+
+        String response = handler.handleRequest(TEST_EVENT, context);
+
+        assertEquals("FAILURE", response);
+    }
 }

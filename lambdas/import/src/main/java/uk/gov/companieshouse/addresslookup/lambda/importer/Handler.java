@@ -15,9 +15,9 @@ public final class Handler implements RequestHandler<Map<String, Object>, String
 
   public String handleRequest(Map<String, Object> event, Context context) {
     try {
-      return service.importCsv(event, context);
+      return service.importCsv(context);
     } catch (Exception e) {
-      throw new RuntimeException("import failed; durable state allows retry", e);
+      throw new ImportFailedException(e);
     }
   }
 }

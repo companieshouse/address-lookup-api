@@ -147,7 +147,7 @@ final class ReleaseStoreTest {
     s3.scanStatus.put(KEY, ReleaseStore.CLEAN);
     var ref = JSON.createObjectNode().put("s3Key", KEY).put("version", FakeS3.DEFAULT_VERSION);
 
-    assertTrue(store.clean(BUCKET, ref));
+    assertTrue(store.isReferenceClean(BUCKET, ref));
   }
 
   @Test
@@ -155,14 +155,14 @@ final class ReleaseStoreTest {
     s3.scanStatus.put(KEY, ReleaseStore.CLEAN);
     var ref = JSON.createObjectNode().put("key", KEY);
 
-    assertTrue(store.clean(BUCKET, ref));
+    assertTrue(store.isReferenceClean(BUCKET, ref));
   }
 
   @Test
   void cleanIsFalseWhileScanIsPending() {
     var ref = JSON.createObjectNode().put("s3Key", KEY);
 
-    assertFalse(store.clean(BUCKET, ref));
+    assertFalse(store.isReferenceClean(BUCKET, ref));
   }
 
   @Test
@@ -170,7 +170,7 @@ final class ReleaseStoreTest {
     s3.scanStatus.put(KEY, ReleaseStore.CLEAN);
     var ref = JSON.createObjectNode().put("s3Key", KEY).put("version", "certified-version");
 
-    var failure = assertThrows(IllegalArgumentException.class, () -> store.clean(BUCKET, ref));
+    var failure = assertThrows(IllegalArgumentException.class, () -> store.isReferenceClean(BUCKET, ref));
 
     assertEquals("Object changed after certification: " + KEY, failure.getMessage());
   }

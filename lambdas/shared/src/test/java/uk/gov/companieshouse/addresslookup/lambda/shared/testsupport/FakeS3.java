@@ -51,6 +51,12 @@ public final class FakeS3 {
   /** Version id returned by headObject; defaults to {@link #DEFAULT_VERSION}. */
   public final Map<String, String> versions = new HashMap<>();
 
+  /** Number of upcoming putObject calls to reject with 412, simulating a concurrent writer. */
+  public int putConflicts;
+
+  /** When set, putObject fails with this HTTP status. */
+  public Integer putErrorStatus;
+
   public int uploadCounter;
   public int abortedUploads;
 
@@ -86,6 +92,9 @@ public final class FakeS3 {
     var matches =
         objects.keySet().stream()
             .filter(k -> k.startsWith(request.prefix()))
+            .filter(k -> request.startAfter() == null || k.compareTo(request.startAfter()) > 0)
+            .sorted()
+            .limit(request.maxKeys() == null ? Long.MAX_VALUE : request.maxKeys())
             .map(k -> S3Object.builder().key(k).build())
             .toList();
     return ListObjectsV2Response.builder().contents(matches).build();
@@ -95,7 +104,7 @@ public final class FakeS3 {
     byte[] bytes = objects.get(request.key());
     if (bytes == null) throw S3Exception.builder().statusCode(404).message("Not found").build();
     return new ResponseInputStream<>(
-        GetObjectResponse.builder().build(),
+        GetObjectResponse.builder().eTag(etag(bytes)).build(),
         AbortableInputStream.create(new ByteArrayInputStream(bytes)));
   }
 
@@ -153,10 +162,24 @@ public final class FakeS3 {
   }
 
   private PutObjectResponse putObject(PutObjectRequest request, RequestBody body) throws Exception {
+    if (putErrorStatus != null)
+      throw S3Exception.builder().statusCode(putErrorStatus).message("error").build();
+    if (putConflicts > 0) {
+      putConflicts--;
+      throw S3Exception.builder().statusCode(412).message("conflict").build();
+    }
     if ("*".equals(request.ifNoneMatch()) && objects.containsKey(request.key()))
       throw S3Exception.builder().statusCode(412).message("exists").build();
+    if (request.ifMatch() != null
+        && (!objects.containsKey(request.key())
+            || !request.ifMatch().equals(etag(objects.get(request.key())))))
+      throw S3Exception.builder().statusCode(412).message("etag mismatch").build();
     objects.put(request.key(), read(body));
     return PutObjectResponse.builder().versionId("put-version").build();
+  }
+
+  private static String etag(byte[] bytes) {
+    return "etag-" + Arrays.hashCode(bytes);
   }
 
   private static byte[] read(RequestBody body) throws Exception {

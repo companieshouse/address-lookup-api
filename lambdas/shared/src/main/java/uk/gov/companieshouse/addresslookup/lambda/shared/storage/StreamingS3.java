@@ -117,8 +117,8 @@ public final class StreamingS3 {
       }
 
       check(total > 0, "Empty object");
-      String actualMd5 = HexFormat.of().formatHex(md5.digest()),
-          actualSha = HexFormat.of().formatHex(sha.digest());
+      String actualMd5 = HexFormat.of().formatHex(md5.digest());
+      String actualSha = HexFormat.of().formatHex(sha.digest());
 
       // Complete the multipart upload only after proving the supplier checksum matches.
       if (expectedMd5 != null && !expectedMd5.equalsIgnoreCase(actualMd5))

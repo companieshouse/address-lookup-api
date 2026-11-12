@@ -18,7 +18,6 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 import com.amazonaws.services.lambda.runtime.Context;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -131,6 +130,20 @@ class ImportServiceTest {
   }
 
   @Test
+  void revisitsManifestWhoseReleaseIsStillProcessing() throws Exception {
+    var store = mock(ReleaseStore.class);
+    var cursor = mock(ReconciliationCursor.class);
+    when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
+    when(releases.findById(UUID.fromString(RELEASE_ID)))
+        .thenReturn(Optional.of(processingRelease()));
+    when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(false);
+
+    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+
+    verify(store).isClean(BUCKET, MANIFEST_KEY, null);
+  }
+
+  @Test
   void skipsManifestUntilItsScanIsClean() throws Exception {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
@@ -167,7 +180,7 @@ class ImportServiceTest {
     when(s3.listObjectsV2(any(ListObjectsV2Request.class)))
         .thenReturn(ListObjectsV2Response.builder().build());
 
-    assertEquals("RECONCILED", service.importCsv(Map.of(), context));
+    assertEquals("RECONCILED", service.importCsv(context));
   }
 
   @Test
@@ -229,7 +242,7 @@ class ImportServiceTest {
             .put("sha256", SHA256);
     when(store.read(BUCKET, "ready/" + RELEASE_ID + "/add_gb_royalmailaddress.json"))
         .thenReturn(reference);
-    when(store.clean(BUCKET, reference)).thenReturn(true);
+    when(store.isReferenceClean(BUCKET, reference)).thenReturn(true);
     when(importer.importClean(
             id,
             Dataset.ADD_GB_ROYALMAILADDRESS,
@@ -244,7 +257,7 @@ class ImportServiceTest {
         ImportService.importReady(
             store, BUCKET, manifest, Dataset.ADD_GB_ROYALMAILADDRESS, importer, "eu-west-2"));
 
-    verify(store).clean(BUCKET, reference);
+    verify(store).isReferenceClean(BUCKET, reference);
     verify(importer)
         .importClean(
             id,
@@ -268,7 +281,7 @@ class ImportServiceTest {
             .put("sha256", SHA256);
     when(store.read(BUCKET, "ready/" + RELEASE_ID + "/add_gb_royalmailaddress.json"))
         .thenReturn(null, reference);
-    when(store.clean(BUCKET, reference)).thenReturn(false);
+    when(store.isReferenceClean(BUCKET, reference)).thenReturn(false);
 
     assertFalse(
         ImportService.importReady(

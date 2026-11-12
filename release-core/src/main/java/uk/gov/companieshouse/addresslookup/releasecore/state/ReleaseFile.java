@@ -73,6 +73,14 @@ public class ReleaseFile {
     return status;
   }
 
+  public String getBucket() {
+    return bucket;
+  }
+
+  public String getChecksum() {
+    return checksum;
+  }
+
   public boolean ready(SupplyType type) {
     return status == (type == SupplyType.COU ? Status.RESOLVED : Status.FULL_READY);
   }

@@ -13,7 +13,7 @@ public final class Handler implements RequestHandler<Map<String, Object>, String
     try {
       return service.download(event, context);
     } catch (Exception e) {
-      throw new RuntimeException("download failed; durable state allows retry", e);
+      throw new DownloadFailedException(e);
     }
   }
 }

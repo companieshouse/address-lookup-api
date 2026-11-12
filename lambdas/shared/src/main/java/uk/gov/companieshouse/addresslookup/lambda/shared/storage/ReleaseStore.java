@@ -24,6 +24,7 @@ public final class ReleaseStore {
   private static final String FIELD_S3_KEY = "s3Key";
   private static final String FIELD_VERSION = "version";
   private static final String SCANNED_PREFIX = "Scanned/";
+  private static final String EXTRACTED_PREFIX = "extracted/";
   private final S3Client s3;
 
   public ReleaseStore(S3Client s3) {
@@ -143,7 +144,7 @@ public final class ReleaseStore {
   }
 
   public static String extractedCsvKey(String id, String dataset) {
-    return SCANNED_PREFIX + UUID.fromString(id) + "/" + dataset + ".csv";
+    return EXTRACTED_PREFIX + id + "/" + dataset + "/" + dataset + ".csv";
   }
 
   public static String downloadZipKey(String id, String dataset) {

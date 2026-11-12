@@ -61,12 +61,22 @@ public final class StreamingS3 {
 
     public Uploaded put(InputStream in, String bucket, String key, String expectedMd5, long limit)
             throws Exception {
-        return put(in, bucket, key, expectedMd5, limit, false);
+        return put(in, bucket, key, expectedMd5, limit, false, null);
     }
 
     public Uploaded putIdempotent(InputStream in, String bucket, String key, long limit)
             throws Exception {
-        return put(in, bucket, key, null, limit, true);
+        return put(in, bucket, key, null, limit, true, null);
+    }
+
+    @FunctionalInterface
+    public interface BeforeCompletion {
+        void run() throws Exception;
+    }
+
+    public Uploaded putIdempotent(InputStream in, String bucket, String key, long limit,
+                                  BeforeCompletion beforeCompletion) throws Exception {
+        return put(in, bucket, key, null, limit, true, beforeCompletion);
     }
 
     public static String checksumKey(String key) throws Exception {
@@ -76,7 +86,7 @@ public final class StreamingS3 {
 
     private Uploaded put(
             InputStream in, String bucket, String key, String expectedMd5, long limit,
-            boolean reuseExisting) throws Exception {
+            boolean reuseExisting, BeforeCompletion beforeCompletion) throws Exception {
         String upload = s3.createMultipartUpload(b -> b.bucket(bucket).key(key)).uploadId();
         LOG.info("Multipart upload started", Map.of(BUCKET_FIELD, bucket, KEY_FIELD, key));
 
@@ -120,6 +130,7 @@ public final class StreamingS3 {
             // Complete the multipart upload only after proving the supplier checksum matches.
             if (expectedMd5 != null && !expectedMd5.equalsIgnoreCase(actualMd5))
                 throw new ChecksumMismatchException(expectedMd5, actualMd5);
+            if (beforeCompletion != null) beforeCompletion.run();
             String version = completeUpload(bucket, key, upload, parts, reuseExisting, actualSha);
             check(
                     version != null && !"null".equals(version),

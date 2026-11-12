@@ -1,6 +1,9 @@
 package uk.gov.companieshouse.addresslookup.lambda.unzip.service;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -11,10 +14,12 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.function.Executable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -22,9 +27,12 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +41,8 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadResponse;
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
+import software.amazon.awssdk.services.s3.model.CopyObjectResponse;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -66,8 +76,6 @@ final class ExtractionServiceTest {
     @Mock
     private S3Client s3;
     @Mock
-    private Commands commands;
-    @Mock
     private Context context;
     private final Map<StoredObject, byte[]> objects = new HashMap<>();
     private byte[] uploaded;
@@ -75,13 +83,12 @@ final class ExtractionServiceTest {
     private boolean failEvidenceOnce;
     private boolean conflictReceiptOnce;
     private boolean conflictingReceiptOnce;
-    private ExtractionService service;
+    private ExtractionComponent service;
 
     @BeforeEach
     void setUp() throws Exception {
-        service = new ExtractionService(
+        service = new ExtractionComponent(
                 s3,
-                commands,
                 new AcquisitionProperties(
                         SOURCE, CHECKED, "ingest", "events", "key", "packages",
                         1024 * 1024, null, null, 1024 * 1024, 20,
@@ -132,7 +139,6 @@ final class ExtractionServiceTest {
 
         assertThrows(S3Exception.class, () -> service.unzip(unzipEvent, context));
         verify(s3, never()).getObject(argThat((GetObjectRequest request) -> ZIP_KEY.equals(request.key())));
-        verifyNoInteractions(commands);
     }
 
     @Test
@@ -142,26 +148,76 @@ final class ExtractionServiceTest {
         when(s3.getObjectTagging(any(GetObjectTaggingRequest.class)))
                 .thenReturn(GetObjectTaggingResponse.builder().build());
 
-        assertEquals("WAITING_FOR_ZIP_SCAN", service.unzip(event(), context));
+        assertThrows(IllegalStateException.class, () -> service.unzip(event(), context));
         verify(s3, never()).getObject(argThat((GetObjectRequest request) -> ZIP_KEY.equals(request.key())));
-        verifyNoInteractions(commands);
     }
 
     @Test
     void rejectsMismatchedHeaderWithoutUploading() throws Exception {
         cleanZip(zip(Map.of(DATASET + ".csv", "wrong,header\n1,2\n")));
 
-        assertEquals("HEADER_MISMATCH", service.unzip(event(), context));
+        assertRejected("HEADER_MISMATCH", () -> service.unzip(event(), context));
         verify(s3, never()).createMultipartUpload(any(Consumer.class));
-        verifyNoInteractions(commands);
     }
 
     @Test
     void rejectsUnexpectedCsvFilenameWithoutUploading() throws Exception {
         cleanZip(zip(Map.of("unexpected.csv", "data\n")));
 
-        assertEquals("ARCHIVE_INVALID", service.unzip(event(), context));
+        assertRejected("ARCHIVE_INVALID", () -> service.unzip(event(), context));
         verify(s3, never()).createMultipartUpload(any(Consumer.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"notes.txt", "add_gb_royalmailaddress_notes.json",
+            "add_gb_royalmailaddress_.csv", "metadata/"})
+    void rejectsUnexpectedEntriesBeforePrimaryCsv(String name) throws Exception {
+        cleanZip(zip(Map.of(name, "data\n")));
+
+        assertRejected("ARCHIVE_INVALID", () -> service.unzip(event(), context));
+        verify(s3, never()).createMultipartUpload(any(Consumer.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"notes.txt", "add_gb_royalmailaddress_notes.json",
+            "add_gb_royalmailaddress_.csv", "metadata/"})
+    void rejectsUnexpectedEntriesAfterPrimaryCsvBeforeCompletingUpload(String name) throws Exception {
+        var entries = new LinkedHashMap<String, String>();
+        entries.put(DATASET + ".csv", header() + "\n");
+        entries.put(name, "data\n");
+        cleanZip(zip(entries));
+        stubUpload();
+
+        assertRejected("ARCHIVE_INVALID", () -> service.unzip(event(), context));
+        verify(s3, never()).completeMultipartUpload(any(Consumer.class));
+        verify(s3).abortMultipartUpload(any(Consumer.class));
+        assertFalse(objects.containsKey(stored(SOURCE, RECEIPT_KEY)));
+    }
+
+    @Test
+    void acceptsMetadataAfterPrimaryCsv() throws Exception {
+        var entries = new LinkedHashMap<String, String>();
+        entries.put(DATASET + ".csv", header() + "\n");
+        entries.put(DATASET + "_multires.csv", "a,b\n");
+        cleanZip(zip(entries));
+        stubUpload();
+
+        assertEquals("CSV_SCAN", service.unzip(event(), context));
+        assertEquals(2, capturedReceipt().path("zipFileCount").asInt());
+        assertEquals((header() + "\n").getBytes(StandardCharsets.UTF_8).length, uploaded.length);
+    }
+
+    @Test
+    void rejectsHighlyCompressedMetadataAfterPrimaryCsv() throws Exception {
+        var entries = new LinkedHashMap<String, String>();
+        entries.put(DATASET + ".csv", header() + "\n");
+        entries.put(DATASET + "_multires.csv", "x".repeat(30_000));
+        cleanZip(zip(entries));
+        stubUpload();
+
+        assertRejected("MALFORMED_ZIP", () -> service.unzip(event(), context));
+        verify(s3, never()).completeMultipartUpload(any(Consumer.class));
+        verify(s3).abortMultipartUpload(any(Consumer.class));
     }
 
     @Test
@@ -169,8 +225,20 @@ final class ExtractionServiceTest {
         for (String name : new String[]{"nested/" + DATASET + ".csv", "..", "dir\\file.csv"}) {
             cleanZip(zip(Map.of(name, "data\n")));
 
-            assertEquals("ARCHIVE_INVALID", service.unzip(event(), context), name);
+            assertRejected("ARCHIVE_INVALID", () -> service.unzip(event(), context));
         }
+        verify(s3, never()).createMultipartUpload(any(Consumer.class));
+    }
+
+    @Test
+    void rejectsArchiveWithTooManyEntries() throws Exception {
+        var entries = new LinkedHashMap<String, String>();
+        for (int i = 0; i < 101; i++) {
+            entries.put(DATASET + "_part" + i + ".csv", "a,b\n" + i + "\n");
+        }
+        cleanZip(zip(entries));
+
+        assertRejected("ARCHIVE_INVALID", () -> service.unzip(event(), context));
         verify(s3, never()).createMultipartUpload(any(Consumer.class));
     }
 
@@ -178,7 +246,7 @@ final class ExtractionServiceTest {
     void rejectsAncillaryEntriesThatExceedTheExpandedSizeLimit() throws Exception {
         cleanZip(zip(Map.of(DATASET + "_big.csv", "x".repeat(200))));
 
-        assertEquals("MALFORMED_ZIP", serviceWithLimit(100).unzip(event(), context));
+        assertRejected("MALFORMED_ZIP", () -> serviceWithLimit(100).unzip(event(), context));
         verify(s3, never()).createMultipartUpload(any(Consumer.class));
     }
 
@@ -187,9 +255,86 @@ final class ExtractionServiceTest {
         cleanZip(zip(Map.of(DATASET + ".csv", header() + "\n" + "row\n".repeat(100))));
         stubUpload();
 
-        assertEquals("MALFORMED_ZIP", serviceWithLimit(100).unzip(event(), context));
+        assertRejected("MALFORMED_ZIP", () ->
+                serviceWithLimit(header().getBytes(StandardCharsets.UTF_8).length + 10)
+                        .unzip(event(), context));
         verify(s3, never()).completeMultipartUpload(any(Consumer.class));
         verify(s3).abortMultipartUpload(any(Consumer.class));
+    }
+
+    @Test
+    void rejectsHighlyCompressedAncillaryEntry() throws Exception {
+        byte[] archive = zip(Map.of(DATASET + "_extra.csv", "x".repeat(30_000)));
+        assertTrue(compressionRatio(archive) > 100);
+        cleanZip(archive);
+
+        assertRejected("MALFORMED_ZIP", () -> service.unzip(event(), context));
+        verify(s3, never()).createMultipartUpload(any(Consumer.class));
+    }
+
+    @Test
+    void rejectsArchiveExceedingTotalCompressionRatio() throws Exception {
+        var entries = new LinkedHashMap<String, String>();
+        entries.put(DATASET + "_first.csv", "a,b\n");
+        entries.put(DATASET + "_second.csv", "x".repeat(1_000));
+        byte[] archive = zip(entries);
+        assertTrue(archiveCompressionRatio(archive) > 20);
+        assertTrue(compressionRatio(zip(Map.of(DATASET + "_second.csv", "x".repeat(1_000)))) < 100);
+        cleanZip(archive);
+
+        assertRejected("MALFORMED_ZIP", () -> service.unzip(event(), context));
+        verify(s3, never()).createMultipartUpload(any(Consumer.class));
+    }
+
+    @Test
+    void abortsUploadWhenPrimaryCsvExceedsCompressionRatio() throws Exception {
+        cleanZip(zip(Map.of(DATASET + ".csv", header() + "\n" + "x".repeat(30_000))));
+        stubUpload();
+
+        assertRejected("MALFORMED_ZIP", () -> service.unzip(event(), context));
+        verify(s3, never()).completeMultipartUpload(any(Consumer.class));
+        verify(s3).abortMultipartUpload(any(Consumer.class));
+    }
+
+    @Test
+    void acceptsStoredPrimaryCsv() throws Exception {
+        byte[] csv = (header() + "\n").getBytes(StandardCharsets.UTF_8);
+        var crc = new CRC32();
+        crc.update(csv);
+        var out = new ByteArrayOutputStream();
+        try (var zip = new ZipOutputStream(out)) {
+            var entry = new ZipEntry(DATASET + ".csv");
+            entry.setMethod(ZipEntry.STORED);
+            entry.setSize(csv.length);
+            entry.setCompressedSize(csv.length);
+            entry.setCrc(crc.getValue());
+            zip.putNextEntry(entry);
+            zip.write(csv);
+            zip.closeEntry();
+        }
+        cleanZip(out.toByteArray());
+        stubUpload();
+
+        assertEquals("CSV_SCAN", service.unzip(event(), context));
+        assertEquals(csvKey(), capturedReceipt().path("key").asText());
+    }
+
+    @Test
+    void extractsValidIslCsv() throws Exception {
+        String dataset = "add_isl_royalmailaddress";
+        String zipKey = "Scanned/" + ID + "/" + dataset + ".zip";
+        String csvKey = ReleaseStore.extractedCsvKey(ID, dataset);
+        String islHeader = DatasetCatalog.tables().stream()
+                .filter(table -> dataset.equals(table.name())).findFirst().orElseThrow().header();
+        cleanZip(zipKey, zip(Map.of(dataset + ".csv", islHeader + "\n")));
+        stubUpload(csvKey);
+        var request = Map.<String, Object>of("detail", Map.of(
+                "schemaVersion", 1, "releaseId", ID, "dataset", dataset,
+                "object", Map.of("bucket", SOURCE, "key", zipKey, "versionId", "zip-version")));
+
+        assertEquals("CSV_SCAN", service.unzip(request, context));
+        assertTrue(objects.containsKey(stored(CHECKED, csvKey)));
+        assertTrue(objects.containsKey(stored(SOURCE, ReleaseStore.receiptKey(ID, dataset, "extract"))));
     }
 
     @Test
@@ -210,7 +355,7 @@ final class ExtractionServiceTest {
                 Duration.ofSeconds(20), Duration.ofSeconds(60));
 
         var failure = assertThrows(IllegalArgumentException.class,
-                () -> new ExtractionService(s3, commands, properties));
+                () -> new ExtractionComponent(s3, properties));
 
         assertEquals("Missing SCANNED_BUCKET", failure.getMessage());
     }
@@ -219,7 +364,7 @@ final class ExtractionServiceTest {
     void reportsMissingPrimaryCsv() throws Exception {
         cleanZip(zip(Map.of(DATASET + "_multires.csv", "data\n")));
 
-        assertEquals("CSV_NOT_FOUND", service.unzip(event(), context));
+        assertRejected("CSV_NOT_FOUND", () -> service.unzip(event(), context));
         verify(s3, never()).createMultipartUpload(any(Consumer.class));
     }
 
@@ -229,7 +374,7 @@ final class ExtractionServiceTest {
         malformed[8] = 99;
         cleanZip(malformed);
 
-        assertEquals("MALFORMED_ZIP", service.unzip(event(), context));
+        assertRejected("MALFORMED_ZIP", () -> service.unzip(event(), context));
         verify(s3, never()).createMultipartUpload(any(Consumer.class));
     }
 
@@ -242,7 +387,6 @@ final class ExtractionServiceTest {
 
         assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));
         verify(s3, never()).createMultipartUpload(any(Consumer.class));
-        verifyNoInteractions(commands);
     }
 
     @Test
@@ -252,7 +396,6 @@ final class ExtractionServiceTest {
 
         assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));
         verify(s3, never()).createMultipartUpload(any(Consumer.class));
-        verifyNoInteractions(commands);
     }
 
     @Test
@@ -272,7 +415,7 @@ final class ExtractionServiceTest {
     }
 
     @Test
-    void recordsUploadedCsvVersionAndPublishesNextCommand() throws Exception {
+    void recordsUploadedCsvVersion() throws Exception {
         cleanZip(validZip());
         stubUpload();
 
@@ -280,7 +423,7 @@ final class ExtractionServiceTest {
         JsonNode receipt = capturedReceipt();
         assertEquals(ID, receipt.path("releaseId").asText());
         assertEquals(DATASET, receipt.path("dataset").asText());
-        assertEquals("Scanned/" + ID + "/" + DATASET + ".csv", receipt.path("key").asText());
+        assertEquals("extracted/" + ID + "/" + DATASET + "/" + DATASET + ".csv", receipt.path("key").asText());
         assertEquals("csv-version", receipt.path("version").asText());
         assertTrue(receipt.path("sha256").asText().matches("[a-f0-9]{64}"));
         assertEquals("zip-version", receipt.path("zipVersion").asText());
@@ -291,24 +434,10 @@ final class ExtractionServiceTest {
         verify(s3).getObject(argThat((GetObjectRequest request) ->
                 SOURCE.equals(request.bucket()) && ZIP_KEY.equals(request.key())
                         && "zip-version".equals(request.versionId())));
-        verify(commands).send("CSV_SCAN", DATASET);
     }
 
     @Test
-    void eventFailureAfterExtractReceiptIsWritten() throws Exception {
-        cleanZip(validZip());
-        stubUpload();
-        doThrow(new IllegalStateException("EventBridge unavailable"))
-                .when(commands).send("CSV_SCAN", DATASET);
-        var request = event();
-        assertThrows(IllegalStateException.class, () -> service.unzip(request, context));
-        JsonNode receipt = capturedReceipt();
-        assertEquals("EXTRACTED", receipt.path("status").asText());
-        verify(commands).send("CSV_SCAN", DATASET);
-    }
-
-    @Test
-    void repeatedCallRetriesEvent() throws Exception {
+    void repeatedCallsDoesNotExtractAgain() throws Exception {
         cleanZip(validZip());
         stubUpload();
 
@@ -316,24 +445,7 @@ final class ExtractionServiceTest {
         assertEquals("CSV_SCAN", service.unzip(event(), context));
 
         verify(s3, times(1)).createMultipartUpload(any(Consumer.class));
-        verify(commands, times(2)).send("CSV_SCAN", DATASET);
         assertEquals(csvKey(), capturedReceipt().path("key").asText());
-    }
-
-    @Test
-    void retriesFailedEventWithoutExtractingAgain() throws Exception {
-        cleanZip(validZip());
-        stubUpload();
-        doThrow(new IllegalStateException("EventBridge unavailable"))
-                .when(commands).send("CSV_SCAN", DATASET);
-        var request = event();
-
-        assertThrows(IllegalStateException.class, () -> service.unzip(request, context));
-        doNothing().when(commands).send("CSV_SCAN", DATASET);
-        assertEquals("CSV_SCAN", service.unzip(request, context));
-
-        verify(s3, times(1)).createMultipartUpload(any(Consumer.class));
-        verify(commands, times(2)).send("CSV_SCAN", DATASET);
     }
 
     @Test
@@ -348,7 +460,6 @@ final class ExtractionServiceTest {
         assertEquals("CSV_SCAN", service.unzip(request, context));
 
         verify(s3, times(2)).createMultipartUpload(any(Consumer.class));
-        verify(commands).send("CSV_SCAN", DATASET);
         assertEquals("csv-version", capturedReceipt().path("version").asText());
     }
 
@@ -366,7 +477,6 @@ final class ExtractionServiceTest {
         assertTrue(objects.containsKey(stored(CHECKED,
                 uk.gov.companieshouse.addresslookup.lambda.shared.storage
                         .StreamingS3.checksumKey(csvKey()))));
-        verify(commands).send("CSV_SCAN", DATASET);
     }
 
     @Test
@@ -377,7 +487,6 @@ final class ExtractionServiceTest {
 
         assertEquals("CSV_SCAN", service.unzip(event(), context));
 
-        verify(commands).send("CSV_SCAN", DATASET);
         assertEquals("csv-version", capturedReceipt().path("version").asText());
     }
 
@@ -390,7 +499,6 @@ final class ExtractionServiceTest {
 
         assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));
 
-        verifyNoInteractions(commands);
     }
 
     @Test
@@ -401,7 +509,6 @@ final class ExtractionServiceTest {
         var request = event();
 
         assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));
-        verifyNoInteractions(commands);
     }
 
     @Test
@@ -424,20 +531,23 @@ final class ExtractionServiceTest {
 
         assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));
         verify(s3, never()).createMultipartUpload(any(Consumer.class));
-        verifyNoInteractions(commands);
     }
 
     // Helper methods
-    private ExtractionService serviceWithLimit(long maxExtractedBytes) {
-        return new ExtractionService(
-                s3, commands,
+    private ExtractionComponent serviceWithLimit(long maxExtractedBytes) {
+        return new ExtractionComponent(
+                s3,
                 new AcquisitionProperties(
                         SOURCE, CHECKED, "ingest", "events", "key", "packages", 1024 * 1024,
                         null, null, maxExtractedBytes, 20, Duration.ofSeconds(20), Duration.ofSeconds(60)));
     }
 
     private void cleanZip(byte[] content) throws Exception {
-        objects.put(stored(SOURCE, ZIP_KEY), content);
+        cleanZip(ZIP_KEY, content);
+    }
+
+    private void cleanZip(String key, byte[] content) throws Exception {
+        objects.put(stored(SOURCE, key), content);
         lenient().when(s3.getObjectTagging(any(GetObjectTaggingRequest.class)))
                 .thenReturn(
                         GetObjectTaggingResponse.builder()
@@ -445,10 +555,40 @@ final class ExtractionServiceTest {
                                 .build());
         lenient().when(s3.headObject(any(HeadObjectRequest.class)))
                 .thenAnswer(
-                        call -> HeadObjectResponse.builder()
-                                .versionId(CHECKED.equals(call.getArgument(0, HeadObjectRequest.class).bucket())
-                                        ? "csv-version" : "zip-version")
-                                .build());
+                        call -> {
+                            var request = call.getArgument(0, HeadObjectRequest.class);
+                            byte[] object = objects.get(stored(request.bucket(), request.key()));
+                            return HeadObjectResponse.builder()
+                                    .versionId(CHECKED.equals(request.bucket())
+                                            ? "csv-version" : "zip-version")
+                                    .contentLength(object == null ? 0L : (long) object.length)
+                                    .build();
+                        });
+        lenient().when(s3.copyObject(any(Consumer.class)))
+                .thenAnswer(call -> {
+                    var builder = CopyObjectRequest.builder();
+                    Consumer<CopyObjectRequest.Builder> request = call.getArgument(0);
+                    request.accept(builder);
+                    var copy = builder.build();
+                    assertEquals(SOURCE, copy.sourceBucket());
+                    assertEquals(key, copy.sourceKey());
+                    assertEquals("zip-version", copy.sourceVersionId());
+                    assertEquals(SOURCE, copy.destinationBucket());
+                    objects.put(stored(copy.destinationBucket(), copy.destinationKey()), content);
+                    return CopyObjectResponse.builder().build();
+                });
+    }
+
+    private void assertRejected(String code, Executable operation) throws Exception {
+        var failure = assertThrows(ExtractionComponent.PermanentExtractionException.class, operation);
+        assertEquals(code, failure.code());
+        String key = "quarantine/" + ID + "/" + DATASET + "/"
+                + uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sha(
+                        "zip-version".getBytes(StandardCharsets.UTF_8)) + ".zip";
+        byte[] quarantined = objects.get(stored(SOURCE, key));
+        assertNotNull(quarantined);
+        assertArrayEquals(objects.get(stored(SOURCE, ZIP_KEY)), quarantined);
+        assertFalse(objects.containsKey(stored(SOURCE, RECEIPT_KEY)));
     }
 
     private static String header() {
@@ -475,7 +615,32 @@ final class ExtractionServiceTest {
         return out.toByteArray();
     }
 
+    private static double compressionRatio(byte[] archive) throws IOException {
+        try (var zip = new ZipInputStream(new ByteArrayInputStream(archive))) {
+            ZipEntry entry = zip.getNextEntry();
+            int expanded = zip.readAllBytes().length;
+            return (double) expanded / entry.getCompressedSize();
+        }
+    }
+
+    private static double archiveCompressionRatio(byte[] archive) throws IOException {
+        try (var zip = new ZipInputStream(new ByteArrayInputStream(archive))) {
+            long expanded = 0;
+            long compressed = 0;
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                expanded += zip.readAllBytes().length;
+                compressed += entry.getCompressedSize();
+            }
+            return (double) expanded / compressed;
+        }
+    }
+
     private void stubUpload() throws Exception {
+        stubUpload(csvKey());
+    }
+
+    private void stubUpload(String key) throws Exception {
         when(s3.createMultipartUpload(any(Consumer.class)))
                 .thenAnswer(
                         call -> {
@@ -483,7 +648,7 @@ final class ExtractionServiceTest {
                             var builder = CreateMultipartUploadRequest.builder();
                             request.accept(builder);
                             assertEquals(CHECKED, builder.build().bucket());
-                            assertEquals(csvKey(), builder.build().key());
+                            assertEquals(key, builder.build().key());
                             return CreateMultipartUploadResponse.builder().uploadId("upload-id").build();
                         });
         lenient().when(s3.uploadPart(any(Consumer.class), any(RequestBody.class)))
@@ -498,9 +663,9 @@ final class ExtractionServiceTest {
         lenient().when(s3.completeMultipartUpload(any(Consumer.class)))
                 .thenAnswer(
                         call -> {
-                            if (objects.containsKey(stored(CHECKED, csvKey())))
+                            if (objects.containsKey(stored(CHECKED, key)))
                                 throw S3Exception.builder().statusCode(412).build();
-                            objects.put(stored(CHECKED, csvKey()), uploaded);
+                            objects.put(stored(CHECKED, key), uploaded);
                             return CompleteMultipartUploadResponse.builder().versionId("csv-version").build();
                         });
     }

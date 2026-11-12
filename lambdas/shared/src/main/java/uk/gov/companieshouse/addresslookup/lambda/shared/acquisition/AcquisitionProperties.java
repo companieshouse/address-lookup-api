@@ -20,7 +20,7 @@ public record AcquisitionProperties(
     List<DatasetDefault> datasets,
     @DefaultValue("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}")
     String osHttpURLTemplate,
-    @DefaultValue("1073741824") long maxExtractedBytes,
+    @DefaultValue("21474836480") long maxExtractedBytes,
     @DefaultValue("20") int sweepLimit,
     @DefaultValue("20s") Duration connectTimeout,
     @DefaultValue("840s") Duration requestTimeout) {

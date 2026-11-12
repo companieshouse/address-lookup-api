@@ -26,6 +26,7 @@ import uk.gov.companieshouse.release.model.ReleaseManifest;
 @Component
 public final class ImportService {
   private static final Logger LOG = LoggerFactory.getLogger(ImportService.class.getName());
+  private static final String JSON_EXTENSION = ".json";
 
   private final S3Client s3;
   private final ImportProperties properties;
@@ -49,7 +50,7 @@ public final class ImportService {
     this.releases = releases;
   }
 
-  public String importCsv(Map<String, Object> event, Context context) throws Exception {
+  public String importCsv(Context context) throws Exception {
     String bucket = properties.scannedBucket();
     return reconcile(
         new ReleaseStore(s3),
@@ -77,20 +78,7 @@ public final class ImportService {
       if (next.isEmpty() || !visited.add(next.get())) break;
       String key = next.get();
       try {
-        // Completed history may use an older schema; don't parse it with today's contract.
-        UUID id = manifestId(key);
-        var existing = releases.findById(id);
-        if (existing.isPresent() && existing.get().getStatus() != Release.Status.PROCESSING)
-          continue;
-        if (!store.isClean(bucket, key, null)) continue;
-        var node = store.read(bucket, key);
-        var manifest = ReleaseManifest.read(node);
-        check(
-            key.equals("manifests/" + manifest.target() + "/" + manifest.id() + ".json"),
-            "Manifest key mismatch");
-        registration.register(
-            manifest, key, sha(node.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-        failures.addAll(importAvailable(store, bucket, manifest, importer, region, context));
+        importManifest(store, bucket, key, region, context, failures);
       } catch (Exception failure) {
         failures.add(new IllegalStateException("Cannot import manifest " + key, failure));
       }
@@ -114,9 +102,32 @@ public final class ImportService {
     return "RECONCILED";
   }
 
+  private void importManifest(
+      ReleaseStore store,
+      String bucket,
+      String key,
+      String region,
+      Context context,
+      List<Exception> failures)
+      throws Exception {
+    // Completed history may use an older schema; don't parse it with today's contract.
+    UUID id = manifestId(key);
+    var existing = releases.findById(id);
+    if (existing.isPresent() && existing.get().getStatus() != Release.Status.PROCESSING) return;
+    if (!store.isClean(bucket, key, null)) return;
+    var node = store.read(bucket, key);
+    var manifest = ReleaseManifest.read(node);
+    check(
+        key.equals("manifests/" + manifest.target() + "/" + manifest.id() + JSON_EXTENSION),
+        "Manifest key mismatch");
+    registration.register(
+        manifest, key, sha(node.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+    failures.addAll(importAvailable(store, bucket, manifest, importer, region, context));
+  }
+
   private static UUID manifestId(String key) {
     String name = key.substring(key.lastIndexOf('/') + 1);
-    check(name.endsWith(".json"), "Unexpected manifest key");
+    check(name.endsWith(JSON_EXTENSION), "Unexpected manifest key");
     return UUID.fromString(name.substring(0, name.length() - 5));
   }
 
@@ -159,12 +170,12 @@ public final class ImportService {
       DatasetImportService importer,
       String region)
       throws Exception {
-    String evidenceKey = "ready/" + manifest.id() + "/" + dataset.datasetName() + ".json";
+    String evidenceKey = "ready/" + manifest.id() + "/" + dataset.datasetName() + JSON_EXTENSION;
     var ref = store.read(bucket, evidenceKey);
     if (ref == null) return false;
     var object = ObjectReference.read(ref);
     validateReference(manifest, dataset, object);
-    if (!store.clean(bucket, ref)) return false;
+    if (!store.isReferenceClean(bucket, ref)) return false;
     return importer.importClean(
         manifest.id(), dataset, bucket, object.key(), object.version(), object.sha256(), region);
   }

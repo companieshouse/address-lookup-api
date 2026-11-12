@@ -65,7 +65,7 @@ class HandlerTest {
     try {
       response = handler.handleRequest(TEST_EVENT, context);
     } catch (Exception e) {
-      assertInstanceOf(RuntimeException.class, e);
+      assertInstanceOf(DownloadFailedException.class, e);
       assertEquals("download failed; durable state allows retry", e.getMessage());
       assertTrue(e.getCause().getMessage().contains(EXCEPTION_TEXT));
     }

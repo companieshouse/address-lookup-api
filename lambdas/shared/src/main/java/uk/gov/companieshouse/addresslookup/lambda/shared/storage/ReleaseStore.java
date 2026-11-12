@@ -3,6 +3,7 @@ package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -25,7 +26,7 @@ public final class ReleaseStore {
     this.s3 = s3;
   }
 
-  public JsonNode read(String bucket, String key) throws Exception {
+  public JsonNode read(String bucket, String key) throws IOException {
     // Prefix-scoped ListBucket grants need not reveal missing keys through GET's 404/403
     // distinction.
     // Check the exact permitted key before reading optional receipts.
@@ -43,7 +44,7 @@ public final class ReleaseStore {
     }
   }
 
-  public void immutable(String bucket, String key, JsonNode value) throws Exception {
+  public void immutable(String bucket, String key, JsonNode value) {
     try {
       s3.putObject(
           PutObjectRequest.builder()
@@ -109,7 +110,7 @@ public final class ReleaseStore {
         "GuardDuty scan " + status + ": s3://" + bucket + "/" + key + " version=" + version);
   }
 
-  public boolean clean(String bucket, JsonNode ref) {
+  public boolean isReferenceClean(String bucket, JsonNode ref) {
     String key = ref.hasNonNull(FIELD_S3_KEY) ? required(ref, FIELD_S3_KEY) : required(ref, "key");
     String version =
         ref.hasNonNull(FIELD_VERSION) ? required(ref, FIELD_VERSION) : version(bucket, key);
@@ -148,13 +149,13 @@ public final class ReleaseStore {
     return SCANNED_PREFIX + UUID.fromString(id) + "/" + dataset + ".zip";
   }
 
-  public JsonNode receipt(String bucket, String id, String dataset, String step) throws Exception {
+  public JsonNode receipt(String bucket, String id, String dataset, String step)
+      throws IOException {
     return read(bucket, receiptKey(id, dataset, step));
   }
 
   public void receipt(
-      String bucket, String id, String dataset, String step, StreamingS3.Uploaded upload)
-      throws Exception {
+      String bucket, String id, String dataset, String step, StreamingS3.Uploaded upload) {
     immutable(bucket, receiptKey(id, dataset, step), JSON.valueToTree(upload));
   }
 
@@ -167,8 +168,7 @@ public final class ReleaseStore {
       String sourceUrl,
       Instant downloadedAt) {}
 
-  public void downloadReceipt(String bucket, DownloadReceipt details, StreamingS3.Uploaded upload)
-      throws Exception {
+  public void downloadReceipt(String bucket, DownloadReceipt details, StreamingS3.Uploaded upload) {
     var receipt = JSON.createObjectNode();
     receipt.put("releaseId", details.releaseId());
     receipt.put("dataset", details.dataset());
@@ -184,8 +184,7 @@ public final class ReleaseStore {
   }
 
   public void receipt(
-      String bucket, String releaseId, String dataset, String step, JsonNode receipt)
-      throws Exception {
+      String bucket, String releaseId, String dataset, String step, JsonNode receipt) {
     immutable(bucket, receiptKey(releaseId, dataset, step), receipt);
   }
 

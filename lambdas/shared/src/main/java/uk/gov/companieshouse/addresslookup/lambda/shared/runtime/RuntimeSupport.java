@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.net.URI;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -15,6 +16,8 @@ public final class RuntimeSupport {
 
   private static final String DETAIL_FIELD = "detail";
 
+  private RuntimeSupport() {}
+
   public static void check(boolean value, String message) {
     if (!value) throw new IllegalArgumentException(message);
   }
@@ -24,8 +27,16 @@ public final class RuntimeSupport {
     if (!value) throw exceptionSupplier.get();
   }
 
-  public static String sha(byte[] bytes) throws Exception {
-    return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+  public static String sha(byte[] bytes) {
+    return digest("SHA-256", bytes);
+  }
+
+  static String digest(String algorithm, byte[] bytes) {
+    try {
+      return HexFormat.of().formatHex(MessageDigest.getInstance(algorithm).digest(bytes));
+    } catch (NoSuchAlgorithmException e) {
+      throw new IllegalStateException("Digest algorithm is not available: " + algorithm, e);
+    }
   }
 
   public static JsonNode detail(Map<String, Object> e) {

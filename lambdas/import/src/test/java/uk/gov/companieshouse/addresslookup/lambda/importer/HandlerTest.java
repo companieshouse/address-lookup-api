@@ -40,7 +40,7 @@ class HandlerTest {
   @Test
   void shouldReturnResponseForSuccessfulDownload() throws Exception {
 
-    Mockito.when(service.importCsv(TEST_EVENT, context)).thenReturn(TEST_RESPONSE);
+    Mockito.when(service.importCsv(context)).thenReturn(TEST_RESPONSE);
 
     String response = handler.handleRequest(TEST_EVENT, context);
 
@@ -52,14 +52,14 @@ class HandlerTest {
 
     final String EXCEPTION_TEXT = "Something went wrong!!";
 
-    Mockito.when(service.importCsv(TEST_EVENT, context)).thenThrow(new Exception(EXCEPTION_TEXT));
+    Mockito.when(service.importCsv(context)).thenThrow(new Exception(EXCEPTION_TEXT));
 
     String response = null;
 
     try {
       response = handler.handleRequest(TEST_EVENT, context);
     } catch (Exception e) {
-      assertInstanceOf(RuntimeException.class, e);
+      assertInstanceOf(ImportFailedException.class, e);
       assertEquals("import failed; durable state allows retry", e.getMessage());
       assertTrue(e.getCause().getMessage().contains(EXCEPTION_TEXT));
     }

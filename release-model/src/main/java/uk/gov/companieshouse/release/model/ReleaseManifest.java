@@ -54,7 +54,7 @@ public record ReleaseManifest(
     return ReleaseJson.MAPPER.readTree(document);
   }
 
-  public static ReleaseManifest read(JsonNode node) throws Exception {
+  public static ReleaseManifest read(JsonNode node) {
     if (!node.isObject()) throw new IllegalArgumentException("Manifest must be an object");
 
     verifyFields(node);

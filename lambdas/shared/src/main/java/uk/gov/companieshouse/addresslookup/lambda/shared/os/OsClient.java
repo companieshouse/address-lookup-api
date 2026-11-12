@@ -48,7 +48,7 @@ public final class OsClient {
     this.http = http;
   }
 
-  public InputStream download(String url) throws Exception {
+  public InputStream download(String url) throws IOException, InterruptedException {
     URI uri = URI.create(url);
     check(
         "https".equals(uri.getScheme()) && "api.os.uk".equals(uri.getHost()),
@@ -74,7 +74,7 @@ public final class OsClient {
     throw new IOException("Too many redirects");
   }
 
-  public JsonNode json(String url) throws Exception {
+  public JsonNode json(String url) throws IOException, InterruptedException {
     try (var in = download(url)) {
       byte[] b = in.readNBytes(4 * 1024 * 1024 + 1);
       check(b.length <= 4 * 1024 * 1024, "OS metadata too large");

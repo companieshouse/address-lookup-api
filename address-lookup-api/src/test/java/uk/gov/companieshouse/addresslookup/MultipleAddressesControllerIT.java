@@ -39,8 +39,8 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
         .andExpect(jsonPath("$[0].postTown").value("ABERDEEN"))
         .andExpect(jsonPath("$[0].country").value("GB-SCT"))
         .andExpect(jsonPath("$[1].postcode").value("AB10 1AU"))
-        .andExpect(jsonPath("$[1].premise").value("FLAT 1 16"))
-        .andExpect(jsonPath("$[1].addressLine1").value("NETHERKIRKGATE"))
+        .andExpect(jsonPath("$[1].premise").value("FLAT 1"))
+        .andExpect(jsonPath("$[1].addressLine1").value("16 NETHERKIRKGATE"))
         .andExpect(jsonPath("$[1].country").value("GB-SCT"));
   }
 
@@ -82,6 +82,23 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
         .andExpect(jsonPath("$[0].addressLine1").value(expectedAddressLine1))
         .andExpect(jsonPath("$[0].postTown").value(expectedPostTown))
         .andExpect(jsonPath("$[0].country").value(expectedCountry));
+  }
+
+  /** Legacy postcode lookup layouts reported by testers for each component combination. */
+  @ParameterizedTest
+  @MethodSource("legacyLayouts")
+  void shouldSplitPremiseAndAddressLine1LikeLegacyLookup(
+      String postcode, String premise, String addressLine1) throws Exception {
+    this.mockMvc
+        .perform(
+            get("/address-lookup-api/multiple-addresses")
+                .queryParam("postcode", postcode)
+                .header(REQUEST_ID.value(), "request_id"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath(
+                    "$[?(@.premise == '" + premise + "' && @.addressLine1 == '" + addressLine1 + "')]")
+                .isNotEmpty());
   }
 
   // ========================
@@ -134,6 +151,18 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
         .andExpect(jsonPath("$[0].premise").exists())
         .andExpect(jsonPath("$[1].premise").exists())
         .andExpect(jsonPath("$[2].premise").exists());
+  }
+
+  private static Stream<Arguments> legacyLayouts() {
+    return Stream.of(
+        // sub-building and building name, no number
+        Arguments.of("LU49PL", "101 GREEN COURT", "GREEN CLOSE"),
+        // building name and number, no sub-building
+        Arguments.of("CH11DF", "UNIT R2", "33 PEPPER STREET"),
+        // sub-building and number, no building name
+        Arguments.of("CH11DF", "UNIT R1", "33 PEPPER STREET"),
+        Arguments.of("IM11BD", "FLAT 2", "40 PRINCES STREET"),
+        Arguments.of("IM11BD", "FLAT 1", "36 PRINCES STREET"));
   }
 
   private static Stream<Arguments> addresses() {

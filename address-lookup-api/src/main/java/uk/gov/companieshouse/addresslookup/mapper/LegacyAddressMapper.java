@@ -34,43 +34,17 @@ public interface LegacyAddressMapper {
   LegacyAddress toLegacyAddressWithoutPremise(RoyalMailAddressLookup address);
 
   /**
-   * Builds the legacy premise. A building name with a building number keeps the number out of the
-   * premise (it moves to address line 1); a sub-building with a building name but no number moves
-   * the building name to address line 1.
+   * Builds the legacy premise using the rule table in {@link LegacyAddressLayout}.
    *
    * @param address address with the premise components
    * @return nonblank components joined by a space, or an empty string
    */
   default String toPremise(RoyalMailAddressLookup address) {
-    if (hasText(address.getBuildingName())) {
-      if (hasText(address.getBuildingNumber())) {
-        return join(address.getSubBuildingName(), address.getBuildingName());
-      }
-      if (hasText(address.getSubBuildingName())) {
-        return join(address.getSubBuildingName());
-      }
-      return join(address.getBuildingName());
-    }
-    return join(address.getSubBuildingName(), number(address));
+    return LegacyAddressLayout.premise(address);
   }
 
   default String toAddressLine1(RoyalMailAddressLookup address) {
-    String street = join(address.getDependentThoroughfare(), address.getThoroughfare());
-    if (!hasText(address.getBuildingName())) {
-      return street;
-    }
-    if (hasText(address.getBuildingNumber())) {
-      return join(number(address), street);
-    }
-    return hasText(address.getSubBuildingName()) ? join(address.getBuildingName(), street) : street;
-  }
-
-  private static String number(RoyalMailAddressLookup address) {
-    return address.getBuildingNumber() == null ? null : address.getBuildingNumber().toString();
-  }
-
-  private static boolean hasText(Object value) {
-    return value != null && !value.toString().isBlank();
+    return LegacyAddressLayout.addressLine1(address);
   }
 
   default String join(String... parts) {

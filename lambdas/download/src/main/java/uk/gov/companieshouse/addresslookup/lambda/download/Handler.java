@@ -10,14 +10,14 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionAppl
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
 
-public final class Handler implements RequestHandler<Map<String, Object>, String> {
-  private final DownloadService service = AcquisitionApplication.start(DownloadService.class);
+import java.util.Map;
 
 public final class Handler extends AbstractRequestHandlerImpl<Map<String,Object>,String> {
     private final DownloadService service =
             AcquisitionApplication.start(DownloadService.class);
 
-    private Logger LOG = LoggerFactory.getLogger(Handler.class.getName());
+    private final Logger LOG = LoggerFactory.getLogger(Handler.class.getName());
+
     @Override
     protected String requestOperation(Map<String, Object> request, Context context) throws PermanentFailureException, TransientFailureException {
         return service.download(request, context);
@@ -42,5 +42,4 @@ public final class Handler extends AbstractRequestHandlerImpl<Map<String,Object>
                 .statusCode(500)
                 .build();
     }
-  }
 }

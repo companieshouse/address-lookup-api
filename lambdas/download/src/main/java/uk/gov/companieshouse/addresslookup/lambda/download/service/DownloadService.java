@@ -33,6 +33,9 @@ public final class DownloadService {
   private static final String DOWNLOAD_COMMAND_DATASET = "dataset";
   private static final String LOG_RELEASE_ID = "release_id";
 
+  private static final String DOWNLOAD_FAILED_MESSAGE = "Download failed";
+  private static final String ERROR_LOG_FIELD = "error";
+
   private final S3Client s3;
   private final OsClient os;
   private final AcquisitionProperties properties;
@@ -111,59 +114,40 @@ public final class DownloadService {
 
       // Stream the supplier ZIP directly into S3 multipart upload. StreamingS3 calculates the MD5
       // while uploading and completes the upload only when it matches the manifest value.
-      try (var inputStream = os.download(datasetUrl)) {
-        var upload =
-                new StreamingS3(s3, context::getRemainingTimeInMillis)
-                        .put(
-                                inputStream,
-                                sourceBucket,
-                                zipUploadS3Path,
-                                expectedDatasetMd5,
-                                properties.maxZipBytes());
+      StreamingS3.Uploaded upload = getUpload(datasetUrl, context, sourceBucket, zipUploadS3Path,
+              expectedDatasetMd5, manifestReleaseId, downloadCommandDataset);
 
-        // prepare the download receipt
-        store.downloadReceipt(
-                sourceBucket,
-                new ReleaseStore.DownloadReceipt(
-                        manifestReleaseId,
-                        downloadCommandDataset,
-                        datasetFileName,
-                        expectedDatasetMd5,
-                        datasetUrl,
-                        Instant.now()),
-                upload);
+      // prepare the download receipt
+      store.downloadReceipt(
+              sourceBucket,
+              new ReleaseStore.DownloadReceipt(
+                      manifestReleaseId,
+                      downloadCommandDataset,
+                      datasetFileName,
+                      expectedDatasetMd5,
+                      datasetUrl,
+                      Instant.now()),
+              upload);
 
-        String receiptLocationS3Path =
-                ReleaseStore.receiptKey(manifestReleaseId, downloadCommandDataset, "download");
-        LOG.info(
-                "Download completed",
-                Map.of(
-                        LOG_RELEASE_ID,
-                        manifestReleaseId,
-                        DOWNLOAD_COMMAND_DATASET,
-                        downloadCommandDataset,
-                        "s3_key",
-                        upload.key(),
-                        "receipt_key",
-                        receiptLocationS3Path));
-      } catch (StreamingS3.ChecksumMismatchException e) {
-        LOG.error(
-                "Download checksum mismatch",
-                e,
-                Map.of(
-                        LOG_RELEASE_ID,
-                        manifestReleaseId,
-                        DOWNLOAD_COMMAND_DATASET,
-                        downloadCommandDataset,
-                        "checksum_mismatch",
-                        e.getMessage()));
-        throw new PermanentFailureException("Download failure, checksum mismatch");
-      } catch (StreamingS3.ExistingObjectVerificationException | NoSuchAlgorithmException exception) {
-        LOG.error("Download failed", Map.of("error", exception.getMessage()));
-        throw new PermanentFailureException(exception.getMessage(), exception);
-      }
-    } catch (IOException | InterruptedException exception) {
-      LOG.error("Download failed", Map.of("error", exception.getMessage()));
+      String receiptLocationS3Path =
+              ReleaseStore.receiptKey(manifestReleaseId, downloadCommandDataset, "download");
+      LOG.info(
+              "Download completed",
+              Map.of(
+                      LOG_RELEASE_ID,
+                      manifestReleaseId,
+                      DOWNLOAD_COMMAND_DATASET,
+                      downloadCommandDataset,
+                      "s3_key",
+                      upload.key(),
+                      "receipt_key",
+                      receiptLocationS3Path));
+    } catch (IOException exception) {
+      LOG.error(DOWNLOAD_FAILED_MESSAGE, Map.of(ERROR_LOG_FIELD, exception.getMessage()));
+      throw new TransientFailureException(exception.getMessage(), exception);
+    } catch (InterruptedException exception) {
+      LOG.error(DOWNLOAD_FAILED_MESSAGE, Map.of(ERROR_LOG_FIELD, exception.getMessage()));
+      Thread.currentThread().interrupt();
       throw new TransientFailureException(exception.getMessage(), exception);
     }
 
@@ -194,6 +178,35 @@ public final class DownloadService {
             && !input.get(DOWNLOAD_COMMAND_DATASET).asText().isBlank(),
         "Missing detail.dataset in download command");
     return input;
+  }
+
+  private StreamingS3.Uploaded getUpload(String datasetUrl,Context context, String sourceBucket,
+                                         String zipUploadS3Path, String expectedDatasetMd5,
+                                         String manifestReleaseId, String downloadCommandDataset)
+          throws IOException, InterruptedException, PermanentFailureException {
+    try (var inputStream = os.download(datasetUrl)) {
+      return new StreamingS3(s3, context::getRemainingTimeInMillis)
+                      .put(inputStream, sourceBucket,
+                              zipUploadS3Path,
+                              expectedDatasetMd5,
+                              properties.maxZipBytes());
+    } catch (StreamingS3.ChecksumMismatchException e) {
+      LOG.error(
+              "Download checksum mismatch",
+              e,
+              Map.of(
+                      LOG_RELEASE_ID,
+                      manifestReleaseId,
+                      DOWNLOAD_COMMAND_DATASET,
+                      downloadCommandDataset,
+                      "checksum_mismatch",
+                      e.getMessage()));
+      throw new PermanentFailureException("Download failure, checksum mismatch");
+    } catch (StreamingS3.ExistingObjectVerificationException |
+             NoSuchAlgorithmException exception) {
+      LOG.error(DOWNLOAD_FAILED_MESSAGE, Map.of(ERROR_LOG_FIELD, exception.getMessage()));
+      throw new PermanentFailureException(exception.getMessage(), exception);
+    }
   }
 
   // Restricts S3 reads to canonical acquisition manifests.

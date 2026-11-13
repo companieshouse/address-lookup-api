@@ -16,7 +16,7 @@ public final class Handler extends AbstractRequestHandlerImpl<Map<String,Object>
     private final DownloadService service =
             AcquisitionApplication.start(DownloadService.class);
 
-    private final Logger LOG = LoggerFactory.getLogger(Handler.class.getName());
+    private static final Logger LOG = LoggerFactory.getLogger(Handler.class.getName());
 
     @Override
     protected String requestOperation(Map<String, Object> request, Context context) throws PermanentFailureException, TransientFailureException {

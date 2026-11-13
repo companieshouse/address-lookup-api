@@ -13,12 +13,11 @@ import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
-import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
 
 import java.util.Map;
 
 @ExtendWith(MockitoExtension.class)
-public class AbstractRequestHandlerImplTest {
+class AbstractRequestHandlerImplTest {
 
     @Mock
     private TestService testService;
@@ -49,8 +48,9 @@ public class AbstractRequestHandlerImplTest {
     @Test
     void shouldThrowAwsServiceExceptionForTransientFailureException() throws Exception {
         when(testService.run()).thenThrow(new TransientFailureException("Something went wrong but might be OK with a retry"));
+        Map<String, Object> request = Map.of();
         Assertions.assertThrows(AwsServiceException.class, () -> {
-            testHandler.handleRequest(Map.of(), context);
+            testHandler.handleRequest(request, context);
         });
     }
 
@@ -71,8 +71,9 @@ public class AbstractRequestHandlerImplTest {
 
         when(testService.run()).thenThrow(exception);
 
+        Map<String, Object> request = Map.of();
         Assertions.assertThrows(AwsServiceException.class, () -> {
-            testHandler.handleRequest(Map.of(), context);
+            testHandler.handleRequest(request, context);
         });
     }
 
@@ -91,8 +92,9 @@ public class AbstractRequestHandlerImplTest {
 
         when(testService.run()).thenThrow(exception);
 
+        Map<String, Object> request = Map.of();
         Assertions.assertThrows(AwsServiceException.class, () -> {
-            testHandler.handleRequest(Map.of(), context);
+            testHandler.handleRequest(request, context);
         });
     }
 
@@ -112,7 +114,7 @@ public class AbstractRequestHandlerImplTest {
 
         @Override
         protected void handlePermanentException(Throwable permanentException) {
-
+            System.err.println(permanentException.getMessage());
         }
 
         @Override

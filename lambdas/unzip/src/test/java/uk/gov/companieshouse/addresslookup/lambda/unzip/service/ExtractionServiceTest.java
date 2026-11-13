@@ -159,7 +159,8 @@ final class ExtractionServiceTest {
     when(s3.getObjectTagging(any(GetObjectTaggingRequest.class)))
         .thenReturn(GetObjectTaggingResponse.builder().build());
 
-    assertThrows(IllegalStateException.class, () -> service.unzip(event(), context));
+    var unzipEvent = event();
+    assertThrows(IllegalStateException.class, () -> service.unzip(unzipEvent, context));
         verify(s3, never()).getObject(argThat((GetObjectRequest request) -> ZIP_KEY.equals(request.key())));
     }
 

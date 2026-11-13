@@ -45,6 +45,7 @@ public final class ExtractionComponent {
     private static final int MAX_ARCHIVE_COMPRESSION_RATIO = 20;
     private static final String DATASET_FIELD = "dataset";
     private static final String RELEASE_ID_FIELD = "releaseId";
+    private static final String REQUEST_ID_FIELD = "request_id";
     private static final String SCHEMA_VERSION_FIELD = "schemaVersion";
     private static final String EXTRACT_FIELD = "extract";
     private static final String VERSION_FIELD = "version";
@@ -113,7 +114,7 @@ public final class ExtractionComponent {
     LOG.info(
         "Extraction started",
         Map.of(
-            "request_id", requestId(context), RELEASE_ID_FIELD, releaseId, DATASET_FIELD, dataset));
+            REQUEST_ID_FIELD, requestId(context), RELEASE_ID_FIELD, releaseId, DATASET_FIELD, dataset));
     JsonNode scanObject = input.path("object");
     String scanBucket = required(scanObject, "bucket");
     String s3Key = required(scanObject, "key");
@@ -238,7 +239,7 @@ public final class ExtractionComponent {
                 LOG.info("Ancillary ZIP entry validated",
                         Map.of(RELEASE_ID_FIELD, expected.releaseId(),
                                 DATASET_FIELD, expected.dataset(),
-                                "request_id", requestId(context),
+                                REQUEST_ID_FIELD, requestId(context),
                                 "entry_count", names.size(),
                                 "elapsed_ms", (System.nanoTime() - locateStart) / NANOS_PER_MILLI));
             }
@@ -251,7 +252,7 @@ public final class ExtractionComponent {
 
   private void drainRemainingEntries(MeasuredZipInputStream zip, LimitedArchiveInputStream limited,
                                        String dataset, Set<String> names, Context context)
-            throws IOException, ArchiveValidationException {
+            throws IOException {
         ZipEntry entry;
         while ((entry = zip.getNextEntry()) != null) {
             limited.startEntry(entry);
@@ -294,7 +295,7 @@ public final class ExtractionComponent {
   private static long startStage(String stage, String releaseId, String dataset, Context context) {
         LOG.info("Unzip stage started",
                 Map.of("stage", stage, RELEASE_ID_FIELD, releaseId,
-                        DATASET_FIELD, dataset, "request_id", requestId(context)));
+                        DATASET_FIELD, dataset, REQUEST_ID_FIELD, requestId(context)));
         return System.nanoTime();
     }
 
@@ -302,7 +303,7 @@ public final class ExtractionComponent {
                                       String dataset, Context context) {
         LOG.info("Unzip stage completed",
                 Map.of("stage", stage, RELEASE_ID_FIELD, releaseId,
-                        DATASET_FIELD, dataset, "request_id", requestId(context),
+                        DATASET_FIELD, dataset, REQUEST_ID_FIELD, requestId(context),
                         "elapsed_ms", (System.nanoTime() - started) / NANOS_PER_MILLI));
     }
 

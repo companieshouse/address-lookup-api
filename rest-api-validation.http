@@ -1,58 +1,248 @@
-# Error and edge-case scenarios for the address lookup API (expected status in each title).
+# Error and edge-case scenarios for the address lookup API.
+# Each request asserts its expected result; run them all with:
+#   npx httpyac send --all rest-api-validation.http
+# Valid-postcode requests need the local database loaded with LU49PJ and WF27QD.
 
-### Valid postcode with a space, lower case (expect 200)
+### Valid postcode, lower case, no space (expect 200)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=lu49pj
+
+?? status == 200
+?? js response.parsedBody.length > 0
+
+### Valid postcode, upper case, no space (expect 200 with addresses)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=LU49PJ
+
+?? status == 200
+?? js response.parsedBody.length > 0
+
+### Postcode containing a space (expect 200 with empty array)
 GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=lu4%209pj
+
+?? status == 200
+?? js response.parsedBody.length == 0
+
+### Postcode with leading space (expect 200 with empty array)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=%20lu49pj
+
+?? status == 200
+?? js response.parsedBody.length == 0
+
+### Postcode with trailing space (expect 200 with empty array)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=lu49pj%20
+
+?? status == 200
+?? js response.parsedBody.length == 0
+
+### Valid postcode with an extra letter appended (expect 200 with empty array)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=LU49PJX
+
+?? status == 200
+?? js response.parsedBody.length == 0
+
+### Valid postcode with a special character appended (expect 200 with empty array)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=LU49PJ!
+
+?? status == 200
+?? js response.parsedBody.length == 0
+
+### Valid postcode with a special character inside (expect 200 with empty array)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=LU4-9PJ
+
+?? status == 200
+?? js response.parsedBody.length == 0
 
 ### Valid postcode but no addresses found (expect 200 with empty array)
 GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=ZZ11ZZ
 
+?? status == 200
+?? js response.parsedBody.length == 0
+
 ### Single address: valid postcode but no address found (expect 404)
 GET http://localhost:8080/address-lookup-api/postcode?postcode=ZZ11ZZ
+
+?? status == 404
 
 ### Empty postcode (expect 404 Address not found)
 GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=
 
+?? status == 404
+
 ### Empty postcode on /addresses (expect 404 Address not found)
 GET http://localhost:8080/address-lookup-api/addresses?postcode=
+
+?? status == 404
 
 ### Empty postcode on /postcode (expect 404 Address not found)
 GET http://localhost:8080/address-lookup-api/postcode?postcode=
 
+?? status == 404
+
 ### Missing postcode parameter (expect 400)
 GET http://localhost:8080/address-lookup-api/multiple-addresses
 
-### Whitespace-only postcode (expect 400 Invalid postcode)
+?? status == 400
+
+### Whitespace-only postcode (expect 200 with empty array)
 GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=%20%20%20
 
-### Numbers only (expect 400 Invalid postcode)
+?? status == 200
+?? js response.parsedBody.length == 0
+
+### Numbers only (expect 200 with empty array)
 GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=12345
 
-### Letters only (expect 400 Invalid postcode)
+?? status == 200
+?? js response.parsedBody.length == 0
+
+### Letters only (expect 200 with empty array)
 GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=INVALID
 
-### Too short (expect 400 Invalid postcode)
+?? status == 200
+?? js response.parsedBody.length == 0
+
+### Completely invalid postcode (expect 200 with empty array)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=ZZZZZZ
+
+?? status == 200
+?? js response.parsedBody.length == 0
+
+### Too short (expect 200 with empty array)
 GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=A
 
-### Too long (expect 400 Invalid postcode)
+?? status == 200
+?? js response.parsedBody.length == 0
+
+### Too long (expect 200 with empty array)
 GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=AB124NYEXTRA
+
+?? status == 200
+?? js response.parsedBody.length == 0
 
 ### Well-formed postcode with a letter in the outward code that does not exist (expect 200 with empty array)
 GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=LU4s9PJ
 
-### Digit where the inward code needs a letter (expect 400 Invalid postcode)
+?? status == 200
+?? js response.parsedBody.length == 0
+
+### Digit where the inward code needs a letter (expect 200 with empty array)
 GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=LU49P1
 
-### Special characters (expect 400 Invalid postcode)
+?? status == 200
+?? js response.parsedBody.length == 0
+
+### Special characters (expect 200 with empty array)
 GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=INVALID@POSTCODE
 
-### SQL injection attempt (expect 400 Invalid postcode)
+?? status == 200
+?? js response.parsedBody.length == 0
+
+### SQL injection attempt (expect 200 with empty array)
 GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=%27%20OR%20%271%27%3D%271
 
-### Script injection attempt (expect 400 Invalid postcode)
+?? status == 200
+?? js response.parsedBody.length == 0
+
+### Script injection attempt (expect 200 with empty array)
 GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=%3Cscript%3Ealert(1)%3C%2Fscript%3E
+
+?? status == 200
+?? js response.parsedBody.length == 0
+
+### Valid postcode on /addresses (expect 200 with addresses)
+GET http://localhost:8080/address-lookup-api/addresses?postcode=LU49PJ
+
+?? status == 200
+?? js response.parsedBody.totalResults > 0
 
 ### Invalid postcode on /addresses (expect 400 Invalid postcode)
 GET http://localhost:8080/address-lookup-api/addresses?postcode=12345
 
-### Invalid postcode on /postcode (expect 400 Invalid postcode)
-GET http://localhost:8080/address-lookup-api/postcode?postcode=BT557KLEXTRA
+?? status == 400
+
+### Special characters on /addresses (expect 400 Invalid postcode)
+GET http://localhost:8080/address-lookup-api/addresses?postcode=LU49PJ!
+
+?? status == 400
+
+### Postcode containing a space on /addresses (expect 200 with totalResults 0)
+GET http://localhost:8080/address-lookup-api/addresses?postcode=LU4%209PJ
+
+?? status == 200
+?? body totalResults == 0
+
+### Missing postcode parameter on /addresses (expect 400)
+GET http://localhost:8080/address-lookup-api/addresses
+
+?? status == 400
+
+### Valid postcode on /postcode (expect 200 with address)
+GET http://localhost:8080/address-lookup-api/postcode?postcode=WF27QD
+
+?? status == 200
+?? body postcode exists
+
+### Valid postcode on /postcode, lower case (expect 200 with address)
+GET http://localhost:8080/address-lookup-api/postcode?postcode=wf27qd
+
+?? status == 200
+?? body postcode exists
+
+### Invalid postcode on /postcode (expect 404 Address not found)
+GET http://localhost:8080/address-lookup-api/postcode?postcode=WF27QDEXTRA
+
+?? status == 404
+
+### Special characters on /postcode (expect 404 Address not found)
+GET http://localhost:8080/address-lookup-api/postcode?postcode=WF2@7QD
+
+?? status == 404
+
+### Postcode containing a space on /postcode (expect 404 Address not found)
+GET http://localhost:8080/address-lookup-api/postcode?postcode=WF2%207QD
+
+?? status == 404
+
+### Valid postcode with leading space on /postcode (expect 404 Address not found)
+GET http://localhost:8080/address-lookup-api/postcode?postcode=%20WF27QD
+
+?? status == 404
+
+### Valid postcode with trailing space on /postcode (expect 404 Address not found)
+GET http://localhost:8080/address-lookup-api/postcode?postcode=WF27QD%20
+
+?? status == 404
+
+### Whitespace-only postcode on /postcode (expect 404 Address not found)
+GET http://localhost:8080/address-lookup-api/postcode?postcode=%20%20%20
+
+?? status == 404
+
+### Completely invalid postcode on /postcode (expect 404 Address not found)
+GET http://localhost:8080/address-lookup-api/postcode?postcode=ZZZZZZ
+
+?? status == 404
+
+### Numbers only on /postcode (expect 404 Address not found)
+GET http://localhost:8080/address-lookup-api/postcode?postcode=12345
+
+?? status == 404
+
+### Letters only on /postcode (expect 404 Address not found)
+GET http://localhost:8080/address-lookup-api/postcode?postcode=INVALID
+
+?? status == 404
+
+### Digit where the inward code needs a letter on /postcode (expect 404 Address not found)
+GET http://localhost:8080/address-lookup-api/postcode?postcode=WF27Q1
+
+?? status == 404
+
+### SQL injection attempt on /postcode (expect 404 Address not found)
+GET http://localhost:8080/address-lookup-api/postcode?postcode=%27%20OR%20%271%27%3D%271
+
+?? status == 404
+
+### Missing postcode parameter on /postcode (expect 400)
+GET http://localhost:8080/address-lookup-api/postcode
+
+?? status == 400

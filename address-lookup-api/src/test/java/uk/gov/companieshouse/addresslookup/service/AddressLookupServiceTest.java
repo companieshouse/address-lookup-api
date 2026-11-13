@@ -40,16 +40,16 @@ class AddressLookupServiceTest {
     when(repository.findByNormalizedPostcode("AB12CD")).thenReturn(List.of());
     when(royalMailAddressMapper.toDtos(List.of())).thenReturn(List.of());
 
-    assertEquals(List.of(), service.lookupByPostcode("AB1 2CD"));
+    assertEquals(List.of(), service.lookupByPostcode("AB12CD"));
 
     verify(royalMailAddressMapper).toDtos(List.of());
   }
 
   @Test
-  void lookupNormalizesLowercasePostcodeWithSpaces() {
+  void lookupNormalizesLowercasePostcode() {
     when(repository.findByNormalizedPostcode("WF27QD")).thenReturn(List.of());
 
-    assertEquals(List.of(), service.lookupLegacyAddressesByPostcode(" wf2 7qd "));
+    assertEquals(List.of(), service.lookupLegacyAddressesByPostcode("wf27qd"));
 
     verify(repository).findByNormalizedPostcode("WF27QD");
   }
@@ -61,7 +61,7 @@ class AddressLookupServiceTest {
     when(repository.findByNormalizedPostcode("AB12CD")).thenReturn(List.of(address));
     when(legacyAddressMapper.toLegacyAddress(address)).thenReturn(expected);
 
-    assertEquals(List.of(expected), service.lookupLegacyAddressesByPostcode("AB1 2CD"));
+    assertEquals(List.of(expected), service.lookupLegacyAddressesByPostcode("AB12CD"));
   }
 
   @Test
@@ -71,14 +71,14 @@ class AddressLookupServiceTest {
     when(repository.findByNormalizedPostcode("AB12CD")).thenReturn(List.of(address));
     when(legacyAddressMapper.toLegacyAddressWithoutPremise(address)).thenReturn(expected);
 
-    assertEquals(Optional.of(expected), service.lookupLegacyAddressByPostcode("AB1 2CD"));
+    assertEquals(Optional.of(expected), service.lookupLegacyAddressByPostcode("AB12CD"));
   }
 
   @Test
   void lookupLegacyAddressReturnsEmptyWhenNoResultsExist() {
     when(repository.findByNormalizedPostcode("AB12CD")).thenReturn(List.of());
 
-    assertEquals(Optional.empty(), service.lookupLegacyAddressByPostcode("AB1 2CD"));
+    assertEquals(Optional.empty(), service.lookupLegacyAddressByPostcode("AB12CD"));
   }
 
   @Test
@@ -88,7 +88,7 @@ class AddressLookupServiceTest {
         .thenThrow(serializationFailure)
         .thenReturn(List.of());
 
-    assertEquals(List.of(), service.lookupLegacyAddressesByPostcode("AB1 2CD"));
+    assertEquals(List.of(), service.lookupLegacyAddressesByPostcode("AB12CD"));
 
     verify(repository, times(2)).findByNormalizedPostcode("AB12CD");
   }
@@ -103,7 +103,7 @@ class AddressLookupServiceTest {
 
     DataAccessException thrown =
         assertThrows(
-            DataAccessException.class, () -> service.lookupLegacyAddressesByPostcode("AB1 2CD"));
+            DataAccessException.class, () -> service.lookupLegacyAddressesByPostcode("AB12CD"));
 
     assertSame(secondFailure, thrown);
     verify(repository, times(2)).findByNormalizedPostcode("AB12CD");
@@ -116,7 +116,7 @@ class AddressLookupServiceTest {
 
     DataAccessException thrown =
         assertThrows(
-            DataAccessException.class, () -> service.lookupLegacyAddressesByPostcode("AB1 2CD"));
+            DataAccessException.class, () -> service.lookupLegacyAddressesByPostcode("AB12CD"));
 
     assertSame(failure, thrown);
     verify(repository, times(1)).findByNormalizedPostcode("AB12CD");

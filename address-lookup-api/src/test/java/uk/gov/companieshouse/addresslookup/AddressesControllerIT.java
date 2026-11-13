@@ -67,6 +67,20 @@ class AddressesControllerIT extends AddressTestBaseIT {
   }
 
   @ParameterizedTest
+  @ValueSource(strings = {" WF27QD", "WF2 7QD", "wf2 7qd", "WF27QD "})
+  void shouldReturnEmptyResultsForKnownPostcodeContainingSpaces(String postcode)
+      throws Exception {
+    this.mockMvc
+        .perform(
+            get("/address-lookup-api/addresses")
+                .queryParam("postcode", postcode)
+                .header(REQUEST_ID.value(), "request_id"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.totalResults").value(0))
+        .andExpect(jsonPath("$.addresses").isEmpty());
+  }
+
+  @ParameterizedTest
   @ValueSource(strings = {"ZZ1 1ZZ", "CF101PX"})
   void shouldReturnEmptyResultsForUnknownPostcode(String postcode) throws Exception {
     this.mockMvc

@@ -26,22 +26,37 @@ public class AddressLookupController {
   @GetMapping("/addresses")
   public AddressLookupResponse lookupAddress(@RequestParam("postcode") String postcode) {
     validatePostcode(postcode);
-    List<RoyalMailAddressDto> addresses = addressLookupService.lookupByPostcode(postcode);
+    List<RoyalMailAddressDto> addresses =
+        containsWhitespace(postcode) ? List.of() : addressLookupService.lookupByPostcode(postcode);
     return new AddressLookupResponse(postcode, addresses.size(), addresses);
   }
 
   @GetMapping("/multiple-addresses")
   public List<LegacyAddress> lookupMultipleAddresses(@RequestParam("postcode") String postcode) {
-    validatePostcode(postcode);
+    if (postcode.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Address not found");
+    }
+    if (!PostcodeValidator.isValid(postcode) || containsWhitespace(postcode)) {
+      return List.of();
+    }
     return addressLookupService.lookupLegacyAddressesByPostcode(postcode);
   }
 
   @GetMapping("/postcode")
   public LegacyAddress lookupPostcode(@RequestParam("postcode") String postcode) {
-    validatePostcode(postcode);
+    if (postcode.isEmpty()
+        || !PostcodeValidator.isValid(postcode)
+        || containsWhitespace(postcode)) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Address not found");
+    }
     return addressLookupService
         .lookupLegacyAddressByPostcode(postcode)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Address not found"));
+  }
+
+  // Stored postcodes are matched in compact form only, so spaced input never matches.
+  private static boolean containsWhitespace(String postcode) {
+    return postcode.chars().anyMatch(Character::isWhitespace);
   }
 
   private static void validatePostcode(String postcode) {

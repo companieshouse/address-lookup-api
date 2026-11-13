@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 test_root="$(mktemp -d)"
 mkdir -p "$test_root/scripts"
 cp "$repo_root/scripts/local-api-smoke.sh" "$repo_root/scripts/maven.sh" "$test_root/scripts/"

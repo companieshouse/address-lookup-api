@@ -12,6 +12,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+/** Base for database-backed ITs; seeds Royal Mail data from the small fixture CSVs. */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Testcontainers
 @AutoConfigureMockMvc
@@ -22,9 +23,15 @@ import org.testcontainers.utility.DockerImageName;
       "spring.docker.compose.enabled=false",
       "FLYWAY_ENABLED=false",
       "spring.flyway.enabled=true",
-      "spring.flyway.locations=classpath:db/migrations,classpath:db/local"
+      "spring.flyway.locations=classpath:db/migrations,classpath:db/local,classpath:db/local/java"
     })
 public abstract class AddressTestBaseIT {
+
+  static {
+    System.setProperty(
+        "als.local.seed.dir",
+        java.nio.file.Path.of("src/test/resources/seed-csv").toAbsolutePath().toString());
+  }
 
   @SuppressWarnings("resource")
   @Container

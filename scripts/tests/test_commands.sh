@@ -7,12 +7,18 @@ for tool in jq ps; do
         exit 1
     fi
 done
-root="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$(dirname "$0")/../.." && pwd)"
 temp="$(mktemp -d)"
 mkdir -p "$temp/scripts" "$temp/bin"
 cp "$root/scripts/local-services.sh" "$root/scripts/sonar.sh" "$root/scripts/db-exec.sh" "$root/scripts/maven.sh" "$temp/scripts/"
 cp "$root/Makefile" "$temp/Makefile"
 export CALL_LOG="$temp/calls"
+# Stub downloader: the lifecycle tests must not need OS credentials or network access.
+cat >"$temp/scripts/fetch-os-csv.sh" <<'FETCH'
+#!/usr/bin/env bash
+printf 'fetch-os-csv\n' >>"$CALL_LOG"
+[[ -z "${FAIL_FETCH:-}" ]]
+FETCH
 export PATH="$temp/bin:$PATH"
 export LOCAL_API_PORT=18997 LOCAL_API_TIMEOUT=2
 export CONFIRM="" PR="" PR_BRANCH=feature/commands PR_BASE=main
@@ -45,7 +51,8 @@ case "$tool" in
         touch address-lookup-api/target/address-lookup-api-test.jar
         ;;
     java)
-        trap 'exit 0' TERM
+        if [[ "${IGNORE_TERM:-0}" == 0 ]]; then trap 'exit 0' TERM; else trap '' TERM; fi
+        [[ "${STARTUP_FAIL:-0}" == 0 ]] || printf 'WARN Exception encountered during context initialization\n'
         while :; do sleep 0.1; done
         ;;
     lsof)
@@ -158,10 +165,24 @@ rm "$temp/.local-run/api.json"
 
 success env CONFIRM=address_lookup bash "$temp/scripts/local-services.sh" db-reset
 check grep -q 'dropdb -U postgres --if-exists --force address_lookup' "$CALL_LOG"
+check grep -Fxq 'fetch-os-csv' "$CALL_LOG"
 success local_command api-stop
+drops="$(grep -c 'dropdb' "$CALL_LOG")"
+failure env CONFIRM=address_lookup FAIL_FETCH=1 bash "$temp/scripts/local-services.sh" db-reset
+check grep -q 'download failed' "$temp/output"
+check test "$(grep -c 'dropdb' "$CALL_LOG")" == "$drops"
+check test ! -e "$temp/.local-run/api.json"
+failure env CONFIRM=address_lookup FAIL_HEALTH=1 STARTUP_FAIL=1 bash "$temp/scripts/local-services.sh" db-reset
+check grep -q 'API startup failed' "$temp/output"
+check test ! -e "$temp/.local-run/api.json"
+check test -f "$temp/.local-run/api.jar"
 failure env CONFIRM=address_lookup SEED_COUNT=0 bash "$temp/scripts/local-services.sh" db-reset
 check grep -q 'no seeded addresses' "$temp/output"
 success local_command api-stop
+success env IGNORE_TERM=1 bash "$temp/scripts/local-services.sh" api-start
+success local_command api-stop
+check grep -q 'sending SIGKILL' "$temp/output"
+check test ! -e "$temp/.local-run/api.json"
 failure env FAIL_HEALTH=1 LOCAL_API_TIMEOUT=1 bash "$temp/scripts/local-services.sh" api-start
 check test ! -e "$temp/.local-run/api.json"
 failure env FAIL_MAVEN=1 bash "$temp/scripts/local-services.sh" api-start

@@ -99,12 +99,14 @@ db-exec:
 
 .PHONY: test-commands test-smoke coverage coverage-check sonar sonar-pr sonar-report
 test-commands:
-	bash tests/test_commands.sh
-	bash tests/test_local_api_smoke.sh
-	bash tests/test_postcodes.sh
-	bash tests/test_add_postcode.sh
-	bash tests/test_maven.sh
-	bash tests/test_concourse.sh
+	bash scripts/tests/test_commands.sh
+	bash scripts/tests/test_fetch_os_csv.sh
+	bash scripts/tests/test_local_api_smoke.sh
+	bash scripts/tests/test_postcodes.sh
+	bash scripts/tests/test_add_postcode.sh
+	bash scripts/tests/test_maven.sh
+	bash scripts/tests/test_m2_check.sh
+	bash scripts/tests/test_concourse.sh
 
 .PHONY: install-fly concourse-status consource-status
 install-fly:
@@ -151,12 +153,12 @@ test-integration:
 .PHONY: m2-check
 m2-check:
 	@# Help: Make sure ~/.m2/settings.xml is there and working with JFrog
-	perl tests/m2-check.pl
+	perl scripts/tests/m2-check.pl
 
 .PHONY: test-flyway
 test-flyway:
 	@# Help: Test the Flyway database feed against fresh PostGIS
-	bash tests/test_database_layout.sh
+	bash scripts/tests/test_database_layout.sh
 	$(MVN) -pl $(api_module) -am -Dit.test=DatabaseFeedIT -Dfailsafe.failIfNoSpecifiedTests=false -Dskip.unit.tests=true test-compile failsafe:integration-test failsafe:verify
 
 .PHONY: test-db-bootstrap

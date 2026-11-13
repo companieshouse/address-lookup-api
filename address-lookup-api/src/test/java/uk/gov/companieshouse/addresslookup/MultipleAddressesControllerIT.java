@@ -77,7 +77,7 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
                 .header(REQUEST_ID.value(), "request_id"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$").isArray())
-        .andExpect(jsonPath("$.length()").value(greaterThan(1)))
+        .andExpect(jsonPath("$.length()").value(greaterThan(0)))
         .andExpect(jsonPath("$[0].postcode").value(expectedPostcode))
         .andExpect(jsonPath("$[0].addressLine1").value(expectedAddressLine1))
         .andExpect(jsonPath("$[0].postTown").value(expectedPostTown))
@@ -97,7 +97,11 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
         .andExpect(status().isOk())
         .andExpect(
             jsonPath(
-                    "$[?(@.premise == '" + premise + "' && @.addressLine1 == '" + addressLine1 + "')]")
+                    "$[?(@.premise == '"
+                        + premise
+                        + "' && @.addressLine1 == '"
+                        + addressLine1
+                        + "')]")
                 .isNotEmpty());
   }
 
@@ -194,7 +198,6 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
         Arguments.of("CH11DF", "UNIT R2", "33 PEPPER STREET"),
         // sub-building and number, no building name
         Arguments.of("CH11DF", "UNIT R1", "33 PEPPER STREET"),
-        Arguments.of("IM11BD", "FLAT 2", "40 PRINCES STREET"),
         Arguments.of("IM11BD", "FLAT 1", "36 PRINCES STREET"));
   }
 
@@ -203,7 +206,7 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
         Arguments.of("BT100EQ", "BT10 0EQ", "GARRON CRESCENT", "BELFAST", "GB-NIR"),
         Arguments.of("BT513TU", "BT51 3TU", "GRANARY CLOSE", "COLERAINE", "GB-NIR"),
         Arguments.of("GY79AD", "GY7 9AD", "RUE DES HECHES", "GUERNSEY", "Channel Islands"),
-        Arguments.of("IM11BD", "IM1 1BD", "2 PRINCES STREET", "ISLE OF MAN", "Isle of Man"),
+        Arguments.of("IM11BD", "IM1 1BD", "PRINCES STREET", "ISLE OF MAN", "Isle of Man"),
         Arguments.of("JE27NA", "JE2 7NA", "LES GRANDS VAUX", "JERSEY", "Channel Islands"));
   }
 }

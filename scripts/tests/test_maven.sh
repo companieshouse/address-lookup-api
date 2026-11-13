@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$(dirname "$0")/../.." && pwd)"
 work_dir="$(mktemp -d)"
 trap 'rm -f "$work_dir/mvn" "$work_dir/calls" "$work_dir/output"; rmdir "$work_dir"' EXIT
 export CALL_LOG="$work_dir/calls"

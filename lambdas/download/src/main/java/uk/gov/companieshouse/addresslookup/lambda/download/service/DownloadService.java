@@ -1,15 +1,23 @@
 package uk.gov.companieshouse.addresslookup.lambda.download.service;
 
-import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.*;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.releaseId;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.detail;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sanitizeUrl;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
+
+import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
@@ -25,6 +33,9 @@ public final class DownloadService {
   private static final String DOWNLOAD_COMMAND_DATASET = "dataset";
   private static final String LOG_RELEASE_ID = "release_id";
 
+  private static final String DOWNLOAD_FAILED_MESSAGE = "Download failed";
+  private static final String ERROR_LOG_FIELD = "error";
+
   private final S3Client s3;
   private final OsClient os;
   private final AcquisitionProperties properties;
@@ -36,7 +47,7 @@ public final class DownloadService {
     AcquisitionProperties.required(properties.sourceBucket(), "SOURCE_BUCKET");
   }
 
-  public String download(Map<String, Object> event, Context context) throws Exception {
+  public String download(Map<String, Object> event, Context context) throws PermanentFailureException, TransientFailureException {
     var input = validateCommand(event);
 
     String downloadCommandPlanKey = input.get(DOWNLOAD_COMMAND_PLAN_KEY).asText().trim();
@@ -48,107 +59,96 @@ public final class DownloadService {
     String sourceBucket = properties.sourceBucket();
 
     validatePlanKey(downloadCommandPlanKey);
-    var manifest =
-        readManifest(store, sourceBucket, downloadCommandPlanKey, downloadCommandDataset);
+    try {
+      var manifest =
+              readManifest(store, sourceBucket, downloadCommandPlanKey, downloadCommandDataset);
 
-    String manifestReleaseId = releaseId(manifest).toString();
-    LOG.info(
-        "Download command accepted",
-        Map.of(
-            LOG_RELEASE_ID,
-            manifestReleaseId,
-            DOWNLOAD_COMMAND_DATASET,
-            downloadCommandDataset,
-            "plan_key",
-            downloadCommandPlanKey));
-
-    // The receipt makes retries idempotent: if the exact release/dataset was already downloaded,
-    // do not fetch the supplier ZIP again.
-    if (store.receipt(sourceBucket, manifestReleaseId, downloadCommandDataset, "download")
-        != null) {
+      String manifestReleaseId = releaseId(manifest).toString();
       LOG.info(
-          "Download skipped because receipt already exists",
-          Map.of(
-              LOG_RELEASE_ID, manifestReleaseId, DOWNLOAD_COMMAND_DATASET, downloadCommandDataset));
-      return "SKIPPED";
-    }
+              "Download command accepted",
+              Map.of(
+                      LOG_RELEASE_ID,
+                      manifestReleaseId,
+                      DOWNLOAD_COMMAND_DATASET,
+                      downloadCommandDataset,
+                      "plan_key",
+                      downloadCommandPlanKey));
 
-    // Read only the dataset requested by the EventBridge command.
-    var datasetJsonObj = manifest.path(downloadCommandDataset);
-    check(datasetJsonObj.isObject(), "Missing dataset in acquisition plan");
+      // The receipt makes retries idempotent: if the exact release/dataset was already downloaded,
+      // do not fetch the supplier ZIP again.
+      if (store.receipt(sourceBucket, manifestReleaseId, downloadCommandDataset, "download")
+              != null) {
+        LOG.info(
+                "Download skipped because receipt already exists",
+                Map.of(
+                        LOG_RELEASE_ID, manifestReleaseId, DOWNLOAD_COMMAND_DATASET, downloadCommandDataset));
+        return "SKIPPED";
+      }
 
-    var datasetZipJsonObj = datasetJsonObj.path("zip");
-    String datasetFileName = required(datasetZipJsonObj, "fileName");
-    check((downloadCommandDataset + ".zip").equals(datasetFileName), "Unexpected ZIP filename");
+      // Read only the dataset requested by the EventBridge command.
+      var datasetJsonObj = manifest.path(downloadCommandDataset);
+      check(datasetJsonObj.isObject(), "Missing dataset in acquisition plan");
 
-    String expectedDatasetMd5 = required(datasetZipJsonObj, "md5");
-    check(expectedDatasetMd5.matches("(?i)[0-9a-f]{32}"), "Invalid ZIP MD5");
+      var datasetZipJsonObj = datasetJsonObj.path("zip");
+      String datasetFileName = required(datasetZipJsonObj, "fileName");
+      check((downloadCommandDataset + ".zip").equals(datasetFileName), "Unexpected ZIP filename");
 
-    String datasetUrl = required(datasetZipJsonObj, "url");
-    String zipUploadS3Path = ReleaseStore.downloadZipKey(manifestReleaseId, downloadCommandDataset);
+      String expectedDatasetMd5 = required(datasetZipJsonObj, "md5");
+      check(expectedDatasetMd5.matches("(?i)[0-9a-f]{32}"), "Invalid ZIP MD5");
 
-    String sanitizedDatasetUrl = sanitizeUrl(datasetUrl);
-    LOG.info(
-        "Download started",
-        Map.of(
-            LOG_RELEASE_ID,
-            manifestReleaseId,
-            DOWNLOAD_COMMAND_DATASET,
-            downloadCommandDataset,
-            "file_name",
-            datasetFileName,
-            "source_url",
-            sanitizedDatasetUrl));
+      String datasetUrl = required(datasetZipJsonObj, "url");
+      String zipUploadS3Path = ReleaseStore.downloadZipKey(manifestReleaseId, downloadCommandDataset);
 
-    // Stream the supplier ZIP directly into S3 multipart upload. StreamingS3 calculates the MD5
-    // while uploading and completes the upload only when it matches the manifest value.
-    try (var inputStream = os.download(datasetUrl)) {
-      var upload =
-          new StreamingS3(s3, () -> context.getRemainingTimeInMillis())
-              .put(
-                  inputStream,
-                  sourceBucket,
-                  zipUploadS3Path,
-                  expectedDatasetMd5,
-                  properties.maxZipBytes());
+      String sanitizedDatasetUrl = sanitizeUrl(datasetUrl);
+      LOG.info(
+              "Download started",
+              Map.of(
+                      LOG_RELEASE_ID,
+                      manifestReleaseId,
+                      DOWNLOAD_COMMAND_DATASET,
+                      downloadCommandDataset,
+                      "file_name",
+                      datasetFileName,
+                      "source_url",
+                      sanitizedDatasetUrl));
+
+      // Stream the supplier ZIP directly into S3 multipart upload. StreamingS3 calculates the MD5
+      // while uploading and completes the upload only when it matches the manifest value.
+      StreamingS3.Uploaded upload = getUpload(datasetUrl, context, sourceBucket, zipUploadS3Path,
+              expectedDatasetMd5, manifestReleaseId, downloadCommandDataset);
 
       // prepare the download receipt
       store.downloadReceipt(
-          sourceBucket,
-          new ReleaseStore.DownloadReceipt(
-              manifestReleaseId,
-              downloadCommandDataset,
-              datasetFileName,
-              expectedDatasetMd5,
-              datasetUrl,
-              Instant.now()),
-          upload);
+              sourceBucket,
+              new ReleaseStore.DownloadReceipt(
+                      manifestReleaseId,
+                      downloadCommandDataset,
+                      datasetFileName,
+                      expectedDatasetMd5,
+                      datasetUrl,
+                      Instant.now()),
+              upload);
 
       String receiptLocationS3Path =
-          ReleaseStore.receiptKey(manifestReleaseId, downloadCommandDataset, "download");
+              ReleaseStore.receiptKey(manifestReleaseId, downloadCommandDataset, "download");
       LOG.info(
-          "Download completed",
-          Map.of(
-              LOG_RELEASE_ID,
-              manifestReleaseId,
-              DOWNLOAD_COMMAND_DATASET,
-              downloadCommandDataset,
-              "s3_key",
-              upload.key(),
-              "receipt_key",
-              receiptLocationS3Path));
-    } catch (StreamingS3.ChecksumMismatchException e) {
-      LOG.error(
-          "Download checksum mismatch",
-          e,
-          Map.of(
-              LOG_RELEASE_ID,
-              manifestReleaseId,
-              DOWNLOAD_COMMAND_DATASET,
-              downloadCommandDataset,
-              "checksum_mismatch",
-              e.getMessage()));
-      return "CHECKSUM_MISMATCH";
+              "Download completed",
+              Map.of(
+                      LOG_RELEASE_ID,
+                      manifestReleaseId,
+                      DOWNLOAD_COMMAND_DATASET,
+                      downloadCommandDataset,
+                      "s3_key",
+                      upload.key(),
+                      "receipt_key",
+                      receiptLocationS3Path));
+    } catch (IOException exception) {
+      LOG.error(DOWNLOAD_FAILED_MESSAGE, Map.of(ERROR_LOG_FIELD, exception.getMessage()));
+      throw new TransientFailureException(exception.getMessage(), exception);
+    } catch (InterruptedException exception) {
+      LOG.error(DOWNLOAD_FAILED_MESSAGE, Map.of(ERROR_LOG_FIELD, exception.getMessage()));
+      Thread.currentThread().interrupt();
+      throw new TransientFailureException(exception.getMessage(), exception);
     }
 
     return "ZIP_SCAN";
@@ -180,6 +180,35 @@ public final class DownloadService {
     return input;
   }
 
+  private StreamingS3.Uploaded getUpload(String datasetUrl,Context context, String sourceBucket,
+                                         String zipUploadS3Path, String expectedDatasetMd5,
+                                         String manifestReleaseId, String downloadCommandDataset)
+          throws IOException, InterruptedException, PermanentFailureException {
+    try (var inputStream = os.download(datasetUrl)) {
+      return new StreamingS3(s3, context::getRemainingTimeInMillis)
+                      .put(inputStream, sourceBucket,
+                              zipUploadS3Path,
+                              expectedDatasetMd5,
+                              properties.maxZipBytes());
+    } catch (StreamingS3.ChecksumMismatchException e) {
+      LOG.error(
+              "Download checksum mismatch",
+              e,
+              Map.of(
+                      LOG_RELEASE_ID,
+                      manifestReleaseId,
+                      DOWNLOAD_COMMAND_DATASET,
+                      downloadCommandDataset,
+                      "checksum_mismatch",
+                      e.getMessage()));
+      throw new PermanentFailureException("Download failure, checksum mismatch");
+    } catch (StreamingS3.ExistingObjectVerificationException |
+             NoSuchAlgorithmException exception) {
+      LOG.error(DOWNLOAD_FAILED_MESSAGE, Map.of(ERROR_LOG_FIELD, exception.getMessage()));
+      throw new PermanentFailureException(exception.getMessage(), exception);
+    }
+  }
+
   // Restricts S3 reads to canonical acquisition manifests.
   private static void validatePlanKey(String planKey) {
     check(
@@ -189,7 +218,7 @@ public final class DownloadService {
 
   // A missing plan fails the invocation. The plan key has already passed format validation.
   private static JsonNode readManifest(
-      ReleaseStore store, String bucket, String planKey, String dataset) throws Exception {
+      ReleaseStore store, String bucket, String planKey, String dataset) throws IOException {
     var manifest = store.read(bucket, planKey);
     if (manifest == null) {
       String message =
@@ -197,7 +226,7 @@ public final class DownloadService {
       LOG.error(
           "Acquisition plan not found",
           Map.of("plan_key", planKey, DOWNLOAD_COMMAND_DATASET, dataset));
-      check(false, message);
+      throw new IllegalArgumentException(message);
     }
     return manifest;
   }

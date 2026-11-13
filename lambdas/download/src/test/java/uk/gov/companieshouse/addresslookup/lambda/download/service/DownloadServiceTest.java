@@ -32,10 +32,13 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
@@ -51,7 +54,9 @@ final class DownloadServiceTest {
       "acquisitions/2026-05-16/4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json";
   private static final String RELEASE_ID = "4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56";
   private static final String DATASET = "add_gb_royalmailaddress";
-  @Mock private OsClient os;
+
+  @Mock
+  private OsClient os;
 
   @Test
   void downloadsOnlyTheDatasetNamedByTheEventBridgeCommand() throws Exception {
@@ -69,8 +74,7 @@ final class DownloadServiceTest {
     verify(os).download(expectedUrl);
     assertEquals(List.of(expectedZipKey), s3.completedKeys);
     assertTrue(s3.completedKeys.stream().noneMatch(k -> k.contains("add_gb_builtaddress")));
-    assertEquals(
-        "Scanned/" + RELEASE_ID + "/" + DATASET + ".receipt.json",
+    assertEquals("Scanned/" + RELEASE_ID + "/" + DATASET + ".receipt.json",
         ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download"));
     assertTrue(s3.objects.containsKey(ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download")));
     JsonNode receipt =
@@ -251,7 +255,10 @@ final class DownloadServiceTest {
         .thenReturn(new ByteArrayInputStream("wrong content".getBytes(StandardCharsets.UTF_8)));
     var service = new DownloadService(s3.client(), os, properties());
 
-    assertEquals("CHECKSUM_MISMATCH", service.download(event(), context()));
+    Exception exception = assertThrows(PermanentFailureException.class, () ->
+            service.download(event(), context()));
+    assertEquals("Download failure, checksum mismatch", exception.getMessage());
+
   }
 
   @Test
@@ -329,23 +336,22 @@ final class DownloadServiceTest {
     verifyNoInteractions(os);
   }
 
-  @Test
-  void eachDatasetCommandDownloadsOnlyItsNamedZip() throws Exception {
-    for (String dataset : List.of("add_gb_royalmailaddress", "add_isl_royalmailaddress")) {
-      byte[] zip = ("zip for " + dataset).getBytes(StandardCharsets.UTF_8);
-      var manifest = manifestWithMd5(dataset, md5(zip));
-      var s3 = new FakeS3();
-      s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifest));
-      var event = event();
-      event.put("detail", Map.of("planKey", PLAN_KEY, "dataset", dataset));
-      when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
-      var service = new DownloadService(s3.client(), os, properties());
+  @ParameterizedTest
+  @ValueSource(strings = {"add_gb_royalmailaddress", "add_isl_royalmailaddress"})
+  void eachDatasetCommandDownloadsOnlyItsNamedZip(String dataset) throws Exception {
+    byte[] zip = ("zip for " + dataset).getBytes(StandardCharsets.UTF_8);
+    var manifest = manifestWithMd5(dataset, md5(zip));
+    var s3 = new FakeS3();
+    s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifest));
+    var event = event();
+    event.put("detail", Map.of("planKey", PLAN_KEY, "dataset", dataset));
+    when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
+    var service = new DownloadService(s3.client(), os, properties());
 
-      assertEquals("ZIP_SCAN", service.download(event, context()));
-      assertEquals(List.of("Scanned/" + RELEASE_ID + "/" + dataset + ".zip"), s3.completedKeys);
-      assertTrue(s3.objects.containsKey(ReleaseStore.receiptKey(RELEASE_ID, dataset, "download")));
-      assertTrue(s3.objects.keySet().stream().noneMatch(k -> k.endsWith(".download-attempt.json")));
-    }
+    assertEquals("ZIP_SCAN", service.download(event, context()));
+    assertEquals(List.of("Scanned/" + RELEASE_ID + "/" + dataset + ".zip"), s3.completedKeys);
+    assertTrue(s3.objects.containsKey(ReleaseStore.receiptKey(RELEASE_ID, dataset, "download")));
+    assertTrue(s3.objects.keySet().stream().noneMatch(k -> k.endsWith(".download-attempt.json")));
   }
 
   @Test
@@ -357,7 +363,9 @@ final class DownloadServiceTest {
     var service = new DownloadService(s3.client(), os, properties());
     var appender = captureStructuredLogs();
     try {
-      assertEquals("CHECKSUM_MISMATCH", service.download(event(), context()));
+      Exception exception = assertThrows(PermanentFailureException.class, () ->
+              service.download(event(), context()));
+      assertEquals("Download failure, checksum mismatch", exception.getMessage());
     } finally {
       stopCapturingStructuredLogs(appender);
     }

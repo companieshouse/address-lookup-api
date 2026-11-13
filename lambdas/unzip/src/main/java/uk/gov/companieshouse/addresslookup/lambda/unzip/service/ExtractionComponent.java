@@ -55,6 +55,7 @@ public final class ExtractionComponent {
     private static final String DATASET_FIELD = "dataset";
     private static final String RELEASE_ID_FIELD = "releaseId";
     private static final String LOG_RELEASE_ID = "release_id";
+    private static final String REQUEST_ID_FIELD = "request_id";
     private static final String SCHEMA_VERSION_FIELD = "schemaVersion";
     private static final String CSV_SCAN_STATUS = "CSV_SCAN";
     private static final String CSV_NOT_FOUND = "CSV_NOT_FOUND";
@@ -276,7 +277,7 @@ public final class ExtractionComponent {
                 LOG.info("Ancillary ZIP entry validated",
                         Map.of(RELEASE_ID_FIELD, expected.releaseId(),
                                 DATASET_FIELD, expected.dataset(),
-                                "request_id", requestId(context),
+                                REQUEST_ID_FIELD, requestId(context),
                                 "entry_count", names.size(),
                                 "elapsed_ms", (System.nanoTime() - locateStart) / NANOS_PER_MILLI));
             }
@@ -386,7 +387,7 @@ public final class ExtractionComponent {
 
     private void drainRemainingEntries(MeasuredZipInputStream zip, LimitedArchiveInputStream limited,
                                        String dataset, Set<String> names, Context context)
-            throws IOException, ArchiveValidationException {
+            throws IOException {
         ZipEntry entry;
         while ((entry = zip.getNextEntry()) != null) {
             limited.startEntry(entry);
@@ -440,7 +441,7 @@ public final class ExtractionComponent {
     private static long startStage(String stage, String releaseId, String dataset, Context context) {
         LOG.info("Unzip stage started",
                 Map.of("stage", stage, RELEASE_ID_FIELD, releaseId,
-                        DATASET_FIELD, dataset, "request_id", requestId(context)));
+                        DATASET_FIELD, dataset, REQUEST_ID_FIELD, requestId(context)));
         return System.nanoTime();
     }
 
@@ -448,7 +449,7 @@ public final class ExtractionComponent {
                                       String dataset, Context context) {
         LOG.info("Unzip stage completed",
                 Map.of("stage", stage, RELEASE_ID_FIELD, releaseId,
-                        DATASET_FIELD, dataset, "request_id", requestId(context),
+                        DATASET_FIELD, dataset, REQUEST_ID_FIELD, requestId(context),
                         "elapsed_ms", (System.nanoTime() - started) / NANOS_PER_MILLI));
     }
 

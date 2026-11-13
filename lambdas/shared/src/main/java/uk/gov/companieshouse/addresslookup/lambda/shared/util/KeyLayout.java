@@ -16,6 +16,8 @@ public class KeyLayout {
       Pattern.compile("^Scanned/(" + UUID + ")/([a-z0-9_]+)\\.(zip|receipt\\.json)$");
   private static final Pattern MANIFEST =
       Pattern.compile("^acquisitions/(\\d{4}-\\d{2}-\\d{2})/(" + UUID + ")\\.json$");
+  private static final Pattern EXTRACTED_CSV =
+      Pattern.compile("^extracted/(" + UUID + ")/([a-z0-9_]+)/\\2\\.csv$");
 
   private KeyLayout() {}
 
@@ -61,6 +63,10 @@ public class KeyLayout {
           scanned.group(1),
           Dataset.named(scanned.group(2)),
           "zip".equals(scanned.group(3)) ? FileType.ZIP : FileType.RECEIPT);
+    }
+    Matcher extracted = EXTRACTED_CSV.matcher(key);
+    if (extracted.matches()) {
+      return new ObjectKey(extracted.group(1), Dataset.named(extracted.group(2)), FileType.CSV);
     }
     Matcher m = OBJECT.matcher(key);
     if (!m.matches()) throw new IllegalArgumentException("Invalid object key");

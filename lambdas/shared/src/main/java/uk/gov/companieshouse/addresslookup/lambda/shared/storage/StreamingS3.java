@@ -47,6 +47,11 @@ public final class StreamingS3 {
     }
   }
 
+  @FunctionalInterface
+  public interface BeforeCompletion {
+    void run() throws IOException;
+  }
+
   private final S3Client s3;
   private final LongSupplier remaining;
   private final int partSizeBytes;
@@ -67,13 +72,21 @@ public final class StreamingS3 {
       throws IOException, NoSuchAlgorithmException, ChecksumMismatchException,
           ExistingObjectVerificationException {
     var verifier = expectedMd5 == null ? ChecksumVerifier.none() : ChecksumVerifier.md5(expectedMd5);
-    return put(in, new ObjectTarget(bucket, key), limit, verifier, ExistingObjectPolicy.failOnConflict());
+    return put(in, new ObjectTarget(bucket, key), limit, verifier, ExistingObjectPolicy.failOnConflict(), null);
   }
 
   public Uploaded putIdempotent(InputStream in, String bucket, String key, long limit)
       throws IOException, NoSuchAlgorithmException, ChecksumMismatchException,
           ExistingObjectVerificationException {
-    return put(in, new ObjectTarget(bucket, key), limit, ChecksumVerifier.none(), reuseExisting);
+    return put(in, new ObjectTarget(bucket, key), limit, ChecksumVerifier.none(), reuseExisting, null);
+  }
+
+  public Uploaded putIdempotent(InputStream in, String bucket, String key, long limit,
+                                BeforeCompletion beforeCompletion)
+      throws IOException, NoSuchAlgorithmException, ChecksumMismatchException,
+          ExistingObjectVerificationException {
+    return put(in, new ObjectTarget(bucket, key), limit, ChecksumVerifier.none(), reuseExisting,
+        beforeCompletion);
   }
 
   public static String checksumKey(String key) {
@@ -87,7 +100,8 @@ public final class StreamingS3 {
       ObjectTarget target,
       long limit,
       ChecksumVerifier verifier,
-      ExistingObjectPolicy policy)
+      ExistingObjectPolicy policy,
+      BeforeCompletion beforeCompletion)
       throws IOException, NoSuchAlgorithmException, ChecksumMismatchException,
           ExistingObjectVerificationException {
     String uploadId =
@@ -99,6 +113,9 @@ public final class StreamingS3 {
 
       // Complete the multipart upload only after proving the supplier checksum matches.
       verifier.verify(streamed.md5());
+      if (beforeCompletion != null) {
+        beforeCompletion.run();
+      }
       String version = completeUpload(target, uploadId, streamed, policy);
 
       var uploaded =

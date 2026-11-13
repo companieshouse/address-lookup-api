@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-root="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$(dirname "$0")/../.." && pwd)"
 work="$(mktemp -d)"
 cleanup() {
     find "$work/database/local" -maxdepth 1 -type f -name 'R__*.sql' -delete

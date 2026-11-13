@@ -119,6 +119,8 @@ fi
     export SPRING_DATASOURCE_USERNAME="$db_user"
     export SPRING_DATASOURCE_PASSWORD="$db_password"
     export SERVER_PORT=0
+    # The smoke check must not import the full OS CSVs cached by db-reset.
+    export LOCAL_SEED_DIR="$repo_root/address-lookup-api/src/test/resources/seed-csv"
     export LOGGING_FILE_NAME="$api_log"
     exec java -jar "${jars[0]}" --spring.profiles.active=local
 ) &

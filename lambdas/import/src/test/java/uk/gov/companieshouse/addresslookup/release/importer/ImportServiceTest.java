@@ -1,6 +1,25 @@
 package uk.gov.companieshouse.addresslookup.release.importer;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+
 import com.amazonaws.services.lambda.runtime.Context;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,27 +40,6 @@ import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseRepository;
 import uk.gov.companieshouse.release.model.Dataset;
 import uk.gov.companieshouse.release.model.ObjectReference;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
-
-import java.time.LocalDate;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockStatic;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 
 @ExtendWith(MockitoExtension.class)
 class ImportServiceTest {
@@ -68,7 +66,8 @@ class ImportServiceTest {
   void setUp() {
     service = new ImportService(s3, properties, registration, importer, promotion, releases);
     lenient().when(properties.sweepLimit()).thenReturn(3);
-    lenient().when(releases.findTop20ByStatusOrderByValidToAsc(Release.Status.PROCESSING))
+    lenient()
+        .when(releases.findTop20ByStatusOrderByValidToAsc(Release.Status.PROCESSING))
         .thenReturn(List.of());
     lenient().when(context.getRemainingTimeInMillis()).thenReturn(900_000);
   }
@@ -96,11 +95,10 @@ class ImportServiceTest {
     }
 
     verify(registration)
-        .register(eq(manifest), eq(MANIFEST_KEY), org.mockito.ArgumentMatchers.matches("[a-f0-9]{64}"));
+        .register(
+            eq(manifest), eq(MANIFEST_KEY), org.mockito.ArgumentMatchers.matches("[a-f0-9]{64}"));
     verify(store).isClean(BUCKET, MANIFEST_KEY, null);
-    verify(importer, never())
-        .importClean(
-            any(), any(), any(), any(), any(), any(), any());
+    verify(importer, never()).importClean(any(), any(), any(), any(), any(), any(), any());
     verify(promotion, never()).promote(any());
   }
 
@@ -132,6 +130,20 @@ class ImportServiceTest {
   }
 
   @Test
+  void revisitsManifestWhoseReleaseIsStillProcessing() throws Exception {
+    var store = mock(ReleaseStore.class);
+    var cursor = mock(ReconciliationCursor.class);
+    when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
+    when(releases.findById(UUID.fromString(RELEASE_ID)))
+        .thenReturn(Optional.of(processingRelease()));
+    when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(false);
+
+    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+
+    verify(store).isClean(BUCKET, MANIFEST_KEY, null);
+  }
+
+  @Test
   void skipsManifestUntilItsScanIsClean() throws Exception {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
@@ -149,7 +161,8 @@ class ImportServiceTest {
   void reportsMalformedManifestKeyForRetry() throws Exception {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
-    when(cursor.next()).thenReturn(Optional.of("manifests/2026-10-06/not-a-uuid.json"), Optional.empty());
+    when(cursor.next())
+        .thenReturn(Optional.of("manifests/2026-10-06/not-a-uuid.json"), Optional.empty());
 
     var failure =
         assertThrows(
@@ -167,21 +180,22 @@ class ImportServiceTest {
     when(s3.listObjectsV2(any(ListObjectsV2Request.class)))
         .thenReturn(ListObjectsV2Response.builder().build());
 
-    assertEquals("RECONCILED", service.importCsv(Map.of(), context));
+    assertEquals("RECONCILED", service.importCsv(context));
   }
 
   @Test
   void recordsPromotionFailuresAndAllowsRetry() throws Exception {
     var cursor = mock(ReconciliationCursor.class);
     when(cursor.next()).thenReturn(Optional.empty());
-    var release = new Release(
-        UUID.fromString(RELEASE_ID),
-        uk.gov.companieshouse.release.model.SupplyType.FULL,
-        null,
-        null,
-        MANIFEST_KEY,
-        "digest",
-        "{}");
+    var release =
+        new Release(
+            UUID.fromString(RELEASE_ID),
+            uk.gov.companieshouse.release.model.SupplyType.FULL,
+            null,
+            null,
+            MANIFEST_KEY,
+            "digest",
+            "{}");
     when(releases.findTop20ByStatusOrderByValidToAsc(Release.Status.PROCESSING))
         .thenReturn(List.of(release));
     doThrow(new IllegalStateException("promotion failed")).when(promotion).promote(release.getId());
@@ -228,19 +242,31 @@ class ImportServiceTest {
             .put("sha256", SHA256);
     when(store.read(BUCKET, "ready/" + RELEASE_ID + "/add_gb_royalmailaddress.json"))
         .thenReturn(reference);
-    when(store.clean(BUCKET, reference)).thenReturn(true);
+    when(store.isReferenceClean(BUCKET, reference)).thenReturn(true);
     when(importer.importClean(
-            id, Dataset.ADD_GB_ROYALMAILADDRESS, BUCKET, OBJECT_KEY, "version-1", SHA256, "eu-west-2"))
+            id,
+            Dataset.ADD_GB_ROYALMAILADDRESS,
+            BUCKET,
+            OBJECT_KEY,
+            "version-1",
+            SHA256,
+            "eu-west-2"))
         .thenReturn(true);
 
     assertTrue(
         ImportService.importReady(
             store, BUCKET, manifest, Dataset.ADD_GB_ROYALMAILADDRESS, importer, "eu-west-2"));
 
-    verify(store).clean(BUCKET, reference);
+    verify(store).isReferenceClean(BUCKET, reference);
     verify(importer)
         .importClean(
-            id, Dataset.ADD_GB_ROYALMAILADDRESS, BUCKET, OBJECT_KEY, "version-1", SHA256, "eu-west-2");
+            id,
+            Dataset.ADD_GB_ROYALMAILADDRESS,
+            BUCKET,
+            OBJECT_KEY,
+            "version-1",
+            SHA256,
+            "eu-west-2");
   }
 
   @Test
@@ -248,13 +274,14 @@ class ImportServiceTest {
     var store = mock(ReleaseStore.class);
     var manifest = mock(ReleaseManifest.class);
     when(manifest.id()).thenReturn(UUID.fromString(RELEASE_ID));
-    var reference = JSON.createObjectNode()
-        .put("key", OBJECT_KEY)
-        .put("version", "version-1")
-        .put("sha256", SHA256);
+    var reference =
+        JSON.createObjectNode()
+            .put("key", OBJECT_KEY)
+            .put("version", "version-1")
+            .put("sha256", SHA256);
     when(store.read(BUCKET, "ready/" + RELEASE_ID + "/add_gb_royalmailaddress.json"))
         .thenReturn(null, reference);
-    when(store.clean(BUCKET, reference)).thenReturn(false);
+    when(store.isReferenceClean(BUCKET, reference)).thenReturn(false);
 
     assertFalse(
         ImportService.importReady(
@@ -263,26 +290,26 @@ class ImportServiceTest {
         ImportService.importReady(
             store, BUCKET, manifest, Dataset.ADD_GB_ROYALMAILADDRESS, importer, "eu-west-2"));
 
-    verify(importer, never())
-        .importClean(
-            any(), any(), any(), any(), any(), any(), any());
+    verify(importer, never()).importClean(any(), any(), any(), any(), any(), any(), any());
   }
 
   @Test
   void rejectsReadyFileFromAnotherReleaseOrDataset() {
     var manifest = mock(ReleaseManifest.class);
     when(manifest.id()).thenReturn(UUID.fromString(RELEASE_ID));
-    var foreignReference = new ObjectReference(
-        "quarantine/csv/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/add_gb_royalmailaddress/"
-            + "12345678-1234-1234-1234-123456789abc.csv",
-        "version-1",
-        SHA256);
+    var foreignReference =
+        new ObjectReference(
+            "quarantine/csv/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/add_gb_royalmailaddress/"
+                + "12345678-1234-1234-1234-123456789abc.csv",
+            "version-1",
+            SHA256);
 
     var failure =
         assertThrows(
             IllegalArgumentException.class,
-            () -> ImportService.validateReference(
-                manifest, Dataset.ADD_GB_ROYALMAILADDRESS, foreignReference));
+            () ->
+                ImportService.validateReference(
+                    manifest, Dataset.ADD_GB_ROYALMAILADDRESS, foreignReference));
 
     assertTrue(failure.getMessage().contains("CSV must belong to release and dataset"));
   }
@@ -293,7 +320,12 @@ class ImportServiceTest {
 
     var failures =
         ImportService.importAvailable(
-            mock(ReleaseStore.class), BUCKET, mock(ReleaseManifest.class), importer, "eu-west-2", context);
+            mock(ReleaseStore.class),
+            BUCKET,
+            mock(ReleaseManifest.class),
+            importer,
+            "eu-west-2",
+            context);
 
     assertTrue(failures.isEmpty());
   }
@@ -309,7 +341,8 @@ class ImportServiceTest {
             store, BUCKET, mock(ReleaseManifest.class), importer, "eu-west-2", context);
 
     assertEquals(Dataset.values().length, failures.size());
-    assertTrue(failures.stream().allMatch(failure -> failure.getMessage().equals("S3 unavailable")));
+    assertTrue(
+        failures.stream().allMatch(failure -> failure.getMessage().equals("S3 unavailable")));
   }
 
   private Release processingRelease() {

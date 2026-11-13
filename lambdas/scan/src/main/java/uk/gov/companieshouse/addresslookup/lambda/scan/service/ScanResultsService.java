@@ -1,6 +1,12 @@
 package uk.gov.companieshouse.addresslookup.lambda.scan.service;
 
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+
 import com.fasterxml.jackson.databind.JsonNode;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 import uk.gov.companieshouse.addresslookup.lambda.scan.InvalidReason;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
@@ -10,13 +16,6 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.FileType
 import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.ObjectKey;
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 
 /**
  * Stateless router for GuardDuty scan results. It never touches S3 or stores state; duplicate
@@ -65,12 +64,13 @@ public final class ScanResultsService {
       rejectionCode = "INVALID_INPUT";
       decision = reject(payload, parsed, rejectionCode, invalidReason.message(), objectUri);
     } else if ("NO_THREATS_FOUND".equals(result)) {
-      decision = switch (parsed.fileType()) {
-        case ZIP -> "ExtractRequested";
-        case CSV -> "DatasetReady";
-        case RECEIPT -> "ReceiptReady";
-        case MANIFEST -> "ManifestReady";
-      };
+      decision =
+          switch (parsed.fileType()) {
+            case ZIP -> "ExtractRequested";
+            case CSV -> "DatasetReady";
+            case RECEIPT -> "ReceiptReady";
+            case MANIFEST -> "ManifestReady";
+          };
       commands.sendIngestion(decision, payload);
     } else {
       rejectionCode = "THREATS_FOUND".equals(result) ? MALWARE_FOUND : "SCAN_INCONCLUSIVE";
@@ -100,20 +100,22 @@ public final class ScanResultsService {
     } catch (IllegalArgumentException e) {
       parsed = null;
     }
-    if (!SOURCE.equals(text(input, "source"))
-        || !DETAIL_TYPE.equals(text(input, "detail-type"))) {
+    if (!SOURCE.equals(text(input, "source")) || !DETAIL_TYPE.equals(text(input, "detail-type"))) {
       return new Validation(parsed, InvalidReason.UNEXPECTED_SOURCE_OR_DETAIL_TYPE);
     }
     if (parsed == null) return new Validation(null, InvalidReason.INVALID_OBJECT_KEY);
     if (versionId == null) return new Validation(parsed, InvalidReason.MISSING_VERSION_ID);
     String expectedBucket = parsed.fileType() == FileType.CSV ? cleanBucket : ingestBucket;
     return new Validation(
-        parsed,
-        expectedBucket.equals(bucket) ? null : InvalidReason.UNKNOWN_BUCKET_FOR_OBJECT_KEY);
+        parsed, expectedBucket.equals(bucket) ? null : InvalidReason.UNKNOWN_BUCKET_FOR_OBJECT_KEY);
   }
 
   private String reject(
-      Map<String, Object> payload, ObjectKey parsed, String code, String message, String objectUri) {
+      Map<String, Object> payload,
+      ObjectKey parsed,
+      String code,
+      String message,
+      String objectUri) {
     payload.put("step", parsed == null ? "scan" : step(parsed.fileType()));
     payload.put("code", code);
     payload.put("message", message);

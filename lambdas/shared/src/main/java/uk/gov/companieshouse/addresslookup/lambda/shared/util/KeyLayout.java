@@ -1,11 +1,10 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.util;
 
-import uk.gov.companieshouse.release.model.Dataset;
-
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import uk.gov.companieshouse.release.model.Dataset;
 
 /** Shared S3 key layout for scanned ZIPs, receipts, manifests and extracted CSVs. */
 public class KeyLayout {
@@ -14,8 +13,7 @@ public class KeyLayout {
   private static final Pattern OBJECT =
       Pattern.compile("^(zips|csv)/(\\w+-\\w+)/([a-z0-9_]+)\\.(zip|csv)$");
   private static final Pattern SCANNED_OBJECT =
-      Pattern.compile(
-          "^Scanned/(" + UUID + ")/([a-z0-9_]+)\\.(zip|receipt\\.json)$");
+      Pattern.compile("^Scanned/(" + UUID + ")/([a-z0-9_]+)\\.(zip|receipt\\.json)$");
   private static final Pattern MANIFEST =
       Pattern.compile("^acquisitions/(\\d{4}-\\d{2}-\\d{2})/(" + UUID + ")\\.json$");
   private static final Pattern EXTRACTED_CSV =
@@ -62,7 +60,8 @@ public class KeyLayout {
     Matcher scanned = SCANNED_OBJECT.matcher(key);
     if (scanned.matches()) {
       return new ObjectKey(
-          scanned.group(1), Dataset.named(scanned.group(2)),
+          scanned.group(1),
+          Dataset.named(scanned.group(2)),
           "zip".equals(scanned.group(3)) ? FileType.ZIP : FileType.RECEIPT);
     }
     Matcher extracted = EXTRACTED_CSV.matcher(key);
@@ -83,7 +82,7 @@ public class KeyLayout {
   }
 
   /** @throws IllegalArgumentException if the key is not a valid ZIP key for a supported dataset */
- public static ZipKey parseZipKey(String key) {
+  public static ZipKey parseZipKey(String key) {
     ObjectKey object = parseObjectKey(key);
     if (object.fileType() != FileType.ZIP) throw new IllegalArgumentException("Expected ZIP key");
     return new ZipKey(object.releaseId(), object.dataset());

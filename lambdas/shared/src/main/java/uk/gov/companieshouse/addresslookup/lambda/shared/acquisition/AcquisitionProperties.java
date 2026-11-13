@@ -1,12 +1,12 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
 
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.context.properties.bind.DefaultValue;
-import uk.gov.companieshouse.release.model.DatasetDefault;
 
 import java.time.Duration;
 import java.util.List;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.DefaultValue;
+import uk.gov.companieshouse.release.model.DatasetDefault;
 
 @ConfigurationProperties("acquisition")
 public record AcquisitionProperties(

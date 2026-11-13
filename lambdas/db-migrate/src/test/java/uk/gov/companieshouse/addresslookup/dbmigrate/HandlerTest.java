@@ -1,25 +1,25 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
-import com.amazonaws.services.lambda.runtime.Context;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.List;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.amazonaws.services.lambda.runtime.Context;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
 @ExtendWith(MockitoExtension.class)
 class HandlerTest {
 
-  private static final String SNAPSHOT_KEY = "address-lookup/db-schema-snapshots/address-lookup-db-1.4.0.zip";
+  private static final String SNAPSHOT_KEY =
+      "address-lookup/db-schema-snapshots/address-lookup-db-1.4.0.zip";
   private static final String VERSION_ID = "v1";
   private static final String SHA256_HEX = "9f2c" + "0".repeat(60);
 
@@ -34,14 +34,21 @@ class HandlerTest {
   }
 
   private static Map<String, Object> buildEventPayload(String command) {
-    return Map.of("command", command, "key", SNAPSHOT_KEY, "versionId", VERSION_ID, "sha256", SHA256_HEX);
+    return Map.of(
+        "command", command, "key", SNAPSHOT_KEY, "versionId", VERSION_ID, "sha256", SHA256_HEX);
   }
 
   @Test
   void validEventIsParsedAndTheServiceResultIsReturned() {
     var expectedRequest = new MigrationRequest(Command.INFO, SNAPSHOT_KEY, VERSION_ID, SHA256_HEX);
     Map<String, Object> serviceResult =
-        Map.of("status", "SUCCESS", "schemaVersion", "2026.004", "pending", List.of("V2026.005__x.sql"));
+        Map.of(
+            "status",
+            "SUCCESS",
+            "schemaVersion",
+            "2026.004",
+            "pending",
+            List.of("V2026.005__x.sql"));
     when(migrationService.handle(expectedRequest)).thenReturn(serviceResult);
 
     var result = handler.handleRequest(buildEventPayload("info"), lambdaContext);
@@ -51,7 +58,8 @@ class HandlerTest {
 
   @Test
   void resultWithoutMigrationListsIsStillReturned() {
-    var expectedRequest = new MigrationRequest(Command.MIGRATE, SNAPSHOT_KEY, VERSION_ID, SHA256_HEX);
+    var expectedRequest =
+        new MigrationRequest(Command.MIGRATE, SNAPSHOT_KEY, VERSION_ID, SHA256_HEX);
     Map<String, Object> serviceResult = Map.of("status", "SUCCESS");
     when(migrationService.handle(expectedRequest)).thenReturn(serviceResult);
 
@@ -65,7 +73,8 @@ class HandlerTest {
     var unknownCommandPayload = buildEventPayload("clean");
     var migrationException =
         assertThrows(
-            MigrationException.class, () -> handler.handleRequest(unknownCommandPayload, lambdaContext));
+            MigrationException.class,
+            () -> handler.handleRequest(unknownCommandPayload, lambdaContext));
 
     assertEquals(MigrationException.Code.INVALID_INPUT, migrationException.code());
     assertEquals("INVALID_INPUT: Unknown command: clean", migrationException.getMessage());
@@ -84,7 +93,8 @@ class HandlerTest {
 
     var migrationException =
         assertThrows(
-            MigrationException.class, () -> handler.handleRequest(eventPayloadWithExtraField, lambdaContext));
+            MigrationException.class,
+            () -> handler.handleRequest(eventPayloadWithExtraField, lambdaContext));
 
     assertEquals(MigrationException.Code.INVALID_INPUT, migrationException.code());
     verifyNoInteractions(migrationService);
@@ -101,14 +111,16 @@ class HandlerTest {
 
   @Test
   void serviceFailureIsRethrownUnchanged() {
-    var expectedRequest = new MigrationRequest(Command.MIGRATE, SNAPSHOT_KEY, VERSION_ID, SHA256_HEX);
+    var expectedRequest =
+        new MigrationRequest(Command.MIGRATE, SNAPSHOT_KEY, VERSION_ID, SHA256_HEX);
     var serviceFailure = new MigrationException(MigrationException.Code.MIGRATION_FAILED, "boom");
     when(migrationService.handle(expectedRequest)).thenThrow(serviceFailure);
 
     var migrateEventPayload = buildEventPayload("migrate");
     var thrown =
         assertThrows(
-            MigrationException.class, () -> handler.handleRequest(migrateEventPayload, lambdaContext));
+            MigrationException.class,
+            () -> handler.handleRequest(migrateEventPayload, lambdaContext));
 
     assertSame(serviceFailure, thrown);
   }
@@ -122,10 +134,10 @@ class HandlerTest {
     var infoEventPayload = buildEventPayload("info");
     var thrown =
         assertThrows(
-            IllegalStateException.class, () -> handler.handleRequest(infoEventPayload, lambdaContext));
+            IllegalStateException.class,
+            () -> handler.handleRequest(infoEventPayload, lambdaContext));
 
     assertEquals("db-migration-lambda command=info failed unexpectedly", thrown.getMessage());
     assertSame(unexpectedFailure, thrown.getCause());
   }
 }
-

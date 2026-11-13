@@ -1,150 +1,174 @@
 package uk.gov.companieshouse.addresslookup.mapper;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import uk.gov.companieshouse.addresslookup.entity.RoyalMailAddressLookup;
 import uk.gov.companieshouse.addresslookup.model.LegacyAddress;
 
+@ExtendWith(MockitoExtension.class)
 class LegacyAddressMapperTest {
 
-    private final LegacyAddressMapper mapper = Mappers.getMapper(LegacyAddressMapper.class);
+  private final LegacyAddressMapper mapper = Mappers.getMapper(LegacyAddressMapper.class);
 
-    @Test
-    void premiseIncludesSubBuildingAndBuildingNumber() {
-        RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
-        when(address.getSubBuildingName()).thenReturn("FLAT 1");
-        when(address.getBuildingNumber()).thenReturn(16);
+  @Mock
+  private RoyalMailAddressLookup address;
 
-        assertEquals("FLAT 1 16", mapper.toPremise(address));
-    }
+  @Test
+  void premiseIncludesSubBuildingAndBuildingNumber() {
+    when(address.getSubBuildingName()).thenReturn("FLAT 1");
+    when(address.getBuildingNumber()).thenReturn(16);
 
-    @Test
-    void premiseUsesOnlyTheBuildingNumberWhenSubBuildingIsAbsent() {
-        RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
-        when(address.getSubBuildingName()).thenReturn(null);
-        when(address.getBuildingNumber()).thenReturn(14);
+    assertEquals("FLAT 1 16", mapper.toPremise(address));
+  }
 
-        assertEquals("14", mapper.toPremise(address));
-    }
+  @Test
+  void premiseUsesOnlyTheBuildingNumberWhenSubBuildingIsAbsent() {
+    when(address.getSubBuildingName()).thenReturn(null);
+    when(address.getBuildingNumber()).thenReturn(14);
 
-    @Test
-    void premiseUsesOnlyTheSubBuildingWhenBuildingNumberIsAbsent() {
-        RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
-        when(address.getSubBuildingName()).thenReturn("FLAT 1");
-        when(address.getBuildingNumber()).thenReturn(null);
+    assertEquals("14", mapper.toPremise(address));
+  }
 
-        assertEquals("FLAT 1", mapper.toPremise(address));
-    }
+  @Test
+  void premiseUsesOnlyTheSubBuildingWhenBuildingNumberIsAbsent() {
+    when(address.getSubBuildingName()).thenReturn("FLAT 1");
+    when(address.getBuildingNumber()).thenReturn(null);
 
-    @Test
-    void premiseIncludesBuildingName() {
-        RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
-        when(address.getSubBuildingName()).thenReturn("FLAT 1");
-        when(address.getBuildingName()).thenReturn("SOVEREIGN HOUSE");
-        when(address.getBuildingNumber()).thenReturn(16);
+    assertEquals("FLAT 1", mapper.toPremise(address));
+  }
 
-        assertEquals("FLAT 1 SOVEREIGN HOUSE 16", mapper.toPremise(address));
-        when(address.getSubBuildingName()).thenReturn(null);
-        when(address.getBuildingNumber()).thenReturn(null);
-        assertEquals("SOVEREIGN HOUSE", mapper.toPremise(address));
-    }
+  @Test
+  void subBuildingAndBuildingNameWithoutNumberMovesBuildingNameToAddressLine1() {
+    when(address.getSubBuildingName()).thenReturn("FLAT 1");
+    when(address.getBuildingName()).thenReturn("SOVEREIGN HOUSE");
+    when(address.getBuildingNumber()).thenReturn(null);
+    when(address.getThoroughfare()).thenReturn("HIGH STREET");
 
-    @Test
-    void premiseIsEmptyWhenBothComponentsAreAbsent() {
-        RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
-        when(address.getSubBuildingName()).thenReturn(null);
-        when(address.getBuildingNumber()).thenReturn(null);
+    LegacyAddress legacy = mapper.toLegacyAddress(address);
 
-        assertEquals("", mapper.toPremise(address));
-    }
+    assertAll(
+        () -> assertEquals("FLAT 1", legacy.premise()),
+        () -> assertEquals("SOVEREIGN HOUSE HIGH STREET", legacy.addressLine1()));
+  }
 
-    @Test
-    void legacyAddressMappingIncludesPremise() {
-        RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
-        when(address.getSubBuildingName()).thenReturn("FLAT 1");
-        when(address.getBuildingNumber()).thenReturn(16);
+  @Test
+  void buildingNameWithoutSubBuildingOrNumberGoesToPremise() {
+    when(address.getBuildingName()).thenReturn("SOVEREIGN HOUSE");
+    when(address.getBuildingNumber()).thenReturn(null);
+    when(address.getThoroughfare()).thenReturn("HIGH STREET");
 
-        assertEquals("FLAT 1 16", mapper.toLegacyAddress(address).premise());
-    }
+    LegacyAddress legacy = mapper.toLegacyAddress(address);
 
-    @Test
-    void legacyAddressMappingWithoutPremiseLeavesItNull() {
-        RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
+    assertAll(
+        () -> assertEquals("SOVEREIGN HOUSE", legacy.premise()),
+        () -> assertEquals("HIGH STREET", legacy.addressLine1()));
+  }
 
-        assertNull(mapper.toLegacyAddressWithoutPremise(address).premise());
-    }
+  @Test
+  void subBuildingBuildingNameAndNumberMovesNumberToAddressLine1() {
+    when(address.getSubBuildingName()).thenReturn("FLAT 1");
+    when(address.getBuildingName()).thenReturn("SOVEREIGN HOUSE");
+    when(address.getBuildingNumber()).thenReturn(16);
+    when(address.getThoroughfare()).thenReturn("HIGH STREET");
 
-    @Test
-    void legacyAddressMappingReturnsNullForNullInput() {
-        assertAll(
-                () -> assertNull(mapper.toLegacyAddress(null)),
-                () -> assertNull(mapper.toLegacyAddressWithoutPremise(null)));
-    }
+    LegacyAddress legacy = mapper.toLegacyAddress(address);
 
-    @Test
-    void legacyAddressMappingJoinsThoroughfareAndLocalityLinesWithSpaces() {
-        RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
-        when(address.getDependentThoroughfare()).thenReturn("MILL LANE");
-        when(address.getThoroughfare()).thenReturn("HIGH STREET");
-        when(address.getDoubleDependentLocality()).thenReturn("OLD TOWN");
-        when(address.getDependentLocality()).thenReturn("RIVERSIDE");
+    assertAll(
+        () -> assertEquals("FLAT 1 SOVEREIGN HOUSE", legacy.premise()),
+        () -> assertEquals("16 HIGH STREET", legacy.addressLine1()));
+  }
 
-        LegacyAddress legacy = mapper.toLegacyAddress(address);
-        LegacyAddress withoutPremise = mapper.toLegacyAddressWithoutPremise(address);
+  @Test
+  void premiseIsEmptyWhenBothComponentsAreAbsent() {
+    when(address.getSubBuildingName()).thenReturn(null);
+    when(address.getBuildingNumber()).thenReturn(null);
 
-        assertAll(
-                () -> assertEquals("MILL LANE HIGH STREET", legacy.addressLine1()),
-                () -> assertEquals("OLD TOWN RIVERSIDE", legacy.addressLine2()),
-                () -> assertEquals("MILL LANE HIGH STREET", withoutPremise.addressLine1()),
-                () -> assertEquals("OLD TOWN RIVERSIDE", withoutPremise.addressLine2()));
-    }
+    assertEquals("", mapper.toPremise(address));
+  }
 
-    @Test
-    void legacyAddressLinesAreEmptyWhenComponentsAreAbsent() {
-        RoyalMailAddressLookup address = mock(RoyalMailAddressLookup.class);
+  @Test
+  void legacyAddressMappingIncludesPremise() {
+    when(address.getSubBuildingName()).thenReturn("FLAT 1");
+    when(address.getBuildingNumber()).thenReturn(16);
 
-        LegacyAddress legacy = mapper.toLegacyAddress(address);
+    assertEquals("FLAT 1 16", mapper.toLegacyAddress(address).premise());
+  }
 
-        assertAll(
-                () -> assertEquals("", legacy.addressLine1()),
-                () -> assertEquals("", legacy.addressLine2()));
-    }
+  @Test
+  void legacyAddressMappingWithoutPremiseLeavesItNull() {
+    assertNull(mapper.toLegacyAddressWithoutPremise(address).premise());
+  }
 
-    @Test
-    void joinTrimsPartsAndOmitsBlankValues() {
-        assertEquals("Main Road High Street", mapper.join(" Main Road ", " ", "High Street"));
-    }
+  @Test
+  void legacyAddressMappingReturnsNullForNullInput() {
+    assertAll(
+        () -> assertNull(mapper.toLegacyAddress(null)),
+        () -> assertNull(mapper.toLegacyAddressWithoutPremise(null)));
+  }
 
-    @Test
-    void joinHandlesSingleNullEmptyAndAllBlankInputs() {
-        assertAll(
-                () -> assertEquals("Main Road", mapper.join("Main Road", null)),
-                () -> assertEquals("Main Road", mapper.join(null, "", "Main Road")),
-                () -> assertEquals("", mapper.join(null, null)),
-                () -> assertEquals("", mapper.join(" ", "")),
-                () -> assertEquals("", mapper.join()));
-    }
+  @Test
+  void legacyAddressMappingJoinsThoroughfareAndLocalityLinesWithSpaces() {
+    when(address.getDependentThoroughfare()).thenReturn("MILL LANE");
+    when(address.getThoroughfare()).thenReturn("HIGH STREET");
+    when(address.getDoubleDependentLocality()).thenReturn("OLD TOWN");
+    when(address.getDependentLocality()).thenReturn("RIVERSIDE");
 
-    @Test
-    void joinKeepsPunctuationInsideParts() {
-        assertEquals("FLAT 1, BLOCK A 16", mapper.join("FLAT 1, BLOCK A", "16"));
-    }
+    LegacyAddress legacy = mapper.toLegacyAddress(address);
+    LegacyAddress withoutPremise = mapper.toLegacyAddressWithoutPremise(address);
 
-    @Test
-    void countryMappingsPreserveLegacyCodesAndFallbacks() {
-        assertAll(
-                () -> assertEquals("GB-ENG", mapper.toLegacyCountry("England")),
-                () -> assertEquals("GB-SCT", mapper.toLegacyCountry("Scotland")),
-                () -> assertEquals("GB-WLS", mapper.toLegacyCountry("Wales")),
-                () -> assertEquals("GB-NIR", mapper.toLegacyCountry("Northern Ireland")),
-                () -> assertEquals("United Kingdom", mapper.toLegacyCountry(null)),
-                () -> assertEquals("United Kingdom", mapper.toLegacyCountry(" ")),
-                () -> assertEquals("Canada", mapper.toLegacyCountry("Canada")));
-    }
+    assertAll(
+        () -> assertEquals("MILL LANE HIGH STREET", legacy.addressLine1()),
+        () -> assertEquals("OLD TOWN RIVERSIDE", legacy.addressLine2()),
+        () -> assertEquals("MILL LANE HIGH STREET", withoutPremise.addressLine1()),
+        () -> assertEquals("OLD TOWN RIVERSIDE", withoutPremise.addressLine2()));
+  }
+
+  @Test
+  void legacyAddressLinesAreEmptyWhenComponentsAreAbsent() {
+    LegacyAddress legacy = mapper.toLegacyAddress(address);
+
+    assertAll(
+        () -> assertEquals("", legacy.addressLine1()),
+        () -> assertEquals("", legacy.addressLine2()));
+  }
+
+  @Test
+  void joinTrimsPartsAndOmitsBlankValues() {
+    assertEquals("Main Road High Street", mapper.join(" Main Road ", " ", "High Street"));
+  }
+
+  @Test
+  void joinHandlesSingleNullEmptyAndAllBlankInputs() {
+    assertAll(
+        () -> assertEquals("Main Road", mapper.join("Main Road", null)),
+        () -> assertEquals("Main Road", mapper.join(null, "", "Main Road")),
+        () -> assertEquals("", mapper.join(null, null)),
+        () -> assertEquals("", mapper.join(" ", "")),
+        () -> assertEquals("", mapper.join()));
+  }
+
+  @Test
+  void joinKeepsPunctuationInsideParts() {
+    assertEquals("FLAT 1, BLOCK A 16", mapper.join("FLAT 1, BLOCK A", "16"));
+  }
+
+  @Test
+  void countryMappingsPreserveLegacyCodesAndFallbacks() {
+    assertAll(
+        () -> assertEquals("GB-ENG", mapper.toLegacyCountry("England")),
+        () -> assertEquals("GB-SCT", mapper.toLegacyCountry("Scotland")),
+        () -> assertEquals("GB-WLS", mapper.toLegacyCountry("Wales")),
+        () -> assertEquals("GB-NIR", mapper.toLegacyCountry("Northern Ireland")),
+        () -> assertEquals("United Kingdom", mapper.toLegacyCountry(null)),
+        () -> assertEquals("United Kingdom", mapper.toLegacyCountry(" ")),
+        () -> assertEquals("Canada", mapper.toLegacyCountry("Canada")));
+  }
 }

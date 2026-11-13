@@ -2,11 +2,10 @@ package uk.gov.companieshouse.addresslookup.dbmigrate;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
-import uk.gov.companieshouse.logging.Logger;
-import uk.gov.companieshouse.logging.LoggerFactory;
-
 import java.util.List;
 import java.util.Map;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
 
 /**
  * Invoked synchronously by the DB pipeline. A thrown {@link MigrationException} surfaces to the

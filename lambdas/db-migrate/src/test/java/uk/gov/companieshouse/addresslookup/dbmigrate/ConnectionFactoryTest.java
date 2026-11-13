@@ -1,12 +1,12 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.Test;
 
 class ConnectionFactoryTest {
 
@@ -15,19 +15,26 @@ class ConnectionFactoryTest {
   @Test
   void unreachableDatabaseFailsAsDatabaseUnavailable() {
     // Port 1 is never open, so the connection is refused straight away.
-    var credentials = new DatabaseCredentials("jdbc:postgresql://127.0.0.1:1/address_lookup", "owner", "s3cret");
+    var credentials =
+        new DatabaseCredentials("jdbc:postgresql://127.0.0.1:1/address_lookup", "owner", "s3cret");
 
     var e = assertThrows(MigrationException.class, () -> connectionFactory.open(credentials));
 
     assertEquals(MigrationException.Code.DATABASE_UNAVAILABLE, e.code());
-    assertTrue(e.getMessage().startsWith("DATABASE_UNAVAILABLE: Cannot connect to jdbc:postgresql://127.0.0.1:1/address_lookup"));
+    assertTrue(
+        e.getMessage()
+            .startsWith(
+                "DATABASE_UNAVAILABLE: Cannot connect to jdbc:postgresql://127.0.0.1:1/address_lookup"));
     assertFalse(e.getMessage().contains("s3cret"));
   }
 
   @Test
   void passwordEmbeddedInTheJdbcUrlIsNotRevealed() {
     var credentials =
-        new DatabaseCredentials("jdbc:postgresql://owner:urlsecret@127.0.0.1:1/address_lookup?password=urlsecret", "owner", "p");
+        new DatabaseCredentials(
+            "jdbc:postgresql://owner:urlsecret@127.0.0.1:1/address_lookup?password=urlsecret",
+            "owner",
+            "p");
 
     var e = assertThrows(MigrationException.class, () -> connectionFactory.open(credentials));
 
@@ -37,7 +44,8 @@ class ConnectionFactoryTest {
   @Test
   void malformedJdbcUrlDoesNotRevealThePasswordInTheMessageOrTheCause() {
     var credentials =
-        new DatabaseCredentials("jdbc:postgresql://owner:urlsecret@127.0.0.1:notaport/address_lookup", "owner", "p");
+        new DatabaseCredentials(
+            "jdbc:postgresql://owner:urlsecret@127.0.0.1:notaport/address_lookup", "owner", "p");
 
     var e = assertThrows(MigrationException.class, () -> connectionFactory.open(credentials));
 
@@ -56,4 +64,3 @@ class ConnectionFactoryTest {
     assertEquals(MigrationException.Code.DATABASE_UNAVAILABLE, e.code());
   }
 }
-

@@ -47,9 +47,7 @@ class HandlerTest {
   void setup() {
     try (MockedStatic<AcquisitionApplication> mockApp =
         Mockito.mockStatic(AcquisitionApplication.class)) {
-      mockApp
-          .when(() -> AcquisitionApplication.start(ExtractionComponent.class))
-          .thenReturn(service);
+      mockApp.when(() -> AcquisitionApplication.start(ExtractionComponent.class)).thenReturn(service);
       handler = new Handler();
     }
   }

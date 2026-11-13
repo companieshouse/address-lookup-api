@@ -20,29 +20,25 @@ import uk.gov.companieshouse.addresslookup.service.AddressLookupService;
 @ExtendWith(MockitoExtension.class)
 class AddressLookupServiceTest {
 
-	@Mock
-	private RoyalMailAddressLookupRepository royalMailAddressLookupRepository;
+  @Mock private RoyalMailAddressLookupRepository royalMailAddressLookupRepository;
 
-	@Mock
-	private LegacyAddressMapper legacyAddressMapper;
+  @Mock private LegacyAddressMapper legacyAddressMapper;
 
-	@Mock
-	private RoyalMailAddressMapper royalMailAddressMapper;
+  @Mock private RoyalMailAddressMapper royalMailAddressMapper;
 
-	@InjectMocks
-	private AddressLookupService addressLookupService;
+  @InjectMocks private AddressLookupService addressLookupService;
 
-	@Test
-	void lookupByPostcode_shouldQueryRepositoryWithSuppliedPostcode() {
-		String postcode = "SW1A 1AA";
-		List<RoyalMailAddressLookup> addresses = List.of();
-		List<RoyalMailAddressDto> expectedAddresses = List.of();
-		when(royalMailAddressLookupRepository.findByNormalizedPostcode(postcode)).thenReturn(addresses);
-		when(royalMailAddressMapper.toDtos(addresses)).thenReturn(expectedAddresses);
+  @Test
+  void lookupByPostcode_shouldQueryRepositoryWithSuppliedPostcode() {
+    String postcode = "SW1A 1AA";
+    List<RoyalMailAddressLookup> addresses = List.of();
+    List<RoyalMailAddressDto> expectedAddresses = List.of();
+    when(royalMailAddressLookupRepository.findByNormalizedPostcode(postcode)).thenReturn(addresses);
+    when(royalMailAddressMapper.toDtos(addresses)).thenReturn(expectedAddresses);
 
-		List<RoyalMailAddressDto> result = addressLookupService.lookupByPostcode(postcode);
+    List<RoyalMailAddressDto> result = addressLookupService.lookupByPostcode(postcode);
 
-		assertEquals(expectedAddresses, result);
-		verify(royalMailAddressLookupRepository).findByNormalizedPostcode(postcode);
-	}
+    assertEquals(expectedAddresses, result);
+    verify(royalMailAddressLookupRepository).findByNormalizedPostcode(postcode);
+  }
 }

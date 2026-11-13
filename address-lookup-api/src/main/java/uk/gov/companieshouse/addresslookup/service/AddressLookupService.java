@@ -2,6 +2,7 @@ package uk.gov.companieshouse.addresslookup.service;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
@@ -50,14 +51,19 @@ public class AddressLookupService {
    * @throws DataAccessException when the lookup fails or its single retry fails
    */
   private List<RoyalMailAddressLookup> findByPostcode(String postcode) {
+    String normalizedPostcode = normalizePostcode(postcode);
     try {
-      return royalMailAddressLookupRepository.findByNormalizedPostcode(postcode);
+      return royalMailAddressLookupRepository.findByNormalizedPostcode(normalizedPostcode);
     } catch (DataAccessException exception) {
       if (!hasSerializationFailure(exception)) {
         throw exception;
       }
-      return royalMailAddressLookupRepository.findByNormalizedPostcode(postcode);
+      return royalMailAddressLookupRepository.findByNormalizedPostcode(normalizedPostcode);
     }
+  }
+
+  private static String normalizePostcode(String postcode) {
+    return postcode.replaceAll("\\s+", "").toUpperCase(Locale.ROOT);
   }
 
   /**

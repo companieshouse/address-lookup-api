@@ -1,0 +1,58 @@
+# Error and edge-case scenarios for the address lookup API (expected status in each title).
+
+### Valid postcode with a space, lower case (expect 200)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=lu4%209pj
+
+### Valid postcode but no addresses found (expect 200 with empty array)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=ZZ11ZZ
+
+### Single address: valid postcode but no address found (expect 404)
+GET http://localhost:8080/address-lookup-api/postcode?postcode=ZZ11ZZ
+
+### Empty postcode (expect 404 Address not found)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=
+
+### Empty postcode on /addresses (expect 404 Address not found)
+GET http://localhost:8080/address-lookup-api/addresses?postcode=
+
+### Empty postcode on /postcode (expect 404 Address not found)
+GET http://localhost:8080/address-lookup-api/postcode?postcode=
+
+### Missing postcode parameter (expect 400)
+GET http://localhost:8080/address-lookup-api/multiple-addresses
+
+### Whitespace-only postcode (expect 400 Invalid postcode)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=%20%20%20
+
+### Numbers only (expect 400 Invalid postcode)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=12345
+
+### Letters only (expect 400 Invalid postcode)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=INVALID
+
+### Too short (expect 400 Invalid postcode)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=A
+
+### Too long (expect 400 Invalid postcode)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=AB124NYEXTRA
+
+### Well-formed postcode with a letter in the outward code that does not exist (expect 200 with empty array)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=LU4s9PJ
+
+### Digit where the inward code needs a letter (expect 400 Invalid postcode)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=LU49P1
+
+### Special characters (expect 400 Invalid postcode)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=INVALID@POSTCODE
+
+### SQL injection attempt (expect 400 Invalid postcode)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=%27%20OR%20%271%27%3D%271
+
+### Script injection attempt (expect 400 Invalid postcode)
+GET http://localhost:8080/address-lookup-api/multiple-addresses?postcode=%3Cscript%3Ealert(1)%3C%2Fscript%3E
+
+### Invalid postcode on /addresses (expect 400 Invalid postcode)
+GET http://localhost:8080/address-lookup-api/addresses?postcode=12345
+
+### Invalid postcode on /postcode (expect 400 Invalid postcode)
+GET http://localhost:8080/address-lookup-api/postcode?postcode=BT557KLEXTRA

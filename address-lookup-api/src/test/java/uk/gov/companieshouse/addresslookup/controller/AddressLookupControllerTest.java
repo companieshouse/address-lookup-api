@@ -1,5 +1,6 @@
 package uk.gov.companieshouse.addresslookup.controller;
 
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -11,6 +12,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -48,11 +51,13 @@ class AddressLookupControllerTest {
         .andExpect(jsonPath("$[0].postcode").value("SW1A 1AA"));
   }
 
-  @Test
-  void multipleAddresses_shouldReturnNotFoundForEmptyPostcode() throws Exception {
+  @ParameterizedTest
+  @ValueSource(strings = {"addresses", "multiple-addresses", "postcode"})
+  void shouldReturnNotFoundForEmptyPostcode(String path) throws Exception {
     mockMvc
-        .perform(get("/address-lookup-api/multiple-addresses").queryParam("postcode", ""))
+        .perform(get("/address-lookup-api/" + path).queryParam("postcode", ""))
         .andExpect(status().isNotFound());
+    verifyNoInteractions(addressLookupService);
   }
 
   @Test
@@ -103,11 +108,20 @@ class AddressLookupControllerTest {
 
   @Test
   void postcode_shouldReturnNotFoundWhenNoAddressIsFound() throws Exception {
-    when(addressLookupService.lookupLegacyAddressByPostcode("UNKNOWN"))
+    when(addressLookupService.lookupLegacyAddressByPostcode("ZZ1 1ZZ"))
         .thenReturn(Optional.empty());
 
     mockMvc
-        .perform(get("/address-lookup-api/postcode").queryParam("postcode", "UNKNOWN"))
+        .perform(get("/address-lookup-api/postcode").queryParam("postcode", "ZZ1 1ZZ"))
         .andExpect(status().isNotFound());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"addresses", "multiple-addresses", "postcode"})
+  void shouldReturnBadRequestForInvalidPostcode(String path) throws Exception {
+    mockMvc
+        .perform(get("/address-lookup-api/" + path).queryParam("postcode", "12345"))
+        .andExpect(status().isBadRequest());
+    verifyNoInteractions(addressLookupService);
   }
 }

@@ -28,18 +28,8 @@ import java.util.zip.ZipException;
 import java.util.zip.ZipInputStream;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
-import org.jspecify.annotations.NonNull;
-import org.springframework.stereotype.Component;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.S3Exception;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
-import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
-import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
-import uk.gov.companieshouse.release.model.DatasetCatalog;
 
 /**
  * Red-zone extraction reads only the exact clean ZIP version. Members must be the primary
@@ -79,7 +69,7 @@ public final class ExtractionComponent {
     }
   }
 
-  static class ArchiveValidationException extends Exception {
+  static class ArchiveValidationException extends IOException {
     ArchiveValidationException(String msg) {
       super(msg);
     }

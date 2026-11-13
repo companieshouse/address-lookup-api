@@ -24,3 +24,7 @@ http-client.private.env.json
 
 # IntelliJ HTTP Client download output
 /downloads/
+
+# Editor-specific files (use a global gitignore)
+.vim/
+.vscode/

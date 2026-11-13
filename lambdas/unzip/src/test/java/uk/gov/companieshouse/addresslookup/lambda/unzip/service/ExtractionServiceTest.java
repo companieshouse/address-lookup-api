@@ -33,7 +33,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
-
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.AbortableInputStream;
@@ -102,7 +101,7 @@ final class ExtractionServiceTest {
                 new ExtractionComponent(
                 s3,
                         new AcquisitionProperties(
-                                "control",
+                "control",
                                 SOURCE,
                                 "events",
                                 "key",

@@ -75,7 +75,7 @@ public final class ExtractionComponent {
         }
     }
 
-    static class ArchiveValidationException extends Exception {
+    static class ArchiveValidationException extends IOException {
         ArchiveValidationException(String msg) {
             super(msg);
         }

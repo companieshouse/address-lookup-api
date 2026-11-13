@@ -48,10 +48,15 @@ public final class StreamingS3 {
         }
     }
 
-    private final S3Client s3;
-    private final LongSupplier remaining;
-    private final int partSizeBytes;
-    private final ExistingObjectPolicy reuseExisting;
+  @FunctionalInterface
+  public interface BeforeCompletion {
+    void run() throws IOException;
+  }
+
+  private final S3Client s3;
+  private final LongSupplier remaining;
+  private final int partSizeBytes;
+  private final ExistingObjectPolicy reuseExisting;
 
     public StreamingS3(S3Client s3, LongSupplier remaining) {
         this(s3, remaining, new ReleaseStore(s3), DEFAULT_PART_SIZE_BYTES);

@@ -68,10 +68,23 @@ else
         exit 1
     fi
     root="$(cd "$(dirname "$0")/.." && pwd)"
+    # A full OS load holds millions of postcodes; sample deterministically above 1M rows.
+    sample_mod="${POSTCODE_SAMPLE_MOD:-20000}"
+    if [[ ! "$sample_mod" =~ ^[1-9][0-9]{0,8}$ ]]; then
+        printf 'POSTCODE_SAMPLE_MOD must be a positive integer.\n' >&2
+        exit 2
+    fi
     if ! database_postcodes="$(docker compose -f "$root/compose.yaml" exec -T postgres \
         psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d address_lookup \
-        -c "SELECT DISTINCT upper(replace(postcode, ' ', '')) AS postcode
-            FROM address_lookup.address_lookup ORDER BY postcode;")"; then
+        -c "SELECT DISTINCT upper(replace(a.postcode, ' ', '')) AS postcode
+            FROM address_lookup.address_lookup a,
+              (SELECT CASE WHEN count(*) > 1000000
+                           THEN ${sample_mod} ELSE 1 END AS k
+                 FROM (SELECT 1
+                         FROM address_lookup.address_lookup
+                        LIMIT 1000001) row_sample) s
+            WHERE mod(abs(hashtext(a.postcode)), s.k) = 0
+            ORDER BY postcode;")"; then
         printf 'Failed to read postcodes from the local lookup database.\n' >&2
         exit 1
     fi

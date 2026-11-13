@@ -28,3 +28,6 @@ http-client.private.env.json
 # Editor-specific files (use a global gitignore)
 .vim/
 .vscode/
+
+# Seed CSVs downloaded from the OS API; never commit
+/database/local/data/

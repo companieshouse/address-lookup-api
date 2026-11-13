@@ -18,7 +18,7 @@ current Makefile and its maintained scripts.
 | Execute local SQL | `make db-exec SQL="SELECT count(*) FROM address_lookup.address_lookup;"` | Executes SQL through Compose `psql` against the local `address_lookup` DB; errors fail the command. |
 | Start API and DB | `make start` | Starts/waits for Postgres, then starts/waits for the API, sequentially. |
 | Stop everything local | `make stop` | Stops this helper's API, then this repository's Compose Postgres. Does not stop shared ingress, other containers, or processes started by other runners. |
-| Reset and reseed DB | `make db-reset CONFIRM=address_lookup` | Stops the managed API, verifies its port is free, starts Postgres, drops/recreates only the local Compose `address_lookup` DB, starts the API with Flyway/local fixtures, and verifies the lookup relation contains rows. Leaves both services running. |
+| Reset and reseed DB | `make db-reset CONFIRM=address_lookup` | Stops the managed API, verifies its port is free, starts Postgres, drops/recreates only the local Compose `address_lookup` DB, deletes any cached CSVs, downloads the newest FULL Royal Mail CSVs from the OS API (`OS_API_KEY` from the environment or `../.env`) into the git-ignored `database/local/data/`, starts the API with Flyway and the local-only CSV seed migrations (full GB and ISL data, about 33 million rows, ten or more minutes), and verifies the lookup relation contains rows. Leaves both services running. |
 | Unit tests | `make test-unit` | Maven reactor Java unit tests with integration tests skipped and automatic Make JDK selection. Does not require local-service tools such as `jq`. |
 | Command-helper regressions | `make test-commands` | Runs lifecycle/Sonar, smoke, postcode lookup/generation, Maven-selector and Concourse helper checks using stubs; requires `jq` and `ps`. |
 | Format Java | `make tidy FILE=path/File.java` | Formats one file in place. Use `FILE=.` for all Java files, or pipe Java source to `make tidy` for formatted stdout. |
@@ -98,7 +98,7 @@ GNU Make reserves `-o` for its own "old file" option, so use `OUTPUT=...`
 with Make, not `make concourse-status -o json`. Direct script calls support
 `bash scripts/concourse-status.sh -o json` (or `human`/`yaml`).
 
-Run `bash tests/test_concourse.sh` for isolated helper regressions.
+Run `bash scripts/tests/test_concourse.sh` for isolated helper regressions.
 
 ## Requirements
 
@@ -163,7 +163,7 @@ Dates in generated fixtures use the UTC generation date. Large selections
 whose filenames exceed the filesystem limit must be split into smaller
 commands; the helper reports this without creating a file.
 
-Run `bash tests/test_add_postcode.sh` for isolated generator regressions.
+Run `bash scripts/tests/test_add_postcode.sh` for isolated generator regressions.
 
 Run `make test-postcodes` to start/wait for the local DB, rebuild/restart the API and exercise
 every distinct postcode in `address_lookup.address_lookup`, one request at a time.
@@ -210,8 +210,12 @@ new or changed local seed files are packaged and applied by Flyway before
 lookups. They do not reset the database. Startup or build failures prevent
 the queries. Unlike `make start`, they do not reuse an already healthy API.
 
-The GB regional seed contains 664 real CSV records, including 266 for
-13 Cardiff postcodes and `KT13 8GL`; the ISL regional seed contains 273.
+Local Royal Mail data is loaded from the OS CSV files, which are never
+committed. `make db-reset` runs `scripts/fetch-os-csv.sh` and the local-only
+Java Flyway migrations in `db.local.java` bulk-load them with `release_id`
+`local`. Integration tests use small fixture CSVs through `LOCAL_SEED_DIR`.
+Against a full load, `make test-postcodes` checks a deterministic sample of
+postcodes (override with `POSTCODE_SAMPLE_MOD`, a smaller value checks more).
 `CF10 1PX` remains in the requested test selection
 but currently has no source records; Java integration tests check its empty
 result. `make test-postcode POSTCODE=CF101PX` fails its non-empty-result
@@ -373,8 +377,9 @@ bash scripts/spotless.sh check
 ```
 
 Maven, parser or other operational failures are errors, not clean results.
-`tests/test_commands.sh` and `make test-commands` are unchanged; they do not
-invoke Spotless or gain new dependencies. Pipeline formatting enforcement is
+The command-helper suite does not invoke Spotless. `make test-commands` also
+requires `zip`, `unzip` and Perl for the CSV-download and Maven-settings checks.
+Pipeline formatting enforcement is
 deferred, and no new workflow is added. Existing Java sources
 are intentionally unchanged by this tools-only introduction, so the opt-in
 scan may report existing differences. Before committing Java changes, tidy
@@ -382,7 +387,7 @@ the files you intend to change and review the diff. `FILE=.` is available
 when a deliberate whole-codebase formatting pass is wanted; it is not run
 automatically.
 
-Run `bash tests/test_spotless.sh` manually for isolated, Maven-stub-based
+Run `bash scripts/tests/test_spotless.sh` manually for isolated, Maven-stub-based
 helper regressions. This suite is not connected to `make test-commands` or
 the pipeline, needs no Maven downloads, and does not format project sources.
 

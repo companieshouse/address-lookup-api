@@ -26,7 +26,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.flywaydb.core.Flyway;
-import org.flywaydb.core.api.output.MigrateResult;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.testcontainers.junit.jupiter.Container;
@@ -181,11 +181,8 @@ class DatabaseFeedIT {
   private static final Set<String> REQUESTED_POSTCODES =
       Stream.concat(
               Stream.of(
-                  "WF27QD", "AB101AU", "BT100BU", "BT100EQ", "BT513TU", "GY80EE", "GY79AD",
-                  "IM11BD", "JE27ND", "JE27NA", "CF143AT", "CF146RP", "CF239XN", "CF243DJ",
-                  "CF102BY", "CF245HB", "CF101FG", "CF102EF", "CF101GA", "CF102HQ", "CF101PX",
-                  "CF102DP", "E139JU", "PO334PL", "IG95AZ", "WC1N1JP", "N16AR", "CF118TA",
-                  "CF145XW", "KT138GL"),
+                  "WF27QD", "AB101AU", "BT100EQ", "BT513TU", "GY80EE", "GY79AD", "IM11BD", "JE27NA",
+                  "CF143AT", "LU49PL", "CH11DF", "DG89JA", "CF101PX"),
               BorderPostcodeFixtures.compactPostcodes().stream())
           .collect(Collectors.toUnmodifiableSet());
 
@@ -200,24 +197,27 @@ class DatabaseFeedIT {
    * Checks fresh production migrations, local fixtures, and repeatable seed reruns.
    */
   @Test
-  void migratesAndSeedsFreshPostgisDatabaseRepeatably(@TempDir Path tempSeeds)
-      throws IOException, SQLException {
+  void migratesAndSeedsFreshPostgisDatabaseRepeatably(
+      @TempDir Path tempSeeds, @TempDir Path tempCsvSeeds) throws IOException, SQLException {
     Path databaseRoot = repositoryRoot().resolve("database");
     Flyway productionFlyway = flyway(databaseRoot.resolve("migrations"));
 
-    MigrateResult productionResult = productionFlyway.migrate();
-    assertEquals(4, productionResult.migrationsExecuted);
-    productionFlyway.validate();
-    assertEquals(0, productionFlyway.migrate().migrationsExecuted);
-
+    assertProductionMigrationsAreRepeatable(productionFlyway);
     assertProductionSchema();
 
-    Flyway localFlyway = flyway(databaseRoot.resolve("migrations"), databaseRoot.resolve("local"));
+    System.setProperty(
+        "als.local.seed.dir", Path.of("src/test/resources/seed-csv").toAbsolutePath().toString());
+    Flyway localFlyway =
+        flyway(
+            databaseRoot.resolve("migrations"),
+            databaseRoot.resolve("local"),
+            Path.of(CSV_SEED_LOCATION));
     long seedCount;
     try (Stream<Path> files = Files.list(databaseRoot.resolve("local"))) {
       seedCount = files.filter(path -> path.getFileName().toString().endsWith(".sql")).count();
     }
-    assertEquals(seedCount, localFlyway.migrate().migrationsExecuted);
+    // The CSV seeds are Java repeatable migrations and add to the SQL seed count.
+    assertEquals(seedCount + 2, localFlyway.migrate().migrationsExecuted);
     assertLocalFixtures();
 
     Map<String, Long> localRowCounts = new HashMap<>();
@@ -227,9 +227,14 @@ class DatabaseFeedIT {
     }
 
     copySeedsWithChangedChecksums(databaseRoot.resolve("local"), tempSeeds);
-    Flyway changedSeedFlyway = flyway(databaseRoot.resolve("migrations"), tempSeeds);
+    Flyway changedSeedFlyway =
+        flyway(databaseRoot.resolve("migrations"), tempSeeds, Path.of(CSV_SEED_LOCATION));
     assertEquals(seedCount, changedSeedFlyway.migrate().migrationsExecuted);
     changedSeedFlyway.validate();
+
+    assertCsvSeedsReload(changedSeedFlyway, tempCsvSeeds, localRowCounts);
+    assertGbReloadSurvivesUdprnConflict(changedSeedFlyway, tempCsvSeeds);
+    assertIsolatedReloadsAfterGbOnlyReload(changedSeedFlyway, tempCsvSeeds, localRowCounts);
 
     Files.writeString(
         tempSeeds.resolve("R__seed_additional_postcode.sql"),
@@ -237,16 +242,99 @@ class DatabaseFeedIT {
         StandardOpenOption.CREATE_NEW);
     Path expandedSeeds = Files.createDirectory(tempSeeds.resolve("expanded"));
     copySeedsWithChangedChecksums(tempSeeds, expandedSeeds);
-    Flyway expandedSeedFlyway = flyway(databaseRoot.resolve("migrations"), expandedSeeds);
+    Flyway expandedSeedFlyway =
+        flyway(databaseRoot.resolve("migrations"), expandedSeeds, Path.of(CSV_SEED_LOCATION));
     assertEquals(seedCount + 1, expandedSeedFlyway.migrate().migrationsExecuted);
     expandedSeedFlyway.validate();
 
+    assertSeedsPreservedRows(localRowCounts);
+    assertLocalFixtures();
+  }
+
+  private static void assertProductionMigrationsAreRepeatable(Flyway productionFlyway) {
+    assertEquals(4, productionFlyway.migrate().migrationsExecuted);
+    productionFlyway.validate();
+    assertEquals(0, productionFlyway.migrate().migrationsExecuted);
+  }
+
+  // A new .csv.version marker changes the Java seed checksum, so both CSV seeds must reload.
+  private static void assertCsvSeedsReload(
+      Flyway flyway, Path tempCsvSeeds, Map<String, Long> localRowCounts)
+      throws IOException, SQLException {
+    Path fixtureCsvs = Path.of("src/test/resources/seed-csv");
+    for (String table : TABLES) {
+      String dataset = table.replace("_v2", "");
+      Files.copy(fixtureCsvs.resolve(dataset + ".csv"), tempCsvSeeds.resolve(dataset + ".csv"));
+      Files.writeString(tempCsvSeeds.resolve(dataset + ".csv.version"), "reload-test/1");
+    }
+    System.setProperty("als.local.seed.dir", tempCsvSeeds.toAbsolutePath().toString());
+    assertEquals(2, flyway.migrate().migrationsExecuted);
+    flyway.validate();
+    for (String table : TABLES) {
+      assertEquals(localRowCounts.get(table), rowCount(table, "local"));
+      assertEquals(1, rowCount(table, "preserve-test"));
+    }
+  }
+
+  private static void bumpSeedVersion(Path seedDirectory, String dataset, String version)
+      throws IOException {
+    Files.writeString(seedDirectory.resolve(dataset + ".csv.version"), version);
+  }
+
+  private static void execute(String sql) throws SQLException {
+    try (Connection connection = connection();
+        Statement statement = connection.createStatement()) {
+      statement.executeUpdate(sql);
+    }
+  }
+
+  // A CSV udprn already owned by another release must be skipped, not abort the seed.
+  private static void assertGbReloadSurvivesUdprnConflict(Flyway flyway, Path tempCsvSeeds)
+      throws IOException, SQLException {
+    String gb = "add_gb_royalmailaddress";
+    execute(
+        "UPDATE os_data."
+            + gb
+            + "_v2 SET release_id = 'conflict-test' WHERE udprn = "
+            + "(SELECT min(udprn) FROM os_data."
+            + gb
+            + "_v2 WHERE release_id = 'local')");
+    bumpSeedVersion(tempCsvSeeds, gb, "conflict/1");
+    assertEquals(1, flyway.migrate().migrationsExecuted);
+    assertEquals(1, rowCount(gb + "_v2", "conflict-test"));
+    execute("DELETE FROM os_data." + gb + "_v2 WHERE release_id = 'conflict-test'");
+  }
+
+  // The GB-only reload above leaves a sibling marker; a later ISL-only reload must still load.
+  private static void assertIsolatedReloadsAfterGbOnlyReload(
+      Flyway flyway, Path tempCsvSeeds, Map<String, Long> localRowCounts)
+      throws IOException, SQLException {
+    String gb = "add_gb_royalmailaddress";
+    String isl = "add_isl_royalmailaddress";
+    execute("DELETE FROM os_data." + isl + "_v2 WHERE release_id = 'local'");
+    bumpSeedVersion(tempCsvSeeds, isl, "isl-only/1");
+    assertEquals(1, flyway.migrate().migrationsExecuted);
+    assertEquals(localRowCounts.get(isl + "_v2"), rowCount(isl + "_v2", "local"));
+    bumpSeedVersion(tempCsvSeeds, gb, "restore/1");
+    assertEquals(1, flyway.migrate().migrationsExecuted);
+    assertEquals(localRowCounts.get(gb + "_v2"), rowCount(gb + "_v2", "local"));
+  }
+
+  private static void assertSeedsPreservedRows(Map<String, Long> localRowCounts)
+      throws SQLException {
     for (String table : TABLES) {
       assertEquals(localRowCounts.get(table), rowCount(table, "local"));
       assertEquals(1, rowCount(table, "preserve-test"));
       assertEquals(1, countDistinctUdprns(table, "preserve-test"));
     }
-    assertLocalFixtures();
+  }
+
+  private static final String CSV_SEED_LOCATION = "db/local/java";
+
+  @AfterEach
+  void restoreFixtureSeedDirectory() {
+    System.setProperty(
+        "als.local.seed.dir", Path.of("src/test/resources/seed-csv").toAbsolutePath().toString());
   }
 
   private static Flyway flyway(Path... locations) {
@@ -254,7 +342,10 @@ class DatabaseFeedIT {
         .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
         .locations(
             List.of(locations).stream()
-                .map(path -> "filesystem:" + path.toAbsolutePath())
+                .map(path ->
+                    CSV_SEED_LOCATION.equals(path.toString())
+                        ? "classpath:" + CSV_SEED_LOCATION
+                        : "filesystem:" + path.toAbsolutePath())
                 .toArray(String[]::new))
         .load();
   }
@@ -470,9 +561,8 @@ class DatabaseFeedIT {
   }
 
   private static void assertLocalFixtures() throws SQLException {
-    assertEquals(694, rowCount(TABLES.get(0), "local"));
-    assertEquals(273, rowCount(TABLES.get(1), "local"));
-    assertEquals(30, scenarioPostcodeRowCount());
+    assertEquals(10, rowCount(TABLES.get(0), "local"));
+    assertEquals(10, rowCount(TABLES.get(1), "local"));
     try (Connection connection = connection()) {
       for (String postcode : REQUESTED_POSTCODES) {
         try (PreparedStatement statement =
@@ -494,31 +584,12 @@ class DatabaseFeedIT {
       assertTrue(countSource(connection, "ISL") > 0, "No ISL view rows");
       assertViewSourceForPostcode(connection, "WF27QD", "GB");
       assertViewSourceForPostcode(connection, "CF143AT", "GB");
-      assertViewSourceForPostcode(connection, "KT138GL", "GB");
       assertViewSourceForPostcode(connection, "GY79AD", "ISL");
       assertEquals(0, countInvalidSourceIds(connection));
       assertRegionGeometry(connection, TABLES.get(0), 27700, true);
       assertRegionGeometry(connection, TABLES.get(1), 4258, false);
-      assertCountryFixture(connection, TABLES.get(0), 19, "Scotland");
+      assertCountryFixture(connection, TABLES.get(0), 16, "Scotland");
       assertCountryFixture(connection, TABLES.get(1), 10403188, "Channel Islands");
-    }
-  }
-
-  private static long scenarioPostcodeRowCount() throws SQLException {
-    List<String> postcodes = List.of("E139JU", "PO334PL", "IG95AZ", "WC1N1JP", "N16AR");
-    try (Connection connection = connection();
-        PreparedStatement statement =
-            connection.prepareStatement(
-                "SELECT count(*) FROM os_data.add_gb_royalmailaddress_v2 "
-                    + "WHERE release_id = 'local' "
-                    + "AND upper(replace(postcode, ' ', '')) IN (?, ?, ?, ?, ?)")) {
-      for (int index = 0; index < postcodes.size(); index++) {
-        statement.setString(index + 1, postcodes.get(index));
-      }
-      try (ResultSet result = statement.executeQuery()) {
-        assertTrue(result.next());
-        return result.getLong(1);
-      }
     }
   }
 
@@ -748,12 +819,12 @@ class DatabaseFeedIT {
     try (var files = Files.list(localSeeds)) {
       List<Path> seeds =
           files.filter(path -> path.getFileName().toString().endsWith(".sql")).toList();
-      assertTrue(
+      assertFalse(
           seeds.contains(localSeeds.resolve("R__seed_add_gb_royalmailaddress.sql")),
-          "Expected the GB seed migration");
-      assertTrue(
+          "The GB SQL seed is replaced by the CSV migration");
+      assertFalse(
           seeds.contains(localSeeds.resolve("R__seed_add_isl_royalmailaddress.sql")),
-          "Expected the ISL seed migration");
+          "The ISL SQL seed is replaced by the CSV migration");
       assertFalse(
           seeds.contains(localSeeds.resolve("R__seed_synthetic_cardiff_addresses.sql")),
           "The retired Cardiff seed must not be present");

@@ -31,7 +31,7 @@ class AddressesControllerIT extends AddressTestBaseIT {
                 .queryParam("postcode", "WF27QD")
                 .header(REQUEST_ID.value(), "request_id"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.totalResults").value(34))
+        .andExpect(jsonPath("$.totalResults").value(2))
         .andExpect(jsonPath("$.addresses[0].udprn").value(26394058))
         .andExpect(jsonPath("$.addresses[0].postcode").value("WF2 7QD"));
   }
@@ -46,7 +46,7 @@ class AddressesControllerIT extends AddressTestBaseIT {
                 .queryParam("postcode", postcode)
                 .header(REQUEST_ID.value(), "request_id"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.totalResults").value(greaterThan(1)))
+        .andExpect(jsonPath("$.totalResults").value(greaterThan(0)))
         .andExpect(jsonPath("$.addresses[0].postcode").value(expectedPostcode))
         .andExpect(jsonPath("$.addresses[0].postTown").value(expectedPostTown));
   }

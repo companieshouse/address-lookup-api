@@ -19,9 +19,9 @@ The API exposes three lookup endpoints under `/address-lookup-api`:
 - `GET /postcode?postcode=...`: one legacy address without premise, or HTTP
   404 when no address is found.
 
-Local development uses the repository's PostGIS container and checked-in
-real OS seed data. No OS API key is needed to start the API or load these
-local fixtures.
+Local development uses the repository's PostGIS container. Royal Mail seed
+data is downloaded from the OS API (`OS_API_KEY` required) by
+`make db-reset`; no CSV is committed.
 
 ## Concourse pipeline commands
 
@@ -72,16 +72,18 @@ Use `make api-restart` to rebuild and restart the API after source changes,
 and `make stop` when finished to stop the managed API and PostGIS.
 See [COMMANDS.md](COMMANDS.md) for the available Make operations.
 
-All local seed rows are real OS CSV records, grouped by source dataset:
-`database/local/R__seed_add_gb_royalmailaddress.sql` contains 664 GB records,
-and `R__seed_add_isl_royalmailaddress.sql` contains 273 ISL records. The GB
-seed includes all 266 source addresses for 13 supplied Cardiff postcodes and
-`KT13 8GL`, from package `24833`, FULL version `150450`. `CF10 1PX` has no
-source record. Both regional seeds use only the `local` release marker and
-replace those rows when reapplied, preserving other releases. All local
-fixtures are excluded from the production migration package; the existing
-`make db-reset` uses this hardcoded SQL without downloading data or requiring
-an OS API key.
+Local Royal Mail data comes from OS CSV files. `make db-reset
+CONFIRM=address_lookup` runs `scripts/fetch-os-csv.sh`, which downloads the
+newest FULL CSV version of the "Address Lookup Service Data v2" package into
+the git-ignored `database/local/data/`, then starts the API with the
+local-only Java Flyway migrations (`db.local.java`, location
+`classpath:db/local/java`). They bulk-load `add_gb_royalmailaddress` and
+`add_isl_royalmailaddress` into the v2 tables with release marker `local`,
+replacing only those rows. A full load is about 33 million rows and takes
+ten or more minutes; `make db-reset` discards cached CSVs, re-downloads and shows seed progress (percent staged) and waits until the API is ready, with no timeout.
+Integration tests use small fixture CSVs from `src/test/resources/seed-csv`.
+The CSVs and the Java migrations are excluded from the production migration
+package.
 
 For an existing checkout using the former separate Cardiff seed, run
 `make clean` before rebuilding to remove obsolete packaged SQL. If a disposable
@@ -192,8 +194,9 @@ and [EDITOR.md](EDITOR.md) for editor setup and integrations.
 ## Environment variables
 
 Configure only the settings for the component you run. The database-backed
-API and `make db-reset` do not require `OS_API_KEY`: local fixtures are
-hardcoded SQL, not live OS downloads. Acquisition and importer settings
+API does not require `OS_API_KEY`; its lookups read only the database.
+`make db-reset` does require it (environment or `../.env`) because it
+downloads the Royal Mail CSVs for the local seed. Acquisition and importer settings
 below apply to the separate upstream pipeline.
 
 Supply secrets through the approved environment or secret store. Do not put
@@ -238,7 +241,8 @@ handlers that use them; they are not API startup requirements.
 The importer reads `lambdas/import/src/main/resources/importer.properties`
 and requires `SCANNED_BUCKET` from the acquisition settings above.
 `MAX_PRIMARY_CSV_BYTES` belongs to the release-core local CSV reader.
-These settings do not control Flyway's hardcoded local SQL fixtures.
+These settings do not control the local CSV seed; see `LOCAL_SEED_DIR` and
+`make db-reset` in `COMMANDS.md`.
 
 | Variable | Purpose | Default or requirement |
 | --- | --- | --- |

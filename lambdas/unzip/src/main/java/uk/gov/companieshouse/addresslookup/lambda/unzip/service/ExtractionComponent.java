@@ -439,7 +439,7 @@ public final class ExtractionComponent {
                         "step", "zip-extract",
                         "code", status,
                         "message", "Rejected ZIP: " + status,
-                        "object", Map.of("bucket", bucket, "key", key, "versionId", version),
+                        "object", Map.of(BUCKET_FIELD, bucket, "key", key, VERSION_ID_FIELD, version),
                         "objectUri", "s3://" + bucket + "/" + key));
         return new PermanentExtractionException(status, failure);
     }
@@ -512,9 +512,9 @@ public final class ExtractionComponent {
                 "Extracted CSV version differs from its receipt");
         var evidence = store.read(bucket, StreamingS3.checksumKey(expected.csvKey()));
         check(evidence != null
-                        && bucket.equals(required(evidence, "bucket"))
+                        && bucket.equals(required(evidence, BUCKET_FIELD))
                         && expected.csvKey().equals(required(evidence, "key"))
-                        && version.equals(required(evidence, "versionId"))
+                        && version.equals(required(evidence, VERSION_ID_FIELD))
                         && checksum.equals(required(evidence, SHA256_FIELD)),
                 "Extracted CSV checksum evidence differs from its receipt");
     }

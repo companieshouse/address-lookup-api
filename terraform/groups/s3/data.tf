@@ -1,5 +1,9 @@
 data "aws_caller_identity" "current" {}
 
+data "aws_kms_key" "acquisition" {
+  key_id = local.kms_alias
+}
+
 data "aws_iam_policy_document" "bucket" {
   for_each = local.buckets
 
@@ -20,7 +24,6 @@ data "aws_iam_policy_document" "bucket" {
       values   = ["false"]
     }
   }
-
 }
 
 data "aws_iam_policy_document" "download_storage" {
@@ -45,5 +48,18 @@ data "aws_iam_policy_document" "download_storage" {
       "${aws_s3_bucket.this["landing"].arn}/control/*",
       "${aws_s3_bucket.this["landing"].arn}/landing/*",
     ]
+  }
+
+  statement {
+    sid       = "EncryptDecryptAcquisitionObjects"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+    resources = [data.aws_kms_key.acquisition.arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["s3.${var.aws_region}.amazonaws.com"]
+    }
   }
 }

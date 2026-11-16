@@ -1,5 +1,6 @@
 locals {
   bucket_prefix = "address-lookup-${var.environment}"
+  kms_alias     = "alias/${var.aws_profile}/environment-services-kms"
 
   buckets = {
     landing = {

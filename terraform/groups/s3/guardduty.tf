@@ -11,12 +11,6 @@ variable "guardduty_scan_prefixes" {
   }
 }
 
-variable "landing_kms_key_arn" {
-  type        = string
-  description = "ARN of the CMK encrypting the Landing bucket; null while the bucket uses SSE-S3"
-  default     = null
-}
-
 locals {
   guardduty_service_principal = "malware-protection-plan.guardduty.amazonaws.com"
   guardduty_role_name         = "${local.bucket_prefix}-guardduty-malware-scan"
@@ -111,20 +105,16 @@ data "aws_iam_policy_document" "guardduty" {
     resources = local.guardduty_object_arns
   }
 
-  dynamic "statement" {
-    for_each = var.landing_kms_key_arn == null ? [] : [var.landing_kms_key_arn]
+  statement {
+    sid       = "DecryptLandingObjects"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+    resources = [data.aws_kms_key.acquisition.arn]
 
-    content {
-      sid       = "DecryptLandingObjects"
-      effect    = "Allow"
-      actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
-      resources = [statement.value]
-
-      condition {
-        test     = "StringLike"
-        variable = "kms:ViaService"
-        values   = ["s3.${var.aws_region}.amazonaws.com"]
-      }
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["s3.${var.aws_region}.amazonaws.com"]
     }
   }
 }

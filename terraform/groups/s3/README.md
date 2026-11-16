@@ -5,7 +5,9 @@ and `landing/` prefixes. No separate Control or Quarantine buckets are created.
 The existing Landing bucket name and Terraform resource address are retained.
 
 The bucket has versioning (Extraction and Upload pin to `versionId`), Block Public Access,
-`BucketOwnerEnforced` ownership, SSE-S3 and a bucket policy denying requests without TLS.
+`BucketOwnerEnforced` ownership, default SSE-KMS encryption using the existing
+customer-managed `alias/<aws_profile>/environment-services-kms` key, and a bucket
+policy denying requests without TLS.
 S3 folders are key prefixes, so no empty folder objects are required.
 
 | Prefix | Lifecycle |
@@ -21,6 +23,8 @@ The `download_storage_policy_json` output describes prefix-scoped listing, readi
 (including object versions), writing and multipart-upload aborts under `control/`
 and `landing/` in this bucket. It does not grant deletion, public access or access
 to other buckets/prefixes.
+It also allows `kms:GenerateDataKey` and `kms:Decrypt` on the encryption key,
+only through S3 in the configured region, including for multipart uploads.
 
 Pass this JSON output to the shared Lambda module's `additional_policies` when
 deploying Download, following `terraform/groups/db-migrate/main.tf`.
@@ -28,6 +32,14 @@ The policy document lives in `data.tf`; bucket resources remain in `main.tf`.
 This group does not create or attach a Download IAM policy, or create a Lambda
 or its execution role.
 GuardDuty has its own role, restricted to scanning and tagging `landing/`.
+Its policy uses the same KMS key automatically, including permission to encrypt
+the GuardDuty validation object.
+
+The existing key must be available in the bucket's region, and its key policy
+must permit these roles directly or delegate access through account IAM policies.
+This group does not change the shared key's policy or rotation settings.
+Other Lambda roles accessing encrypted data also need appropriate KMS permissions;
+the key ARN is exposed as `kms_key_arn`.
 
 ## Deployment
 
@@ -36,6 +48,10 @@ paths are unchanged. Before running acquisition against this layout, update the
 handlers to use the two prefixes and configure their bucket settings to this
 bucket (`source_bucket` output). Completion/retry tracking remains application
 logic; creating the bucket does not implement it.
+
+Default SSE-KMS applies to new writes that do not override the encryption settings.
+It does not re-encrypt existing objects or object versions; those require a separate
+migration if present.
 
 If the former Control or Quarantine buckets have already been deployed, migrate
 or retain their contents and review the Terraform plan before applying. Removing

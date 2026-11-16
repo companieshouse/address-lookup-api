@@ -1,14 +1,9 @@
 package uk.gov.companieshouse.addresslookup.lambda.download;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import com.amazonaws.services.lambda.runtime.Context;
-
-import java.util.Map;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,6 +16,8 @@ import uk.gov.companieshouse.addresslookup.lambda.download.service.DownloadServi
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
+
+import java.util.Map;
 
 @ExtendWith(MockitoExtension.class)
 class HandlerTest {

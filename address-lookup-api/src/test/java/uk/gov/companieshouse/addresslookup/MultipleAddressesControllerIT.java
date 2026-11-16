@@ -112,19 +112,21 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
         "A",
         "AB124NYEXTRA",
         "INVALID",
+        "ZZZZZZ",
         "INVALID@POSTCODE",
         "12345",
         "LU49P1",
         "' OR '1'='1",
         "<script>alert(1)</script>"
       })
-  void shouldReturnBadRequestForInvalidPostcode(String postcode) throws Exception {
+  void shouldReturnEmptyListForInvalidPostcode(String postcode) throws Exception {
     this.mockMvc
         .perform(
             get("/address-lookup-api/multiple-addresses")
                 .queryParam("postcode", postcode)
                 .header(REQUEST_ID.value(), "request_id"))
-        .andExpect(status().isBadRequest());
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$").isEmpty());
   }
 
   @Test
@@ -137,14 +139,26 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
   }
 
   @Test
-  void shouldAcceptLowerCasePostcodeWithSpace() throws Exception {
+  void shouldAcceptLowerCasePostcodeWithoutSpace() throws Exception {
     this.mockMvc
         .perform(
             get("/address-lookup-api/multiple-addresses")
-                .queryParam("postcode", "ab10 1au")
+                .queryParam("postcode", "ab101au")
                 .header(REQUEST_ID.value(), "request_id"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$[0].postcode").value("AB10 1AU"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {" ab101au", "ab10 1au", "AB10 1AU", "ab101au "})
+  void shouldReturnEmptyListForPostcodeContainingSpaces(String postcode) throws Exception {
+    this.mockMvc
+        .perform(
+            get("/address-lookup-api/multiple-addresses")
+                .queryParam("postcode", postcode)
+                .header(REQUEST_ID.value(), "request_id"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$").isEmpty());
   }
 
   @Test
@@ -158,7 +172,7 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"ZZ1 1ZZ", "AB12 4NY", "CF101PX", "LU4s9PJ"})
+  @ValueSource(strings = {"ZZ11ZZ", "AB124NY", "CF101PX", "LU4s9PJ"})
   void shouldReturnEmptyArrayForUnknownPostcode(String postcode) throws Exception {
     this.mockMvc
         .perform(

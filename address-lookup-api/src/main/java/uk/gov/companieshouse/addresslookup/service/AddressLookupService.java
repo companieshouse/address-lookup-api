@@ -63,7 +63,7 @@ public class AddressLookupService {
   }
 
   private static String normalizePostcode(String postcode) {
-    return postcode.replaceAll("\\s+", "").toUpperCase(Locale.ROOT);
+    return postcode.toUpperCase(Locale.ROOT);
   }
 
   /**

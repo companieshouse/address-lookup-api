@@ -14,6 +14,8 @@ The API exposes three lookup endpoints under `/address-lookup-api`:
 
 - `GET /addresses?postcode=...`: structured address records, including
   identifiers and coordinates, with the requested postcode and result count.
+  Returns HTTP 404 for an empty postcode or one containing spaces or special
+  characters, and HTTP 400 for other malformed postcodes.
 - `GET /multiple-addresses?postcode=...`: a list of legacy addresses with
   premise, address lines, post town and country.
 - `GET /postcode?postcode=...`: one legacy address without premise, or HTTP
@@ -186,8 +188,14 @@ and [EDITOR.md](EDITOR.md) for editor setup and integrations.
 
 ## Sample HTTP requests
 
-`rest-api.http` holds sample requests for the API and the Ordnance Survey download API. See
+`http/rest-api.http` holds sample requests for the API and the Ordnance Survey download API. See
 [docs/rest-api-http.md](docs/rest-api-http.md) for how to run it in IntelliJ with your own OS API key.
+
+`http/rest-api-validation.http` holds error and edge-case checks (run with
+`npx httpyac send --all http/rest-api-validation.http`). `http/external-api-comparison/` holds an
+IntelliJ HTTP Client script that checks the local `multiple-addresses` and `postcode` endpoints behave like the
+public postcode lookup service (same status codes; for 200 responses, the same shape and emptiness). Run the whole
+`external-api-comparison.http` file against a running local API loaded with `LU49PJ` and `WF27QD`.
 
 ## Environment variables
 

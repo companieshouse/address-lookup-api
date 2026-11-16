@@ -5,8 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.when;
 
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mapstruct.factory.Mappers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -21,69 +25,33 @@ class LegacyAddressMapperTest {
   @Mock
   private RoyalMailAddressLookup address;
 
-  @Test
-  void premiseIncludesSubBuildingAndBuildingNumber() {
-    when(address.getSubBuildingName()).thenReturn("FLAT 1");
-    when(address.getBuildingNumber()).thenReturn(16);
-
-    assertEquals("FLAT 1 16", mapper.toPremise(address));
+  static Stream<Arguments> layouts() {
+    return Stream.of(
+        // sub, name, number, expected premise, expected line 1
+        Arguments.of(null, null, null, "", "HIGH STREET"),
+        Arguments.of(null, null, 14, "14", "HIGH STREET"),
+        Arguments.of(null, "UNIT R2", null, "UNIT R2", "HIGH STREET"),
+        Arguments.of(null, "UNIT R2", 33, "UNIT R2", "33 HIGH STREET"),
+        Arguments.of("FLAT 2", null, null, "FLAT 2", "HIGH STREET"),
+        Arguments.of("FLAT 2", null, 40, "FLAT 2", "40 HIGH STREET"),
+        Arguments.of("101", "GREEN COURT", null, "101 GREEN COURT", "HIGH STREET"),
+        Arguments.of("FLAT 1", "SOVEREIGN HOUSE", 16, "FLAT 1 SOVEREIGN HOUSE", "16 HIGH STREET"));
   }
 
-  @Test
-  void premiseUsesOnlyTheBuildingNumberWhenSubBuildingIsAbsent() {
-    when(address.getSubBuildingName()).thenReturn(null);
-    when(address.getBuildingNumber()).thenReturn(14);
-
-    assertEquals("14", mapper.toPremise(address));
-  }
-
-  @Test
-  void premiseUsesOnlyTheSubBuildingWhenBuildingNumberIsAbsent() {
-    when(address.getSubBuildingName()).thenReturn("FLAT 1");
-    when(address.getBuildingNumber()).thenReturn(null);
-
-    assertEquals("FLAT 1", mapper.toPremise(address));
-  }
-
-  @Test
-  void subBuildingAndBuildingNameWithoutNumberMovesBuildingNameToAddressLine1() {
-    when(address.getSubBuildingName()).thenReturn("FLAT 1");
-    when(address.getBuildingName()).thenReturn("SOVEREIGN HOUSE");
-    when(address.getBuildingNumber()).thenReturn(null);
+  @ParameterizedTest
+  @MethodSource("layouts")
+  void mapsPremiseAndAddressLine1ByComponentCombination(
+      String sub, String name, Integer number, String premise, String line1) {
+    when(address.getSubBuildingName()).thenReturn(sub);
+    when(address.getBuildingName()).thenReturn(name);
+    when(address.getBuildingNumber()).thenReturn(number);
     when(address.getThoroughfare()).thenReturn("HIGH STREET");
 
     LegacyAddress legacy = mapper.toLegacyAddress(address);
 
     assertAll(
-        () -> assertEquals("FLAT 1", legacy.premise()),
-        () -> assertEquals("SOVEREIGN HOUSE HIGH STREET", legacy.addressLine1()));
-  }
-
-  @Test
-  void buildingNameWithoutSubBuildingOrNumberGoesToPremise() {
-    when(address.getBuildingName()).thenReturn("SOVEREIGN HOUSE");
-    when(address.getBuildingNumber()).thenReturn(null);
-    when(address.getThoroughfare()).thenReturn("HIGH STREET");
-
-    LegacyAddress legacy = mapper.toLegacyAddress(address);
-
-    assertAll(
-        () -> assertEquals("SOVEREIGN HOUSE", legacy.premise()),
-        () -> assertEquals("HIGH STREET", legacy.addressLine1()));
-  }
-
-  @Test
-  void subBuildingBuildingNameAndNumberMovesNumberToAddressLine1() {
-    when(address.getSubBuildingName()).thenReturn("FLAT 1");
-    when(address.getBuildingName()).thenReturn("SOVEREIGN HOUSE");
-    when(address.getBuildingNumber()).thenReturn(16);
-    when(address.getThoroughfare()).thenReturn("HIGH STREET");
-
-    LegacyAddress legacy = mapper.toLegacyAddress(address);
-
-    assertAll(
-        () -> assertEquals("FLAT 1 SOVEREIGN HOUSE", legacy.premise()),
-        () -> assertEquals("16 HIGH STREET", legacy.addressLine1()));
+        () -> assertEquals(premise, legacy.premise()),
+        () -> assertEquals(line1, legacy.addressLine1()));
   }
 
   @Test
@@ -96,10 +64,9 @@ class LegacyAddressMapperTest {
 
   @Test
   void legacyAddressMappingIncludesPremise() {
-    when(address.getSubBuildingName()).thenReturn("FLAT 1");
-    when(address.getBuildingNumber()).thenReturn(16);
+    when(address.getBuildingName()).thenReturn("SOVEREIGN HOUSE");
 
-    assertEquals("FLAT 1 16", mapper.toLegacyAddress(address).premise());
+    assertEquals("SOVEREIGN HOUSE", mapper.toLegacyAddress(address).premise());
   }
 
   @Test

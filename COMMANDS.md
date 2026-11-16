@@ -392,7 +392,7 @@ truncated diagnostics, not the helper's complete path list or 255 contract.
 
 ### Editor integration
 
-See [EDITOR.md](EDITOR.md) for VS Code, Vim and IntelliJ setup and usage.
+See [EDITOR.md](EDITOR.md) for IntelliJ setup and usage.
 All editor actions use the existing Spotless helper and root `pom.xml`;
 there is no separate formatting configuration or automatic format-on-save.
 

@@ -12,6 +12,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
 import uk.gov.companieshouse.release.model.DatasetCatalog;
@@ -38,6 +39,7 @@ import uk.gov.companieshouse.logging.LoggerFactory;
 @Component
 public final class ExtractionComponent {
     private final S3Client s3;
+    private final Commands commands;
     private final AcquisitionProperties properties;
     private final ZipQuarantineStore quarantine;
     private static final int MAX_CSV_HEADER_BYTES = 64 * 1024;
@@ -95,8 +97,9 @@ public final class ExtractionComponent {
         }
     }
 
-    public ExtractionComponent(S3Client s3, AcquisitionProperties properties) {
+    public ExtractionComponent(S3Client s3, Commands commands, AcquisitionProperties properties) {
         this.s3 = s3;
+        this.commands = commands;
         this.properties = properties;
         AcquisitionProperties.required(properties.sourceBucket(), "SOURCE_BUCKET");
         AcquisitionProperties.required(properties.scannedBucket(), "SCANNED_BUCKET");
@@ -166,7 +169,7 @@ public final class ExtractionComponent {
         try (var zip = new MeasuredZipInputStream(s3.getObject(request))) {
       completeStage("open-zip", stageStart, releaseId, dataset, context);
             return extractZip(zip, table, expectedReceipt, store, scanBucket, checked, context);
-        } catch (ZipException e) {
+        } catch (ZipException | EOFException e) {
             throw reject("MALFORMED_ZIP", e, scanBucket, s3Key, zipVersion, releaseId, dataset);
     } catch (CsvHeaderException e) {
       throw reject("HEADER_MISMATCH", e, scanBucket, s3Key, zipVersion, releaseId, dataset);
@@ -277,13 +280,22 @@ public final class ExtractionComponent {
 
     private PermanentExtractionException reject(
       String status, Exception failure, String bucket, String key, String version,
-            String releaseId, String dataset) throws Exception {
+            String releaseId, String dataset) {
         LOG.error("ZIP extraction failed",
                 failure,
                 Map.of(STATUS, status, RELEASE_ID_FIELD, releaseId, DATASET_FIELD, dataset));
         String quarantineKey = "quarantine/" + releaseId + "/" + dataset + "/"
                 + sha(version.getBytes(StandardCharsets.UTF_8)) + ".zip";
         quarantine.copy(bucket, key, version, quarantineKey);
+        commands.sendIngestion("StepRejected",
+                Map.of(SCHEMA_VERSION_FIELD, 1,
+                        RELEASE_ID_FIELD, releaseId,
+                        DATASET_FIELD, dataset,
+                        "step", "zip-extract",
+                        "code", status,
+                        "message", "Rejected ZIP: " + status,
+                        "object", Map.of("bucket", bucket, "key", key, "versionId", version),
+                        "objectUri", "s3://" + bucket + "/" + key));
         return new PermanentExtractionException(status, failure);
     }
 

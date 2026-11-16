@@ -25,7 +25,7 @@ final class ZipQuarantineStore {
     void copy(String bucket, String key, String version, String destination) {
         Long length = s3.headObject(HeadObjectRequest.builder()
                 .bucket(bucket).key(key).versionId(version).build()).contentLength();
-        check(length != null && length > 0 && length <= maxZipBytes,
+        check(length != null && length >= 0 && length <= maxZipBytes,
                 "Invalid ZIP size for quarantine");
         if (length <= MAX_SINGLE_COPY_BYTES) {
             try {

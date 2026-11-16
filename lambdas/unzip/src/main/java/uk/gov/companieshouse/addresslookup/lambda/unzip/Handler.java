@@ -19,6 +19,8 @@ public final class Handler implements RequestHandler<Map<String, Object>, String
   public String handleRequest(Map<String, Object> event, Context context) {
     try {
       return service.unzip(event, context);
+    } catch (ExtractionComponent.PermanentExtractionException e) {
+      return "StepRejected:" + e.code();
     } catch (Exception e) {
       String reason = e.getMessage();
       throw new UnzipFailureException("unzip failed {" + reason + "}", e);

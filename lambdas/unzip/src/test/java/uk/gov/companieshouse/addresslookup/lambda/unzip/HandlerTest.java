@@ -63,6 +63,15 @@ class HandlerTest {
   }
 
   @Test
+  void acknowledgesPublishedPermanentRejection() throws Exception {
+    var failure = Mockito.mock(ExtractionComponent.PermanentExtractionException.class);
+    Mockito.when(failure.code()).thenReturn("HEADER_MISMATCH");
+    Mockito.when(service.unzip(TEST_EVENT, context)).thenThrow(failure);
+
+    assertEquals("StepRejected:HEADER_MISMATCH", handler.handleRequest(TEST_EVENT, context));
+  }
+
+  @Test
   void shouldThrowExceptionForException() throws Exception {
 
     final String EXCEPTION_TEXT = "Something went wrong!!";

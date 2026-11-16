@@ -47,6 +47,7 @@ import java.util.zip.ZipInputStream;
 @Component
 public final class ExtractionComponent {
     private final S3Client s3;
+    private final Commands commands;
     private final AcquisitionProperties properties;
     private final ZipQuarantineStore quarantine;
     private static final int MAX_CSV_HEADER_BYTES = 64 * 1024;
@@ -101,8 +102,9 @@ public final class ExtractionComponent {
         }
     }
 
-    public ExtractionComponent(S3Client s3, AcquisitionProperties properties) {
+    public ExtractionComponent(S3Client s3, Commands commands, AcquisitionProperties properties) {
         this.s3 = s3;
+        this.commands = commands;
         this.properties = properties;
         AcquisitionProperties.required(properties.controlBucket(), "CONTROL_BUCKET");
         AcquisitionProperties.required(properties.landingBucket(), "LANDING_BUCKET");
@@ -190,7 +192,7 @@ public final class ExtractionComponent {
             completeStage("open-zip", stageStart, releaseId, dataset, context);
             return extractZip(
                     zip, table, zipObject.packageVersion(), checked, context, s3Key, zipVersion);
-        } catch (ZipException e) {
+        } catch (ZipException | EOFException e) {
             logExtractionFailure(MALFORMED_ZIP, e, releaseId, dataset, s3Key);
             throw permanentFailure(MALFORMED_ZIP, e, releaseId, dataset);
         } catch (CsvHeaderException e) {
@@ -412,7 +414,7 @@ public final class ExtractionComponent {
 
     private PermanentExtractionException reject(
             String reasonCode, Exception failure, String bucket, String key, String version,
-            String releaseId, String dataset, String s3Key) throws Exception {
+            String releaseId, String dataset, String s3Key) {
         LOG.error(
                 "ZIP extraction failed",
                 failure,
@@ -430,6 +432,15 @@ public final class ExtractionComponent {
         String quarantineKey = "quarantine/" + releaseId + "/" + dataset + "/"
                 + sha(version.getBytes(StandardCharsets.UTF_8)) + ".zip";
         quarantine.copy(bucket, key, version, quarantineKey);
+        commands.sendIngestion("StepRejected",
+                Map.of(SCHEMA_VERSION_FIELD, 1,
+                        RELEASE_ID_FIELD, releaseId,
+                        DATASET_FIELD, dataset,
+                        "step", "zip-extract",
+                        "code", status,
+                        "message", "Rejected ZIP: " + status,
+                        "object", Map.of("bucket", bucket, "key", key, "versionId", version),
+                        "objectUri", "s3://" + bucket + "/" + key));
         return new PermanentExtractionException(status, failure);
     }
 

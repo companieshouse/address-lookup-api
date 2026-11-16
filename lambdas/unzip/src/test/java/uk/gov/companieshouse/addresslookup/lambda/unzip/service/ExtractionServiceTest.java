@@ -100,7 +100,8 @@ final class ExtractionServiceTest {
         service =
                 new ExtractionComponent(
                 s3,
-                        new AcquisitionProperties(
+                        commands,
+            new AcquisitionProperties(
                 "control",
                                 SOURCE,
                                 "events",
@@ -173,6 +174,7 @@ final class ExtractionServiceTest {
         assertThrows(S3Exception.class, () -> service.unzip(unzipEvent, context));
         verify(s3, never())
                 .getObject(argThat((GetObjectRequest request) -> ZIP_KEY.equals(request.key())));
+        verify(commands, never()).sendIngestion(anyString(), anyMap());
     }
 
     @Test
@@ -186,6 +188,7 @@ final class ExtractionServiceTest {
     assertThrows(IllegalStateException.class, () -> service.unzip(unzipEvent, context));
         verify(s3, never())
                 .getObject(argThat((GetObjectRequest request) -> ZIP_KEY.equals(request.key())));
+        verify(commands, never()).sendIngestion(anyString(), anyMap());
     }
 
     @Test
@@ -197,6 +200,44 @@ final class ExtractionServiceTest {
     }
 
     @Test
+  void publishesRejectionOnlyAfterQuarantiningZip() throws Exception {
+    cleanZip(zip(Map.of(DATASET + ".csv", "wrong,header\n1,2\n")));
+    doAnswer(call -> {
+      assertTrue(objects.keySet().stream().anyMatch(object ->
+          SOURCE.equals(object.bucket()) && object.key().startsWith("quarantine/" + ID + "/")));
+      return null;
+    }).when(commands).sendIngestion(eq("StepRejected"), anyMap());
+    var request = event();
+
+    assertRejected("HEADER_MISMATCH", () -> service.unzip(request, context));
+  }
+
+  @Test
+  void publicationFailureRemainsRetryableAfterQuarantine() throws Exception {
+    cleanZip(zip(Map.of(DATASET + ".csv", "wrong,header\n1,2\n")));
+    var publicationFailure = new EventPublicationException("EventBridge unavailable");
+    doThrow(publicationFailure).when(commands).sendIngestion(eq("StepRejected"), anyMap());
+    var request = event();
+
+    assertEquals(publicationFailure,
+        assertThrows(EventPublicationException.class, () -> service.unzip(request, context)));
+    assertTrue(objects.keySet().stream().anyMatch(object ->
+        SOURCE.equals(object.bucket()) && object.key().startsWith("quarantine/" + ID + "/")));
+    assertFalse(objects.containsKey(stored(SOURCE, RECEIPT_KEY)));
+  }
+
+  @Test
+  void quarantineFailureDoesNotPublishRejection() throws Exception {
+    cleanZip(zip(Map.of(DATASET + ".csv", "wrong,header\n1,2\n")));
+    doThrow(S3Exception.builder().statusCode(503).build())
+        .when(s3).copyObject(any(Consumer.class));
+    var request = event();
+
+    assertThrows(S3Exception.class, () -> service.unzip(request, context));
+    verify(commands, never()).sendIngestion(anyString(), anyMap());
+  }
+
+  @Test
     void rejectsUnexpectedCsvFilenameWithoutUploading() throws Exception {
         cleanZip(zip(Map.of("unexpected.csv", "data\n")));
 
@@ -396,7 +437,7 @@ final class ExtractionServiceTest {
         var failure =
                 assertThrows(
                         IllegalArgumentException.class,
-                        () -> new ExtractionComponent(s3, properties));
+                        () -> new ExtractionComponent(s3, commands, properties));
 
         assertEquals("Missing LANDING_BUCKET", failure.getMessage());
     }
@@ -698,8 +739,9 @@ final class ExtractionServiceTest {
     private ExtractionComponent serviceWithLimit(long maxExtractedBytes) {
         return new ExtractionComponent(
                 s3,
-                new AcquisitionProperties(
-                        "control",
+                commands,
+        new AcquisitionProperties(
+            "control",
                         SOURCE,
                         "events",
                         "key",
@@ -744,6 +786,14 @@ final class ExtractionServiceTest {
                                                         ? "csv-version"
                                                         : "zip-version")
                                         .build());
+        verify(commands, atLeastOnce()).sendIngestion(eq("StepRejected"), argThat(payload ->
+                Integer.valueOf(1).equals(payload.get("schemaVersion"))
+                        && ID.equals(payload.get("releaseId"))
+                        && DATASET.equals(payload.get("dataset"))
+                        && "zip-extract".equals(payload.get("step"))
+                        && code.equals(payload.get("code"))
+                        && Map.of("bucket", SOURCE, "key", ZIP_KEY, "versionId", "zip-version")
+                                .equals(payload.get("object"))));
     }
 
     private static String header() {

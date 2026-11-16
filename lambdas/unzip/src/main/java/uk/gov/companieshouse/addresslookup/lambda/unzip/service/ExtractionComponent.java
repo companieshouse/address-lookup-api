@@ -49,6 +49,8 @@ public final class ExtractionComponent {
     private static final String RELEASE_ID_FIELD = "releaseId";
     private static final String REQUEST_ID_FIELD = "request_id";
     private static final String SCHEMA_VERSION_FIELD = "schemaVersion";
+    private static final String BUCKET_FIELD = "bucket";
+    private static final String VERSION_ID_FIELD = "versionId";
     private static final String EXTRACT_FIELD = "extract";
     private static final String VERSION_FIELD = "version";
     private static final String SHA256_FIELD = "sha256";
@@ -119,9 +121,9 @@ public final class ExtractionComponent {
         Map.of(
             REQUEST_ID_FIELD, requestId(context), RELEASE_ID_FIELD, releaseId, DATASET_FIELD, dataset));
     JsonNode scanObject = input.path("object");
-    String scanBucket = required(scanObject, "bucket");
+    String scanBucket = required(scanObject, BUCKET_FIELD);
     String s3Key = required(scanObject, "key");
-    String zipVersion = required(scanObject, "versionId");
+    String zipVersion = required(scanObject, VERSION_ID_FIELD);
 
     check(scanBucket.equals(properties.sourceBucket()), "Unexpected ZIP bucket");
     check(s3Key.equals("Scanned/" + releaseId + "/" + table.name() + ".zip"), "Unexpected ZIP key");
@@ -294,7 +296,7 @@ public final class ExtractionComponent {
                         "step", "zip-extract",
                         "code", status,
                         "message", "Rejected ZIP: " + status,
-                        "object", Map.of("bucket", bucket, "key", key, "versionId", version),
+                        "object", Map.of(BUCKET_FIELD, bucket, "key", key, VERSION_ID_FIELD, version),
                         "objectUri", "s3://" + bucket + "/" + key));
         return new PermanentExtractionException(status, failure);
     }
@@ -371,9 +373,9 @@ public final class ExtractionComponent {
     var evidence = store.read(bucket, StreamingS3.checksumKey(expected.csvKey()));
     check(
         evidence != null
-            && bucket.equals(required(evidence, "bucket"))
+            && bucket.equals(required(evidence, BUCKET_FIELD))
             && expected.csvKey().equals(required(evidence, "key"))
-            && version.equals(required(evidence, "versionId"))
+            && version.equals(required(evidence, VERSION_ID_FIELD))
             && checksum.equals(required(evidence, SHA256_FIELD)),
         "Extracted CSV checksum evidence differs from its receipt");
   }

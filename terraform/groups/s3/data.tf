@@ -21,49 +21,29 @@ data "aws_iam_policy_document" "bucket" {
     }
   }
 
-  # Quarantine: only the Quarantine Lambda role writes ...
-  dynamic "statement" {
-    for_each = each.key == "quarantine" ? [1] : []
+}
 
-    content {
-      sid       = "DenyWriteExceptQuarantineLambda"
-      effect    = "Deny"
-      actions   = local.quarantine_write_actions
-      resources = ["${aws_s3_bucket.this[each.key].arn}/*"]
+data "aws_iam_policy_document" "download_storage" {
+  statement {
+    sid       = "ListAcquisitionStateAndDownloads"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.this["landing"].arn]
 
-      principals {
-        type        = "*"
-        identifiers = ["*"]
-      }
-
-      condition {
-        test     = "ArnNotEquals"
-        variable = "aws:PrincipalArn"
-        values   = [local.quarantine_lambda_role_arn]
-      }
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["control/*", "landing/*"]
     }
   }
 
-  # ... and nobody reads except the break-glass role (the Lambda cannot read back).
-  dynamic "statement" {
-    for_each = each.key == "quarantine" ? [1] : []
-
-    content {
-      sid       = "DenyReadExceptBreakGlass"
-      effect    = "Deny"
-      actions   = local.quarantine_read_actions
-      resources = [aws_s3_bucket.this[each.key].arn, "${aws_s3_bucket.this[each.key].arn}/*"]
-
-      principals {
-        type        = "*"
-        identifiers = ["*"]
-      }
-
-      condition {
-        test     = "ArnNotEquals"
-        variable = "aws:PrincipalArn"
-        values   = [local.break_glass_role_arn]
-      }
-    }
+  statement {
+    sid     = "ReadWriteControlStateAndDownloads"
+    effect  = "Allow"
+    actions = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:AbortMultipartUpload"]
+    resources = [
+      "${aws_s3_bucket.this["landing"].arn}/control/*",
+      "${aws_s3_bucket.this["landing"].arn}/landing/*",
+    ]
   }
 }

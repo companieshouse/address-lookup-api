@@ -82,16 +82,16 @@ resource "aws_s3_bucket_policy" "this" {
   depends_on = [aws_s3_bucket_public_access_block.this]
 }
 
-# Landing: raw/ and extracted/ expire after var.landing_retention_days.
+# One lifecycle configuration per bucket; control state outlives landing data.
 resource "aws_s3_bucket_lifecycle_configuration" "landing" {
   bucket = aws_s3_bucket.this["landing"].id
 
   rule {
-    id     = "expire-raw"
+    id     = "expire-landing"
     status = "Enabled"
 
     filter {
-      prefix = "raw/"
+      prefix = "landing/"
     }
 
     expiration {
@@ -108,73 +108,15 @@ resource "aws_s3_bucket_lifecycle_configuration" "landing" {
   }
 
   rule {
-    id     = "expire-extracted"
+    id     = "expire-control-history"
     status = "Enabled"
 
     filter {
-      prefix = "extracted/"
-    }
-
-    expiration {
-      days = var.landing_retention_days
-    }
-
-    noncurrent_version_expiration {
-      noncurrent_days = var.noncurrent_retention_days
-    }
-
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 7
-    }
-  }
-
-  depends_on = [aws_s3_bucket_versioning.this]
-}
-
-# Control: sources/acquisitions/ is kept longer for audit.
-resource "aws_s3_bucket_lifecycle_configuration" "control" {
-  bucket = aws_s3_bucket.this["control"].id
-
-  rule {
-    id     = "expire-acquisition-sources"
-    status = "Enabled"
-
-    filter {
-      prefix = "sources/acquisitions/"
-    }
-
-    expiration {
-      days = var.audit_retention_days
+      prefix = "control/"
     }
 
     noncurrent_version_expiration {
       noncurrent_days = var.audit_retention_days
-    }
-
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 7
-    }
-  }
-
-  depends_on = [aws_s3_bucket_versioning.this]
-}
-
-# Quarantine holds objects awaiting scan or failed scan; expire them like landing data.
-resource "aws_s3_bucket_lifecycle_configuration" "quarantine" {
-  bucket = aws_s3_bucket.this["quarantine"].id
-
-  rule {
-    id     = "expire-quarantine"
-    status = "Enabled"
-
-    filter {}
-
-    expiration {
-      days = var.landing_retention_days
-    }
-
-    noncurrent_version_expiration {
-      noncurrent_days = var.noncurrent_retention_days
     }
 
     abort_incomplete_multipart_upload {

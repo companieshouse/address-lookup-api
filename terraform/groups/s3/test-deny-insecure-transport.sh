@@ -7,7 +7,7 @@ environment="${1:?usage: $0 <environment>}"
 principal="$(aws sts get-caller-identity --query Arn --output text)"
 status=0
 
-for purpose in control landing quarantine; do
+for purpose in landing; do
   bucket="address-lookup-${environment}-${purpose}"
   policy="$(aws s3api get-bucket-policy --bucket "$bucket" --query Policy --output text)"
 

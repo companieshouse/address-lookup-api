@@ -19,7 +19,7 @@ variable "aws_region" {
 
 variable "landing_retention_days" {
   type        = number
-  description = "Days before objects under raw/ and extracted/ (and in Quarantine) expire. To be agreed in ALS-102"
+  description = "Days before objects under landing/ expire"
   default     = 30
 }
 
@@ -31,18 +31,6 @@ variable "noncurrent_retention_days" {
 
 variable "audit_retention_days" {
   type        = number
-  description = "Days before objects under sources/acquisitions/ expire; kept longer than landing data for audit. To be agreed in ALS-102"
+  description = "Days before noncurrent control/ versions expire; current plans, cursors and receipts are retained for recovery"
   default     = 365
-}
-
-variable "quarantine_lambda_role_name" {
-  type        = string
-  description = "Name of the Quarantine Lambda's IAM role; the only principal allowed to write to the Quarantine bucket"
-  default     = "address-lookup-quarantine-lambda"
-}
-
-variable "break_glass_role_name" {
-  type        = string
-  description = "Name of the break-glass IAM role; the only principal allowed to read the Quarantine bucket"
-  default     = "address-lookup-quarantine-break-glass"
 }

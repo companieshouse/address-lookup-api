@@ -3,15 +3,18 @@ package uk.gov.companieshouse.addresslookup.lambda.download.service;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mockConstruction;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
-
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.spi.ILoggingEvent;
@@ -20,7 +23,26 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.Mock;
+import org.mockito.MockedConstruction;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
+import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
+import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
+import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
+import uk.gov.companieshouse.addresslookup.lambda.shared.testsupport.FakeS3;
+import uk.gov.companieshouse.logging.StructuredLogger;
+
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -30,20 +52,6 @@ import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.slf4j.LoggerFactory;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
-import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
-import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
-import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
-import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
-import uk.gov.companieshouse.addresslookup.lambda.shared.testsupport.FakeS3;
-import uk.gov.companieshouse.logging.StructuredLogger;
 
 @ExtendWith(MockitoExtension.class)
 final class DownloadServiceTest {
@@ -213,8 +221,8 @@ final class DownloadServiceTest {
     var service = new DownloadService(s3.client(), os, properties());
     var context = context();
 
-    assertThrows(Exception.class, () -> service.download(event, context));
-
+    Exception exception = assertThrows(IllegalArgumentException.class, () -> service.download(event, context));
+    assertEquals("Unknown dataset: not_a_real_dataset", exception.getMessage());
     assertTrue(s3.objects.isEmpty());
     verifyNoInteractions(os);
   }
@@ -382,6 +390,60 @@ final class DownloadServiceTest {
         "checksum mismatch must not publish a receipt");
     assertTrue(s3.completedKeys.isEmpty(), "checksum mismatch must not complete a ZIP object");
     assertTrue(s3.objects.keySet().stream().noneMatch(k -> k.endsWith(".download-attempt.json")));
+  }
+
+  @ParameterizedTest
+  @ValueSource(classes = {IOException.class, InterruptedException.class})
+  void shouldHandleExceptionsFromOsClientWithTransientFailureException(Class<? extends Exception> exceptionClass) throws Exception {
+    var s3 = new FakeS3();
+    s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
+
+    final String EXCEPTION_MESSAGE = "exception message";
+    Exception thrownException = exceptionClass.getConstructor(String.class).newInstance(EXCEPTION_MESSAGE);
+    when(os.download(anyString()))
+            .thenThrow(thrownException);
+    var service = new DownloadService(s3.client(), os, properties());
+
+    Exception exception = assertThrows(TransientFailureException.class, () ->
+            service.download(event(), context()));
+    assertEquals(EXCEPTION_MESSAGE, exception.getMessage());
+    assertInstanceOf(exceptionClass, exception.getCause());
+
+  }
+
+  @Test
+  void shouldHandleExistingObjectVerificationException() throws Exception {
+    final String EXCEPTION_MESSAGE = "exception message";
+
+    String dataset = "add_gb_royalmailaddress";
+
+    byte[] zip = ("zip for add_gb_royalmailaddress").getBytes(StandardCharsets.UTF_8);
+
+    var manifest = manifestWithMd5(dataset, md5(zip));
+
+    var s3 = new FakeS3();
+    s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifest));
+
+    Map<String, Object> event = event();
+    event.put("detail", Map.of("planKey", PLAN_KEY, "dataset", dataset));
+
+    when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
+
+    try (MockedConstruction<StreamingS3> mocked = mockConstruction(StreamingS3.class,
+            (mock, context) -> {
+              when(mock.put(any(InputStream.class), anyString(), anyString(),
+                      anyString(), anyLong())).thenThrow(new StreamingS3.ExistingObjectVerificationException(
+                      new Exception(EXCEPTION_MESSAGE)));
+            })) {
+      var service = new DownloadService(s3.client(), os, properties());
+
+      Exception exception = assertThrows(PermanentFailureException.class, () ->
+              service.download(event(), context()));
+
+      assertInstanceOf(StreamingS3.ExistingObjectVerificationException.class, exception.getCause());
+
+      assertEquals("Could not verify existing extracted CSV", exception.getMessage());
+    }
   }
 
   private static ListAppender<ILoggingEvent> captureStructuredLogs() {

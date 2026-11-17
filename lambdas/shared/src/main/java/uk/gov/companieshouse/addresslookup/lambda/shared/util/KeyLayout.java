@@ -6,7 +6,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import uk.gov.companieshouse.release.model.Dataset;
 
-/** Shared S3 key layout for scanned ZIPs, receipts, manifests and extracted CSVs. */
+/** Shared S3 key layouts for acquisition objects and their legacy counterparts. */
 public class KeyLayout {
   private static final String UUID =
       "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
@@ -16,10 +16,128 @@ public class KeyLayout {
       Pattern.compile("^Scanned/(" + UUID + ")/([a-z0-9_]+)\\.(zip|receipt\\.json)$");
   private static final Pattern MANIFEST =
       Pattern.compile("^acquisitions/(\\d{4}-\\d{2}-\\d{2})/(" + UUID + ")\\.json$");
+  private static final Pattern COMPONENT = Pattern.compile("[A-Za-z0-9_-]+");
+  private static final Pattern CSV_NAME = Pattern.compile("[A-Za-z0-9_-][A-Za-z0-9_.-]*\\.csv");
+  private static final Pattern LANDING_OBJECT =
+      Pattern.compile(
+          "^(initial_full|daily_cou|monthly_full)/([A-Za-z0-9_-]+)/([A-Za-z0-9_-]+)/"
+              + "(manifest/data_package_manifest\\.json|manifest/unpack_state\\.json|"
+              + "downloads/([a-z0-9_]+)\\.zip|"
+              + "downloads/([a-z0-9_]+)_orderSummary\\.json|"
+              + "downloads/([a-z0-9_]+)/([A-Za-z0-9_-][A-Za-z0-9_.-]*\\.csv))$");
 
   private KeyLayout() {}
 
   public record ZipKey(String releaseId, Dataset dataset) {}
+
+  public enum Feed {
+    INITIAL_FULL("initial_full"),
+    DAILY_COU("daily_cou"),
+    MONTHLY_FULL("monthly_full");
+
+    private final String prefix;
+
+    Feed(String prefix) {
+      this.prefix = prefix;
+    }
+
+    private static Feed fromPrefix(String prefix) {
+      for (Feed feed : values()) {
+        if (feed.prefix.equals(prefix)) return feed;
+      }
+      throw new IllegalArgumentException("Invalid feed");
+    }
+  }
+
+  public record PackageVersion(Feed feed, String packageId, String versionId) {
+    public PackageVersion {
+      if (feed == null) throw new IllegalArgumentException("Missing feed");
+      requireComponent(packageId, "package ID");
+      requireComponent(versionId, "version ID");
+    }
+  }
+
+  public enum LandingFileType {
+    MANIFEST,
+    UNPACK_STATE,
+    ZIP,
+    ORDER_SUMMARY,
+    CSV
+  }
+
+  public record LandingObject(
+      PackageVersion packageVersion, Dataset dataset, LandingFileType fileType, String fileName) {}
+
+  public static String downloadCursorKey(String packageId) {
+    return "cursors/" + requireComponent(packageId, "package ID") + ".json";
+  }
+
+  public static String extractionCursorKey(String packageId) {
+    return "cursors/" + requireComponent(packageId, "package ID") + ".extraction.json";
+  }
+
+  public static String versionPrefix(PackageVersion version) {
+    return version.feed().prefix + "/" + version.packageId() + "/" + version.versionId() + "/";
+  }
+
+  public static String dataPackageManifestKey(PackageVersion version) {
+    return versionPrefix(version) + "manifest/data_package_manifest.json";
+  }
+
+  public static String unpackStateKey(PackageVersion version) {
+    return versionPrefix(version) + "manifest/unpack_state.json";
+  }
+
+  public static String downloadZipKey(PackageVersion version, Dataset dataset) {
+    return versionPrefix(version) + "downloads/" + dataset.datasetName() + ".zip";
+  }
+
+  public static String orderSummaryKey(PackageVersion version, Dataset dataset) {
+    return versionPrefix(version) + "downloads/" + dataset.datasetName() + "_orderSummary.json";
+  }
+
+  public static String extractedCsvKey(PackageVersion version, Dataset dataset, String fileName) {
+    requireCsvName(fileName);
+    return versionPrefix(version) + "downloads/" + dataset.datasetName() + "/" + fileName;
+  }
+
+  public static LandingObject parseLandingObject(String key) {
+    if (key == null) throw new IllegalArgumentException("Missing S3 key");
+    Matcher match = LANDING_OBJECT.matcher(key);
+    if (!match.matches()) throw new IllegalArgumentException("Invalid landing object key");
+    var version =
+        new PackageVersion(Feed.fromPrefix(match.group(1)), match.group(2), match.group(3));
+    String suffix = match.group(4);
+    if (suffix.equals("manifest/data_package_manifest.json")) {
+      return new LandingObject(version, null, LandingFileType.MANIFEST, null);
+    }
+    if (suffix.equals("manifest/unpack_state.json")) {
+      return new LandingObject(version, null, LandingFileType.UNPACK_STATE, null);
+    }
+    if (match.group(5) != null) {
+      return new LandingObject(version, Dataset.named(match.group(5)), LandingFileType.ZIP, null);
+    }
+    if (match.group(6) != null) {
+      return new LandingObject(
+          version, Dataset.named(match.group(6)), LandingFileType.ORDER_SUMMARY, null);
+    }
+    requireCsvName(match.group(8));
+    return new LandingObject(
+        version, Dataset.named(match.group(7)), LandingFileType.CSV, match.group(8));
+  }
+
+  private static String requireComponent(String value, String name) {
+    if (value == null || !COMPONENT.matcher(value).matches()) {
+      throw new IllegalArgumentException("Invalid " + name);
+    }
+    return value;
+  }
+
+  private static void requireCsvName(String fileName) {
+    if (fileName == null || !CSV_NAME.matcher(fileName).matches() || fileName.contains("..")) {
+      throw new IllegalArgumentException("Invalid CSV filename");
+    }
+  }
 
   public enum FileType {
     ZIP,

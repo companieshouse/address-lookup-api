@@ -10,6 +10,79 @@ import uk.gov.companieshouse.release.model.Dataset;
 
 class KeyLayoutTest {
   @Test
+  void buildsAndParsesPerVersionLandingKeys() {
+    for (var feed : KeyLayout.Feed.values()) {
+      var version = new KeyLayout.PackageVersion(feed, "24833", "150450");
+      String prefix = feed.name().toLowerCase(java.util.Locale.ROOT) + "/24833/150450/";
+      String manifest = KeyLayout.dataPackageManifestKey(version);
+      String state = KeyLayout.unpackStateKey(version);
+      assertEquals(prefix + "manifest/data_package_manifest.json", manifest);
+      assertEquals(prefix + "manifest/unpack_state.json", state);
+      assertEquals(
+          new KeyLayout.LandingObject(version, null, KeyLayout.LandingFileType.MANIFEST, null),
+          KeyLayout.parseLandingObject(manifest));
+      assertEquals(
+          new KeyLayout.LandingObject(version, null, KeyLayout.LandingFileType.UNPACK_STATE, null),
+          KeyLayout.parseLandingObject(state));
+      for (Dataset dataset : Dataset.values()) {
+        String name = dataset.datasetName();
+        String zip = KeyLayout.downloadZipKey(version, dataset);
+        String summary = KeyLayout.orderSummaryKey(version, dataset);
+        String csv = KeyLayout.extractedCsvKey(version, dataset, name + ".csv");
+        assertEquals(prefix + "downloads/" + name + ".zip", zip);
+        assertEquals(prefix + "downloads/" + name + "_orderSummary.json", summary);
+        assertEquals(prefix + "downloads/" + name + "/" + name + ".csv", csv);
+        assertEquals(
+            new KeyLayout.LandingObject(version, dataset, KeyLayout.LandingFileType.ZIP, null),
+            KeyLayout.parseLandingObject(zip));
+        assertEquals(
+            new KeyLayout.LandingObject(
+                version, dataset, KeyLayout.LandingFileType.ORDER_SUMMARY, null),
+            KeyLayout.parseLandingObject(summary));
+        assertEquals(
+            new KeyLayout.LandingObject(
+                version, dataset, KeyLayout.LandingFileType.CSV, name + ".csv"),
+            KeyLayout.parseLandingObject(csv));
+      }
+    }
+  }
+
+  @Test
+  void buildsPerPackageCursorKeys() {
+    assertEquals("cursors/24833.json", KeyLayout.downloadCursorKey("24833"));
+    assertEquals("cursors/24833.extraction.json", KeyLayout.extractionCursorKey("24833"));
+    assertThrows(IllegalArgumentException.class, () -> KeyLayout.downloadCursorKey("../24833"));
+  }
+
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(
+      strings = {
+        "",
+        "initial_full/../150450/manifest/data_package_manifest.json",
+        "initial_full/24833/../manifest/data_package_manifest.json",
+        "initial_full/24833/150450/downloads/unknown.zip",
+        "initial_full/24833/150450/downloads/add_gb_royalmailaddress/../data.csv",
+        "initial_full/24833/150450/downloads/add_gb_royalmailaddress/a..csv",
+        "initial_full/24833/150450/downloads/add_gb_royalmailaddress/data.csv/extra",
+        "other/24833/150450/manifest/data_package_manifest.json"
+      })
+  void rejectsInvalidLandingKeys(String key) {
+    assertThrows(IllegalArgumentException.class, () -> KeyLayout.parseLandingObject(key));
+  }
+
+  @Test
+  void rejectsInvalidComponentsWhenBuildingKeys() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new KeyLayout.PackageVersion(KeyLayout.Feed.INITIAL_FULL, "../24833", "150450"));
+    var version = new KeyLayout.PackageVersion(KeyLayout.Feed.INITIAL_FULL, "24833", "150450");
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> KeyLayout.extractedCsvKey(version, Dataset.ADD_GB_ROYALMAILADDRESS, "../data.csv"));
+  }
+
+  @Test
   void parsesManifestWithoutDataset() {
     String releaseId = "f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4";
     String key = "acquisitions/2026-10-15/" + releaseId + ".json";

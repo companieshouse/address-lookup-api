@@ -32,6 +32,7 @@ class DatabaseBootstrapTest {
         List.of(
             "CREATE EXTENSION IF NOT EXISTS postgis",
             "CREATE ROLE \"address_lookup_owner\" LOGIN",
+            "CREATE ROLE \"als_upload\" NOLOGIN",
             "GRANT CONNECT, CREATE ON DATABASE \"addressdb\" TO \"address_lookup_owner\"",
             "GRANT USAGE, CREATE ON SCHEMA public TO \"address_lookup_owner\""),
         db.executed);

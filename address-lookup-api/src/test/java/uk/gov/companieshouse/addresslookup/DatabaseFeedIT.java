@@ -206,7 +206,7 @@ class DatabaseFeedIT {
     Flyway productionFlyway = flyway(databaseRoot.resolve("migrations"));
 
     MigrateResult productionResult = productionFlyway.migrate();
-    assertEquals(4, productionResult.migrationsExecuted);
+    assertEquals(9, productionResult.migrationsExecuted);
     productionFlyway.validate();
     assertEquals(0, productionFlyway.migrate().migrationsExecuted);
 
@@ -280,7 +280,10 @@ class DatabaseFeedIT {
         assertPrimaryKey(connection, table);
         assertPostcodeIndex(connection, table);
       }
-      assertEquals(Set.copyOf(TABLES), physicalTableNames(connection));
+      Set<String> activeTables = new HashSet<>(TABLES);
+      activeTables.add("release_history");
+      assertEquals(activeTables, physicalTableNames(connection));
+      assertAls143Objects(connection);
 
       Map<String, String> contracts = new HashMap<>();
       try (Statement statement = connection.createStatement();
@@ -314,6 +317,40 @@ class DatabaseFeedIT {
       assertNullableColumn(connection, TABLES.get(1), "release_id", false);
       assertVarcharLength(connection, TABLES.get(0), "description", 25);
       assertVarcharLength(connection, TABLES.get(1), "description", 25);
+    }
+  }
+
+  private static void assertAls143Objects(Connection connection) throws SQLException {
+    assertRelation(connection, "os_stage.data_package_manifest", true);
+    assertRelation(connection, "os_stage.import_ledger", true);
+    assertRelation(connection, "os_stage.add_gb_royalmailaddress", true);
+    assertRelation(connection, "os_stage.add_isl_royalmailaddress", true);
+    assertRelation(connection, "os_data.release_history", true);
+    try (Statement statement = connection.createStatement()) {
+      statement.execute(
+          "INSERT INTO os_stage.data_package_manifest "
+              + "(release_id, mode, target, package_id, version_id, datasets) VALUES "
+              + "('r1', 'FULL', 't', 'p', 'v', "
+              + "'[{\"dataset\":\"add_gb_royalmailaddress\",\"file\":\"a.csv\",\"rows\":5}]')");
+      assertFalse(completeness(statement, "r1"));
+      statement.execute(
+          "INSERT INTO os_stage.import_ledger (release_id, dataset, file, rows) "
+              + "VALUES ('r1', 'add_gb_royalmailaddress', 'a.csv', 4)");
+      assertFalse(completeness(statement, "r1"));
+      statement.execute(
+          "UPDATE os_stage.import_ledger SET rows = 5 WHERE release_id = 'r1'");
+      assertTrue(completeness(statement, "r1"));
+      assertFalse(completeness(statement, "unknown"));
+      statement.execute("DELETE FROM os_stage.import_ledger");
+      statement.execute("DELETE FROM os_stage.data_package_manifest");
+    }
+  }
+
+  private static boolean completeness(Statement statement, String releaseId) throws SQLException {
+    try (ResultSet result =
+        statement.executeQuery("SELECT os_ingest.is_release_complete('" + releaseId + "')")) {
+      result.next();
+      return result.getBoolean(1);
     }
   }
 

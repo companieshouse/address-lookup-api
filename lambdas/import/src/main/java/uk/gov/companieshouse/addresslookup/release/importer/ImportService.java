@@ -27,6 +27,7 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 @Component
 public final class ImportService {
   private static final Logger LOG = LoggerFactory.getLogger(ImportService.class.getName());
+  private static final String JSON_SUFFIX = ".json";
 
   private final S3Client s3;
   private final ImportProperties properties;
@@ -87,7 +88,7 @@ public final class ImportService {
         var node = store.read(bucket, key);
         var manifest = ReleaseManifest.read(node);
         check(
-            key.equals("manifests/" + manifest.target() + "/" + manifest.id() + ".json"),
+            key.equals("manifests/" + manifest.target() + "/" + manifest.id() + JSON_SUFFIX),
             "Manifest key mismatch");
         registration.register(
             manifest, key, sha(node.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
@@ -116,8 +117,8 @@ public final class ImportService {
 
   private static UUID manifestId(String key) {
     String name = key.substring(key.lastIndexOf('/') + 1);
-    check(name.endsWith(".json"), "Unexpected manifest key");
-    return UUID.fromString(name.substring(0, name.length() - 5));
+    check(name.endsWith(JSON_SUFFIX), "Unexpected manifest key");
+    return UUID.fromString(name.substring(0, name.length() - JSON_SUFFIX.length()));
   }
 
   private void promoteAvailable(List<Exception> failures, Context context) {
@@ -159,7 +160,7 @@ public final class ImportService {
       DatasetImportService importer,
       String region)
       throws Exception {
-    String evidenceKey = "ready/" + manifest.id() + "/" + dataset.datasetName() + ".json";
+    String evidenceKey = "ready/" + manifest.id() + "/" + dataset.datasetName() + JSON_SUFFIX;
     var ref = store.read(bucket, evidenceKey);
     if (ref == null) return false;
     var object = ObjectReference.read(ref);

@@ -10,13 +10,16 @@ customer-managed `alias/<aws_profile>/environment-services-kms` key, and a bucke
 policy denying requests without TLS.
 S3 folders are key prefixes, so no empty folder objects are required.
 
-Server access logging uses the shared `aws/s3_access_logging` module and writes
+Server access logging follows the shared `aws/s3_access_logging` convention and writes
 to the existing `<account>-<region>-s3-access-logs.ch.gov.uk` bucket, with the
 prefix `<account-id>/<region>/<source-bucket>/`. The account name is derived
 from `aws_profile` by removing the region suffix (for example,
 `development-eu-west-2` becomes `development`).
 The destination must already exist in the same AWS account and region and allow
 S3 server access log delivery. This group does not create another bucket for logs.
+The logging resource is declared directly so Trivy can associate it with the
+source bucket without environment profile variables. A `moved` block preserves
+any logging configuration previously managed by the module.
 
 | Prefix | Lifecycle |
 | --- | --- |
@@ -68,9 +71,8 @@ to delete non-empty buckets. No objects are automatically moved.
 
 Apply with the `<env>-s3-plan` / `<env>-s3-apply` Concourse jobs.
 
-When scanning this group with Trivy, supply the environment's profile so the
-scanner can resolve bucket names and associate the logging module with its source:
+The group can be scanned with Trivy without loading a profile:
 
 ```bash
-trivy config --tf-vars terraform/groups/s3/profiles/development-eu-west-2/cidev/vars terraform/groups/s3
+trivy config terraform/groups/s3
 ```

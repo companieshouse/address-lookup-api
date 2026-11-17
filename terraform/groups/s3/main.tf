@@ -29,13 +29,17 @@ resource "aws_s3_bucket" "this" {
   tags = merge(module.iac_tags.tags, module.owner_tags.tags, { Purpose = each.key })
 }
 
-module "access_logging" {
+resource "aws_s3_bucket_logging" "this" {
   for_each = local.buckets
-  source   = "git@github.com:companieshouse/terraform-modules//aws/s3_access_logging?ref=1.0.442"
 
-  aws_account           = trimsuffix(var.aws_profile, "-${var.aws_region}")
-  aws_region            = var.aws_region
-  source_s3_bucket_name = aws_s3_bucket.this[each.key].id
+  bucket        = aws_s3_bucket.this[each.key].id
+  target_bucket = "${trimsuffix(var.aws_profile, "-${var.aws_region}")}-${var.aws_region}-s3-access-logs.ch.gov.uk"
+  target_prefix = "${local.account_id}/${var.aws_region}/${aws_s3_bucket.this[each.key].id}/"
+}
+
+moved {
+  from = module.access_logging["landing"].aws_s3_bucket_logging.access_logging
+  to   = aws_s3_bucket_logging.this["landing"]
 }
 
 # Extraction and Upload pin to object versionId, so versioning is required.

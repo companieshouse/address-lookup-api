@@ -11,9 +11,14 @@ command -v mvn >/dev/null 2>&1 || {
     printf 'Spotless requires Maven and a JDK 21 or later.\n' >&2
     exit 1
 }
+command -v java >/dev/null 2>&1 || {
+    printf 'Spotless requires Java from a JDK 21 or later.\n' >&2
+    exit 1
+}
 temp="$(mktemp -d)"
 trap 'rm -rf "$temp"' EXIT
-cp "$root/pom.xml" "$temp/pom.xml"
+# Keep the shared rules without resolving the application's private parent.
+java "$root/scripts/SpotlessPom.java" "$root/pom.xml" "$temp/pom.xml"
 
 files=()
 original_contents=()

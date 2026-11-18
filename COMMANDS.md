@@ -352,11 +352,14 @@ over stdin. Run these commands from the repository root.
 untracked Java files. Generated/build/runtime directories named `target`,
 `build-*`, `.git` and `.local-run` are excluded. Other languages, SQL migrations,
 POMs and documentation are not reformatted by these commands.
-The helper formats a temporary snapshot using the same POM configuration and
-compares every Java file. This avoids Spotless's truncated standard violation
-list and never modifies source files during checks. Temporary files are cleaned
-on exit; formatter or dependency errors are reported explicitly without
-overwriting inputs.
+The helper requires Bash, Maven and JDK 21 or later. A Java source-file launcher
+extracts the Spotless plugin and properties from the root POM into a temporary
+standalone POM, without the application parent, modules or dependencies. It
+downloads only the public formatter tooling, formats a temporary snapshot using the shared
+configuration and compares every Java file. This avoids Spotless's truncated
+standard violation list and never modifies source files during checks.
+Temporary files are cleaned on exit; formatter or dependency errors are
+reported explicitly without overwriting inputs.
 Before tidy writes any results, it checks every destination against the original
 snapshot. If a file changed while Maven was running, tidy aborts without writing
 back any files, preserving the intervening edits. Avoid editing files during
@@ -374,10 +377,19 @@ bash scripts/spotless.sh check
 
 Maven, parser or other operational failures are errors, not clean results.
 `tests/test_commands.sh` and `make test-commands` are unchanged; they do not
-invoke Spotless or gain new dependencies. Pipeline formatting enforcement is
-deferred, and no new workflow is added. Existing Java sources
-are intentionally unchanged by this tools-only introduction, so the opt-in
-scan may report existing differences. Before committing Java changes, tidy
+invoke Spotless or gain new dependencies. The GitHub Actions workflow
+`.github/workflows/spotless.yml` runs `make spotless-check` on pull requests,
+pushes and manual dispatch using Java 21. Formatting violations and operational
+errors fail the job; the workflow never formats or commits source changes.
+
+The workflow uses Maven Central for the formatter and requires no repository
+secrets, private Maven mirror, application build or application dependencies.
+It also works for fork pull requests without private credentials. No Python
+or additional XML library is required. Local Maven settings still apply when
+running the helper locally. Making the check mandatory for merging requires
+a separate branch-protection or ruleset setting.
+
+Before committing Java changes, tidy
 the files you intend to change and review the diff. `FILE=.` is available
 when a deliberate whole-codebase formatting pass is wanted; it is not run
 automatically.

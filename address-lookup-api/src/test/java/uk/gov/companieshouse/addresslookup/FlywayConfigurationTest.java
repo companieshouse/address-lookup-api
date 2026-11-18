@@ -17,7 +17,8 @@ import org.springframework.util.ClassUtils;
 class FlywayConfigurationTest {
 
   private static final String MIGRATION_LOCATIONS = "classpath:db/migrations";
-  private static final String LOCAL_LOCATIONS = "classpath:db/migrations,classpath:db/local";
+  private static final String LOCAL_LOCATIONS =
+      "classpath:db/migrations,classpath:db/local,classpath:db/local/java";
 
   /**
    * Verifies that an unset legacy flag resolves to the safe disabled default.
@@ -83,7 +84,7 @@ class FlywayConfigurationTest {
     PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
 
     assertTrue(resolver.getResources("classpath*:db/migrations/*.sql").length > 0);
-    assertTrue(resolver.getResources("classpath*:db/local/*.sql").length > 0);
+    assertTrue(resolver.getResources("classpath*:db/local/java/*.class").length > 0);
   }
 
   private static Properties loadProperties(String classpathResource) throws IOException {

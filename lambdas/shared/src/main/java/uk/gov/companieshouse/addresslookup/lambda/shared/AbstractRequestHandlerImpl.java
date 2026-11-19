@@ -23,13 +23,12 @@ public abstract class AbstractRequestHandlerImpl<I, O> implements RequestHandler
     protected abstract O requestOperation(I request, Context context) throws PermanentFailureException, TransientFailureException;
 
     private O handleExceptions(@NotNull Exception exception) {
-        // Depending upon the Throwable type, throw either handle as a Transient Failure
+        // Depending upon the Throwable type, handle as a Transient Failure
         // or Permanent Failure
         switch (exception) {
             case PermanentFailureException pfe -> handlePermanentException(pfe);
-            case TransientFailureException tfe -> handleTransientException(tfe);
-            case Commands.CommandDispatchException cde -> handleCommandDispatchException(cde);
             case IllegalArgumentException iae -> handlePermanentException(iae);
+            case Commands.CommandDispatchException cde -> handleCommandDispatchException(cde);
             default -> handleTransientException(exception);
         }
         return failureResponse();
@@ -37,7 +36,7 @@ public abstract class AbstractRequestHandlerImpl<I, O> implements RequestHandler
 
     protected abstract O failureResponse();
 
-    private void handleCommandDispatchException(Commands.CommandDispatchException commandDispatchException)  {
+    private void handleCommandDispatchException(Commands.CommandDispatchException commandDispatchException) {
         if (commandDispatchException.getCause() instanceof JsonProcessingException) {
             handlePermanentException(commandDispatchException);
         } else {
@@ -45,7 +44,7 @@ public abstract class AbstractRequestHandlerImpl<I, O> implements RequestHandler
         }
     }
 
-    protected abstract void handlePermanentException(Throwable permanentException);
-    protected abstract void handleTransientException(Throwable transientException);
+    protected abstract void handlePermanentException(Exception permanentException);
+    protected abstract void handleTransientException(Exception transientException);
 
 }

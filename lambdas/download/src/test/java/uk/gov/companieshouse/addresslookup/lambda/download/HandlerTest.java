@@ -11,7 +11,6 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
-import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import uk.gov.companieshouse.addresslookup.lambda.download.service.DownloadService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
@@ -64,9 +63,9 @@ class HandlerTest {
         final String EXCEPTION_TEXT = "Something went wrong!!";
 
         Mockito.when(service.download(TEST_EVENT, context))
-                .thenThrow(new TransientFailureException(EXCEPTION_TEXT));
+                .thenThrow(TransientFailureException.builder().description(EXCEPTION_TEXT).build());
 
-        Exception exception = assertThrows(AwsServiceException.class,
+        Exception exception = assertThrows(RuntimeException.class,
                 () -> handler.handleRequest(TEST_EVENT, context));
 
         assertEquals("download failed; durable state allows retry", exception.getMessage());
@@ -79,7 +78,7 @@ class HandlerTest {
         final String EXCEPTION_TEXT = "Something went wrong!!";
 
         Mockito.when(service.download(TEST_EVENT, context))
-                .thenThrow(new PermanentFailureException(EXCEPTION_TEXT));
+                .thenThrow(PermanentFailureException.builder().description(EXCEPTION_TEXT).build());
 
         String response = handler.handleRequest(TEST_EVENT, context);
 

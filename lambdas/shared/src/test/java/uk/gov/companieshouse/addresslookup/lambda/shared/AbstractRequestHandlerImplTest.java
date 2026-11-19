@@ -1,5 +1,7 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import com.amazonaws.services.lambda.runtime.Context;
@@ -25,7 +27,7 @@ class AbstractRequestHandlerImplTest {
     @Mock
     private Context context;
 
-    private AbstractRequestHandlerImpl<Map<String, Object>, String> testHandler =
+    private final AbstractRequestHandlerImpl<Map<String, Object>, String> testHandler =
             new TestRequestHandlerImpl();
 
     @Test
@@ -34,22 +36,22 @@ class AbstractRequestHandlerImplTest {
 
         String response = testHandler.handleRequest(Map.of(), context);
 
-        Assertions.assertEquals("SUCCESS", response);
+        assertEquals("SUCCESS", response);
     }
 
     @Test
     void shouldReturnFailureForPermanentFailureException() throws Exception {
-        when(testService.run()).thenThrow(new PermanentFailureException("Something went wrong that can't be fixed with a retry"));
+        when(testService.run()).thenThrow(PermanentFailureException.builder().description("Something went wrong that can't be fixed with a retry").build());
         String response = testHandler.handleRequest(Map.of(), context);
 
-        Assertions.assertEquals("FAILURE", response);
+        assertEquals("FAILURE", response);
     }
 
     @Test
     void shouldThrowAwsServiceExceptionForTransientFailureException() throws Exception {
-        when(testService.run()).thenThrow(new TransientFailureException("Something went wrong but might be OK with a retry"));
+        when(testService.run()).thenThrow(TransientFailureException.builder().description("Something went wrong but might be OK with a retry").build());
         Map<String, Object> request = Map.of();
-        Assertions.assertThrows(AwsServiceException.class, () -> {
+        assertThrows(AwsServiceException.class, () -> {
             testHandler.handleRequest(request, context);
         });
     }
@@ -61,7 +63,7 @@ class AbstractRequestHandlerImplTest {
         when(testService.run()).thenThrow(exception);
         String response = testHandler.handleRequest(Map.of(), context);
 
-        Assertions.assertEquals("FAILURE", response);
+        assertEquals("FAILURE", response);
     }
 
     @Test
@@ -72,7 +74,7 @@ class AbstractRequestHandlerImplTest {
         when(testService.run()).thenThrow(exception);
 
         Map<String, Object> request = Map.of();
-        Assertions.assertThrows(AwsServiceException.class, () -> {
+        assertThrows(AwsServiceException.class, () -> {
             testHandler.handleRequest(request, context);
         });
     }
@@ -83,7 +85,7 @@ class AbstractRequestHandlerImplTest {
         when(testService.run()).thenThrow(exception);
         String response = testHandler.handleRequest(Map.of(), context);
 
-        Assertions.assertEquals("FAILURE", response);
+        assertEquals("FAILURE", response);
     }
 
     @Test
@@ -93,7 +95,7 @@ class AbstractRequestHandlerImplTest {
         when(testService.run()).thenThrow(exception);
 
         Map<String, Object> request = Map.of();
-        Assertions.assertThrows(AwsServiceException.class, () -> {
+        assertThrows(AwsServiceException.class, () -> {
             testHandler.handleRequest(request, context);
         });
     }
@@ -113,12 +115,12 @@ class AbstractRequestHandlerImplTest {
         }
 
         @Override
-        protected void handlePermanentException(Throwable permanentException) {
+        protected void handlePermanentException(Exception permanentException) {
             System.err.println(permanentException.getMessage());
         }
 
         @Override
-        protected void handleTransientException(Throwable transientException) {
+        protected void handleTransientException(Exception transientException) {
             throw  AwsServiceException.builder().cause(transientException).build();
         }
     }

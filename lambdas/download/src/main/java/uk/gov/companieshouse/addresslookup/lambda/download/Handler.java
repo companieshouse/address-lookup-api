@@ -1,7 +1,6 @@
 package uk.gov.companieshouse.addresslookup.lambda.download;
 
 import com.amazonaws.services.lambda.runtime.Context;
-import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import uk.gov.companieshouse.addresslookup.lambda.download.service.DownloadService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.AbstractRequestHandlerImpl;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
@@ -11,6 +10,7 @@ import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
 
 import java.util.Map;
+import java.util.Objects;
 
 public final class Handler extends AbstractRequestHandlerImpl<Map<String,Object>,String> {
     private final DownloadService service =
@@ -29,17 +29,18 @@ public final class Handler extends AbstractRequestHandlerImpl<Map<String,Object>
     }
 
     @Override
-    protected void handlePermanentException(Throwable permanentException) {
+    protected void handlePermanentException(Exception permanentException) {
         LOG.error("An unrecoverable error occurred which attempting the download",
-                Map.of("Error", permanentException));
+                permanentException,
+                Map.of("Error", Objects.toString(permanentException.getMessage())));
     }
 
     @Override
-    protected void handleTransientException(Throwable transientException) {
-        throw AwsServiceException.builder()
-                .message("download failed; durable state allows retry")
-                .cause(transientException)
-                .statusCode(500)
-                .build();
+    protected void handleTransientException(Exception transientException) {
+        LOG.error("download failed; durable state allows retry",
+                transientException,
+                Map.of("Error", Objects.toString(transientException.getMessage())));
+
+        throw new RuntimeException("download failed; durable state allows retry",transientException);
     }
 }

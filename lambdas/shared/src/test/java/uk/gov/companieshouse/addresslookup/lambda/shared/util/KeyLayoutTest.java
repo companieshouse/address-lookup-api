@@ -59,6 +59,10 @@ class KeyLayoutTest {
   @ValueSource(
       strings = {
         "",
+        "initial_full/package.id/150450/manifest/data_package_manifest.json",
+        "initial_full/24833/version.id/manifest/data_package_manifest.json",
+        "initial_full//150450/manifest/data_package_manifest.json",
+        "initial_full/24833//manifest/data_package_manifest.json",
         "initial_full/../150450/manifest/data_package_manifest.json",
         "initial_full/24833/../manifest/data_package_manifest.json",
         "initial_full/24833/150450/downloads/unknown.zip",

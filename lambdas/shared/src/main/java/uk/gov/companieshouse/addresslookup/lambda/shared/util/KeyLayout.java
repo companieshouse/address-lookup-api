@@ -13,7 +13,7 @@ public class KeyLayout {
   private static final Pattern CSV_NAME = Pattern.compile("[A-Za-z0-9_-][A-Za-z0-9_.-]*\\.csv");
   private static final Pattern LANDING_OBJECT =
       Pattern.compile(
-          "^(initial_full|daily_cou|monthly_full)/([A-Za-z0-9_-]+)/([A-Za-z0-9_-]+)/"
+          "^([^/]+)/([^/]+)/([^/]+)/"
               + "(manifest/data_package_manifest\\.json|manifest/unpack_state\\.json|"
               + "downloads/([a-z0-9_]+)\\.zip|"
               + "downloads/([a-z0-9_]+)_orderSummary\\.json|"

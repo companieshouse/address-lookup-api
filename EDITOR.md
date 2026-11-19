@@ -6,7 +6,7 @@ the same helper used by `make tidy`. It does not duplicate formatting rules
 in EditorConfig or editor-specific formatter configurations.
 
 Open the repository root (the directory containing `pom.xml`) in your editor.
-Bash, Maven and Java 21+ must be available in the editor's environment.
+Bash, Maven and Java 25+ must be available in the editor's environment.
 These instructions use the checked-in Bash helper and Unix `env` command.
 
 This is an explicit formatting action, not automatic format-on-save or a

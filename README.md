@@ -14,14 +14,16 @@ The API exposes three lookup endpoints under `/address-lookup-api`:
 
 - `GET /addresses?postcode=...`: structured address records, including
   identifiers and coordinates, with the requested postcode and result count.
+  Returns HTTP 404 for an empty postcode or one containing spaces or special
+  characters, and HTTP 400 for other malformed postcodes.
 - `GET /multiple-addresses?postcode=...`: a list of legacy addresses with
   premise, address lines, post town and country.
 - `GET /postcode?postcode=...`: one legacy address without premise, or HTTP
   404 when no address is found.
 
-Local development uses the repository's PostGIS container and checked-in
-real OS seed data. No OS API key is needed to start the API or load these
-local fixtures.
+Local development uses the repository's PostGIS container. Royal Mail seed
+data is downloaded from the OS API (`OS_API_KEY` required) by
+`make db-reset`; no CSV is committed.
 
 ## Concourse pipeline commands
 
@@ -72,16 +74,41 @@ Use `make api-restart` to rebuild and restart the API after source changes,
 and `make stop` when finished to stop the managed API and PostGIS.
 See [COMMANDS.md](COMMANDS.md) for the available Make operations.
 
-All local seed rows are real OS CSV records, grouped by source dataset:
-`database/local/R__seed_add_gb_royalmailaddress.sql` contains 664 GB records,
-and `R__seed_add_isl_royalmailaddress.sql` contains 273 ISL records. The GB
-seed includes all 266 source addresses for 13 supplied Cardiff postcodes and
-`KT13 8GL`, from package `24833`, FULL version `150450`. `CF10 1PX` has no
-source record. Both regional seeds use only the `local` release marker and
-replace those rows when reapplied, preserving other releases. All local
-fixtures are excluded from the production migration package; the existing
-`make db-reset` uses this hardcoded SQL without downloading data or requiring
-an OS API key.
+Local Royal Mail data comes from OS CSV files. `make db-reset
+CONFIRM=address_lookup` runs `scripts/fetch-os-csv.sh`, which downloads the
+newest FULL CSV version of the "Address Lookup Service Data v2" package into
+the git-ignored `database/local/data/`, then starts the API with the
+local-only Java Flyway migrations (`db.local.java`, location
+`classpath:db/local/java`). They bulk-load `add_gb_royalmailaddress` and
+`add_isl_royalmailaddress` into the v2 tables with release marker `local`,
+replacing only those rows. Geometry is built from easting/northing (GB, SRID
+27700) or longitude/latitude (ISL, SRID 4258) using the SRID of the table
+column. Each migration uses the Flyway connection and transaction: every CSV
+row is staged first, then duplicate `udprn` rows are removed last (newest
+`versiondate`/`entrydate` kept) and the number removed is logged. The
+migrations are repeatable. Their checksum comes from the version marker
+`<dataset>.csv.version` (`<packageId>/<versionId>`) written by the download
+script, so a new OS version is re-applied; without a marker (the fixtures) it is
+a hash of the CSV contents, so an edited fixture is re-applied. Restarting with
+no change reloads nothing; a missing CSV is skipped and logged. The seed classes live in
+`address-lookup-api/src/local/java` and are compiled as test sources, so the
+production jar and image contain no seed code, local SQL or CSV. Only
+`-Plocal-seed` (used by `scripts/local-services.sh`) builds them into a local
+jar and gives `postgresql` and `structured-logging` compile scope. A full load is about 33 million rows and takes
+about 12 minutes. It needs `OS_API_KEY` (environment or `../.env`) and the
+script checks free disk space first (override with `MIN_FREE_KB`); allow at
+least 60 GB, including the Docker volume for staging table, tables and indexes.
+`make db-reset` downloads first and leaves the database and cached CSVs
+unchanged if that fails, then shows seed progress and waits with no timeout.
+Re-running it refreshes the full data. For no key and no download use
+`make db-reset CONFIRM=address_lookup FIXTURES=1`, which loads the committed
+fixture CSVs; to change them, edit the CSVs in `src/test/resources/seed-csv`
+(keep the header row and every postcode the tests use) and run
+`make test-integration`. `make test-postcodes` checks every postcode on fixture
+data and a reproducible sample on full data. `database/README.md` is not used.
+Integration tests use small fixture CSVs from `src/test/resources/seed-csv`.
+The CSVs and the Java migrations are excluded from the production migration
+package.
 
 For an existing checkout using the former separate Cardiff seed, run
 `make clean` before rebuilding to remove obsolete packaged SQL. If a disposable
@@ -186,14 +213,21 @@ and [EDITOR.md](EDITOR.md) for editor setup and integrations.
 
 ## Sample HTTP requests
 
-`rest-api.http` holds sample requests for the API and the Ordnance Survey download API. See
+`http/rest-api.http` holds sample requests for the API and the Ordnance Survey download API. See
 [docs/rest-api-http.md](docs/rest-api-http.md) for how to run it in IntelliJ with your own OS API key.
+
+`http/rest-api-validation.http` holds error and edge-case checks (run with
+`npx httpyac send --all http/rest-api-validation.http`). `http/external-api-comparison/` holds an
+IntelliJ HTTP Client script that checks the local `multiple-addresses` and `postcode` endpoints behave like the
+public postcode lookup service (same status codes; for 200 responses, the same shape and emptiness). Run the whole
+`external-api-comparison.http` file against a running local API loaded with `LU49PJ` and `WF27QD`.
 
 ## Environment variables
 
 Configure only the settings for the component you run. The database-backed
-API and `make db-reset` do not require `OS_API_KEY`: local fixtures are
-hardcoded SQL, not live OS downloads. Acquisition and importer settings
+API does not require `OS_API_KEY`; its lookups read only the database.
+`make db-reset` does require it (environment or `../.env`) because it
+downloads the Royal Mail CSVs for the local seed. Acquisition and importer settings
 below apply to the separate upstream pipeline.
 
 Supply secrets through the approved environment or secret store. Do not put
@@ -238,7 +272,8 @@ The importer reads `lambdas/import/src/main/resources/importer.properties`
 and requires both `CONTROL_BUCKET` for reconciliation cursors and `LANDING_BUCKET`
 for manifests and scanned data.
 `MAX_PRIMARY_CSV_BYTES` belongs to the release-core local CSV reader.
-These settings do not control Flyway's hardcoded local SQL fixtures.
+These settings do not control the local CSV seed; see `LOCAL_SEED_DIR` and
+`make db-reset` in `COMMANDS.md`.
 
 | Variable | Purpose | Default or requirement |
 | --- | --- | --- |

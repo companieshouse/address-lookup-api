@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 work_dir="$(mktemp -d)"
-trap 'rm -f "$work_dir/curl" "$work_dir/docker" "$work_dir/calls" "$work_dir/output" "$work_dir/Makefile" "$work_dir/scripts/local-services.sh" "$work_dir/scripts/test-postcodes.sh"; rmdir "$work_dir/scripts" "$work_dir"' EXIT
+real_docker="$(command -v docker || true)"
+pg_container=""
+cleanup() {
+    [[ -z "$pg_container" ]] || "$real_docker" rm -f "$pg_container" >/dev/null 2>&1 || true
+    rm -f "$work_dir/curl" "$work_dir/docker" "$work_dir/docker_sql" "$work_dir/sql_flat" "$work_dir/calls" "$work_dir/output" "$work_dir/Makefile" "$work_dir/scripts/local-services.sh" "$work_dir/scripts/test-postcodes.sh" "$work_dir/sql_flat" "$work_dir/docker_sql"
+    rmdir "$work_dir/scripts" "$work_dir"
+}
+trap cleanup EXIT
 mkdir "$work_dir/scripts"
 cp "$repo_root/Makefile" "$work_dir/Makefile"
 cp "$repo_root/scripts/test-postcodes.sh" "$work_dir/scripts/"
@@ -43,12 +50,17 @@ STUB
 chmod +x "$work_dir/curl"
 cat > "$work_dir/docker" <<'STUB'
 #!/usr/bin/env bash
+printf '%s\n' "$*" > "$DOCKER_SQL"
+if [[ -n "${REAL_PG:-}" ]]; then
+    while [[ "$1" != psql ]]; do shift; done
+    exec "$REAL_DOCKER" exec -i "$REAL_PG" "$@"
+fi
 [[ "${FAIL_DB:-0}" == 0 ]] || exit 7
 [[ "${EMPTY_DB:-0}" == 0 ]] || exit 0
 printf 'DG89JA\nDG27AZ\nNE119NU\nCF143AT\nKT138GL\nAB123CD\n'
 STUB
 chmod +x "$work_dir/docker"
-export PATH="$work_dir:$PATH" CALLS="$work_dir/calls"
+export PATH="$work_dir:$PATH" CALLS="$work_dir/calls" DOCKER_SQL="$work_dir/docker_sql"
 export POSTCODE="" POSTCODES=""
 for target in test-postcode test-postcodes; do
     : > "$CALLS"
@@ -74,6 +86,24 @@ grep -Fq '"udprn": 19' "$work_dir/output"
 grep -Fq 'All 6 postcode lookups passed.' "$work_dir/output"
 for postcode in CF143AT KT138GL AB123CD; do
     grep -Fq "postcode=$postcode" "$CALLS"
+done
+# The sampling query: one-million-row threshold, default modulus, and the hash filter.
+tr -s ' \n' '  ' < "$DOCKER_SQL" > "$work_dir/sql_flat"
+grep -Fq 'count(*) > 1000000 THEN 20000 ELSE 1 END AS k' "$work_dir/sql_flat"
+grep -Fq 'LIMIT 1000001) row_sample' "$work_dir/sql_flat"
+grep -Fq 'mod(abs(hashtext(a.postcode)), s.k) = 0' "$work_dir/sql_flat"
+: > "$CALLS"
+POSTCODE_SAMPLE_MOD=500 bash "$repo_root/scripts/test-postcodes.sh" > "$work_dir/output"
+tr -s ' \n' '  ' < "$DOCKER_SQL" | grep -Fq 'count(*) > 1000000 THEN 500 ELSE 1 END AS k'
+for modulus in 0 -5 abc 1.5 1234567890 '5; DROP TABLE x'; do
+    : > "$CALLS"
+    if POSTCODE_SAMPLE_MOD="$modulus" bash "$repo_root/scripts/test-postcodes.sh" \
+        > "$work_dir/output" 2>&1; then
+        printf 'Expected POSTCODE_SAMPLE_MOD=%s to be rejected.\n' "$modulus" >&2
+        exit 1
+    fi
+    grep -Fq 'POSTCODE_SAMPLE_MOD must be a positive integer.' "$work_dir/output"
+    [[ ! -s "$CALLS" ]]
 done
 for error in FAIL_DB EMPTY_DB; do
     : > "$CALLS"
@@ -136,4 +166,37 @@ for failure in http transport json empty mismatch; do
     [[ "$(wc -l < "$CALLS" | tr -d ' ')" == 3 ]]
     grep -Fq 'FAILED NE119NU' "$work_dir/output"
 done
+
+# Run the real sampling query against PostgreSQL below and above one million rows.
+if [[ -n "$real_docker" ]] && "$real_docker" image inspect postgis/postgis:18-3.6 >/dev/null 2>&1; then
+    pg_container="$("$real_docker" run -d --rm -e POSTGRES_PASSWORD=pw -e POSTGRES_DB=address_lookup \
+        postgis/postgis:18-3.6)"
+    for _ in $(seq 1 60); do
+        "$real_docker" exec "$pg_container" pg_isready -U postgres -d address_lookup >/dev/null 2>&1 &&
+            break
+        sleep 1
+    done
+    sleep 2
+    psql_real() { "$real_docker" exec -i "$pg_container" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d address_lookup "$@"; }
+    psql_real -c "CREATE SCHEMA address_lookup;
+        CREATE TABLE address_lookup.address_lookup (postcode text);
+        INSERT INTO address_lookup.address_lookup
+            SELECT 'AB' || n || 'CD' FROM generate_series(1, 50) n;" > /dev/null
+    export REAL_PG="$pg_container" REAL_DOCKER="$real_docker"
+    : > "$CALLS"
+    bash "$repo_root/scripts/test-postcodes.sh" > "$work_dir/output"
+    [[ "$(wc -l < "$CALLS" | tr -d ' ')" == 50 ]]
+    psql_real -c "INSERT INTO address_lookup.address_lookup
+        SELECT 'AB' || n || 'CD' FROM generate_series(51, 1000001) n;" > /dev/null
+    expected="$(psql_real -c "SELECT count(DISTINCT upper(replace(postcode, ' ', '')))
+        FROM address_lookup.address_lookup WHERE mod(abs(hashtext(postcode)), 5000) = 0;")"
+    : > "$CALLS"
+    POSTCODE_SAMPLE_MOD=5000 bash "$repo_root/scripts/test-postcodes.sh" > "$work_dir/output"
+    actual="$(wc -l < "$CALLS" | tr -d ' ')"
+    [[ "$actual" == "$expected" ]] && (( actual > 0 && actual < 1000 ))
+    unset REAL_PG REAL_DOCKER
+    printf 'Real PostgreSQL sampling checks passed (%s sampled of 1000001).\n' "$actual"
+else
+    printf 'Skipped real PostgreSQL sampling checks: postgis/postgis:18-3.6 image unavailable.\n'
+fi
 printf 'Postcode helper checks passed.\n'

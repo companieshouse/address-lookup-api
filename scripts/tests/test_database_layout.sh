@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 test -d "$repo_root/database/migrations"
 test -d "$repo_root/database/local"
 test ! -e "$repo_root/database/provisional"

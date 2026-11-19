@@ -51,7 +51,8 @@ read_state() {
         { printf 'PID identity mismatch; refusing to signal an unrelated process.\n' >&2; exit 1; }
     local command_line
     command_line="$(ps -ww -p "$pid" -o args=)"
-    [[ "$command_line" == *"$root/address-lookup-api/target/address-lookup-api-"* ]] ||
+    [[ "$command_line" == *"$state_dir/api.jar"* ||
+        "$command_line" == *"$root/address-lookup-api/target/address-lookup-api-"* ]] ||
         { printf 'PID is not this checkout API; refusing to signal it.\n' >&2; exit 1; }
 }
 
@@ -69,7 +70,18 @@ api_stop() {
         fi
         sleep 0.2
     done
-    printf 'API PID %s did not stop in 20 seconds; state retained.\n' "$pid" >&2
+    # A JVM busy inside a long database statement (for example a seed insert) ignores SIGTERM.
+    printf 'API PID %s ignored SIGTERM for 20 seconds; sending SIGKILL.\n' "$pid" >&2
+    kill -KILL "$pid"
+    for ((attempt=0; attempt<25; attempt++)); do
+        if ! kill -0 "$pid" 2>/dev/null || [[ "$(ps -p "$pid" -o stat=)" == *Z* ]]; then
+            rm "$state"
+            printf 'Stopped managed API.\n'
+            return
+        fi
+        sleep 0.2
+    done
+    printf 'API PID %s did not stop after SIGKILL; state retained.\n' "$pid" >&2
     return 1
 }
 
@@ -103,7 +115,7 @@ api_start() {
         return
     fi
     port_free
-    bash "$root/scripts/maven.sh" -pl address-lookup-api -am package -DskipTests=true \
+    bash "$root/scripts/maven.sh" -pl address-lookup-api -am package -DskipTests=true -Plocal-seed \
         -Dskip.unit.tests=true -Dskip.integration.tests=true
     local jars=()
     shopt -s nullglob
@@ -111,11 +123,16 @@ api_start() {
     [[ ${#jars[@]} == 1 ]] ||
         { printf 'Expected exactly one API JAR; clean stale build outputs first.\n' >&2; return 1; }
     port_free
-    nohup java -jar "${jars[0]}" --spring.profiles.active=local \
+    # Run a private copy so rebuilding the project while the API seeds cannot corrupt the running JAR.
+    cp "${jars[0]}" "$state_dir/api.jar"
+    local log_start
+    log_start="$(wc -c <"$state_dir/api.log" 2>/dev/null || echo 0)"
+    LOCAL_SEED_DIR="${LOCAL_SEED_DIR:-$(cat "$state_dir/seed-dir" 2>/dev/null || echo "$root/database/local/data")}" \
+    nohup java -jar "$state_dir/api.jar" --spring.profiles.active=local \
         "--server.port=$port" --spring.docker.compose.enabled=false \
         --spring.datasource.url=jdbc:postgresql://localhost:5433/address_lookup \
         --spring.flyway.enabled=true \
-        --spring.flyway.locations=classpath:db/migrations,classpath:db/local \
+        --spring.flyway.locations=classpath:db/migrations,classpath:db/local,classpath:db/local/java \
         </dev/null >>"$state_dir/api.log" 2>&1 &
     pid=$!
     if ! fingerprint="$(identity "$pid")" || [[ -z "$fingerprint" ]]; then
@@ -131,14 +148,32 @@ api_start() {
         printf 'Failed to save API state; stopped launched process.\n' >&2
         return 1
     fi
-    local deadline=$((SECONDS + timeout))
-    while (( SECONDS < deadline )); do
+    # A reset has no deadline: the seed can run for a long time, so show its progress
+    # and wait for as long as the API process is alive.
+    local deadline=$((SECONDS + timeout)) shown=$log_start
+    while [[ -n "${wait_forever:-}" ]] || (( SECONDS < deadline )); do
         kill -0 "$pid" 2>/dev/null || break
+        if [[ -n "${wait_forever:-}" ]]; then
+            local size
+            size="$(wc -c <"$state_dir/api.log")"
+            if (( size > shown )); then
+                local chunk
+                chunk="$(tail -c +"$((shown + 1))" "$state_dir/api.log")"
+                grep -a 'Seed \|Staged \|Seeded ' <<<"$chunk" || true
+                shown=$size
+                # A failed startup can leave the JVM alive, so stop waiting as soon as it is logged.
+                if grep -aq 'Exception encountered during context initialization\|APPLICATION FAILED TO START' <<<"$chunk"; then
+                    api_stop
+                    printf 'API startup failed; inspect .local-run/api.log.\n' >&2
+                    return 1
+                fi
+            fi
+        fi
         if health_ok; then
             printf 'API healthy on port %s; log: .local-run/api.log\n' "$port"
             return
         fi
-        sleep 1
+        sleep 2
     done
     api_stop
     printf 'API failed readiness; inspect .local-run/api.log.\n' >&2
@@ -159,11 +194,23 @@ case "$action" in
     db-reset)
         [[ "${CONFIRM:-}" == address_lookup ]] ||
             { printf 'Destructive reset requires CONFIRM=address_lookup.\n' >&2; exit 2; }
+        if [[ "${FIXTURES:-}" == 1 ]]; then
+            # Committed fixture CSVs: no OS API key or download.
+            export LOCAL_SEED_DIR="$root/address-lookup-api/src/test/resources/seed-csv"
+            mkdir -p "$state_dir" && printf '%s' "$LOCAL_SEED_DIR" >"$state_dir/seed-dir"
+        else
+            # Download first, into temporary files published only when complete, so a failed or
+            # interrupted download leaves the database and any earlier CSVs unchanged.
+            bash "$root/scripts/fetch-os-csv.sh" ||
+                { printf 'Seed CSV download failed; the database was not changed.\n' >&2; exit 1; }
+            rm -f "$state_dir/seed-dir"
+        fi
         api_stop
         port_free
         db_start
         "${compose[@]}" exec -T postgres dropdb -U postgres --if-exists --force address_lookup
         "${compose[@]}" exec -T postgres createdb -U postgres address_lookup
+        wait_forever=1
         api_start
         count="$("${compose[@]}" exec -T postgres psql -U postgres -d address_lookup \
             -v ON_ERROR_STOP=1 -qAt -c 'SELECT count(*) FROM address_lookup.address_lookup')"

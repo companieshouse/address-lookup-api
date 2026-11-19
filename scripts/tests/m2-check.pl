@@ -8,7 +8,11 @@ my $m2s = "$m2/settings.xml";
 if ( !-f $m2s ) {
     printf "JFrog Token: (Get it from https://chartifacts.jfrog.io/ui/packages > Setup A Client > Maven > Select Virtual-Release > Generate token)\n";
     chomp(my $token = <STDIN>);
+    # Create the token-bearing file owner-only from the start, never world-readable.
+    my $old_umask = umask 0077;
     open my $fh, '>', $m2s or die "Unable to write to $m2s"; $|=1;
+    umask $old_umask;
+    chmod 0600, $m2s;
     printf $fh q{<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
  <mirrors>
    <mirror>
@@ -31,6 +35,7 @@ if ( !-f $m2s ) {
    </server>
  </servers>
 </settings>}, $token;
+    close $fh or die "Unable to write to $m2s";
 }
 my $err = "Are you inside the address-lookup-api repo?\n";
 my $git = do { open my $fh, '<', '.git/config' or die $err; local $/; <$fh> };

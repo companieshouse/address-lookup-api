@@ -169,7 +169,6 @@ public final class DownloadService {
     } catch (StreamingS3.ExistingObjectVerificationException exception) {
       handleExistingObjectVerificationException(exception, downloadCommandDataset, manifestReleaseId);
     } catch (NoSuchAlgorithmException exception) {
-      LOG.error(UPLOAD_FAILED_MESSAGE, exception);
       throw PermanentFailureException.builder()
               .description(exception.getMessage())
               .cause(exception)
@@ -274,8 +273,6 @@ public final class DownloadService {
 
   private void handleExistingObjectVerificationException(StreamingS3.ExistingObjectVerificationException
       exception, String dataset, String releaseId) throws TransientFailureException, PermanentFailureException {
-
-    LOG.error(UPLOAD_FAILED_MESSAGE, exception);
 
     if (isExistingObjectVerificationExceptionTransient(exception)) {
       throw TransientFailureException.builder()

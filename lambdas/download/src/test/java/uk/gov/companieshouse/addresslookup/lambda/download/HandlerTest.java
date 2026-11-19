@@ -11,6 +11,7 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import uk.gov.companieshouse.addresslookup.lambda.download.service.DownloadService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
@@ -74,11 +75,25 @@ class HandlerTest {
 
     @Test
     void shouldReturnFailureForPermanentFailureException() throws Exception {
-
         final String EXCEPTION_TEXT = "Something went wrong!!";
+        doTestForExceptionReturningFailure(PermanentFailureException.builder().description(EXCEPTION_TEXT).build());
+    }
 
+    @Test
+    void shouldReturnFailureForNPE() throws Exception {
+        doTestForExceptionReturningFailure(new NullPointerException());
+    }
+
+    @Test
+    void shouldReturnFailureForS3404Exception() throws Exception {
+
+        S3Exception.Builder exceptionBuilder = S3Exception.builder().statusCode(404);
+        doTestForExceptionReturningFailure(exceptionBuilder.build());
+    }
+
+    private void doTestForExceptionReturningFailure(Exception exception) throws Exception {
         Mockito.when(service.download(TEST_EVENT, context))
-                .thenThrow(PermanentFailureException.builder().description(EXCEPTION_TEXT).build());
+                .thenThrow(exception);
 
         String response = handler.handleRequest(TEST_EVENT, context);
 

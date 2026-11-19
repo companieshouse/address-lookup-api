@@ -23,7 +23,7 @@ public final class Handler extends AbstractRequestHandlerImpl<Map<String,Object>
     @Override
     protected boolean isPermanent(Exception exception) {
         return switch (exception) {
-            case S3Exception s3e when s3e.isRetryableException() -> false;
+            case S3Exception s3e when s3e.statusCode() >= 500 -> false;
             default -> super.isPermanent(exception);
         };
     }

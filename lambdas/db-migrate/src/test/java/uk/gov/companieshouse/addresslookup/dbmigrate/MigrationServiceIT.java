@@ -62,7 +62,11 @@ class MigrationServiceIT {
           "V2026.006__create_staging_ngd_tables.sql",
           "V2026.007__create_release_history.sql",
           "V2026.008__create_completeness_check.sql",
-          "V2026.009__create_upload_lambda_role.sql");
+          "V2026.009__create_upload_lambda_role.sql",
+          "V2026.010__create_full_staging_schema.sql",
+          "V2026.011__create_full_import_procedure.sql",
+          "V2026.012__create_full_build_indexes_procedure.sql",
+          "V2026.013__create_full_promote_procedure.sql");
 
   private String database;
 
@@ -93,7 +97,7 @@ class MigrationServiceIT {
     var first = run(snapshot, Command.MIGRATE);
     assertEquals("SUCCESS", first.get("status"));
     assertEquals(BASELINE, first.get("applied"));
-    assertEquals("2026.009", first.get("schemaVersion"));
+    assertEquals("2026.013", first.get("schemaVersion"));
     assertTrue(viewExists("address_lookup", "address_lookup"));
     assertEquals(
         0, count("SELECT count(*) FROM address_lookup.address_lookup"), "no seed data ships");
@@ -103,7 +107,7 @@ class MigrationServiceIT {
     var validate = run(snapshot, Command.VALIDATE);
     assertEquals(true, validate.get("valid"));
     assertEquals(List.of(), validate.get("pending"));
-    assertEquals("2026.009", validate.get("schemaVersion"));
+    assertEquals("2026.013", validate.get("schemaVersion"));
   }
 
   @Test

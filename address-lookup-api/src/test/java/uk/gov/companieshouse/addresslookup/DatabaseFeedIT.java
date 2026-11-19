@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -23,6 +24,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.flywaydb.core.Flyway;
@@ -33,6 +38,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
+import org.testcontainers.utility.MountableFile;
 
 /**
  * Verifies the root Flyway database feed and its local seed migrations.
@@ -201,7 +207,7 @@ class DatabaseFeedIT {
    */
   @Test
   void migratesAndSeedsFreshPostgisDatabaseRepeatably(
-      @TempDir Path tempSeeds, @TempDir Path tempCsvSeeds) throws IOException, SQLException {
+      @TempDir Path tempSeeds, @TempDir Path tempCsvSeeds) throws Exception {
     Path databaseRoot = repositoryRoot().resolve("database");
     Flyway productionFlyway = flyway(databaseRoot.resolve("migrations"));
 
@@ -251,10 +257,286 @@ class DatabaseFeedIT {
 
     assertSeedsPreservedRows(localRowCounts);
     assertLocalFixtures();
+
+    assertFullLoadProceduresImportIndexAndPromoteRepeatably(tempCsvSeeds);
+  }
+
+  /**
+   * Runs the FULL import, index and promote procedures against a stand-in for aws_s3 that reads the
+   * Landing files from the container, covering re-runs, a failed completeness check and the swap.
+   */
+  private static void assertFullLoadProceduresImportIndexAndPromoteRepeatably(Path landing)
+      throws Exception {
+    Path fixtures = Path.of("src/test/resources/seed-csv");
+    long gbRows = Files.readAllLines(fixtures.resolve("add_gb_royalmailaddress.csv")).size() - 1;
+    long islRows = Files.readAllLines(fixtures.resolve("add_isl_royalmailaddress.csv")).size() - 1;
+    String directory = "/tmp/landing/full/p1/v1/";
+    for (String dataset : List.of("add_gb_royalmailaddress", "add_isl_royalmailaddress")) {
+      POSTGRES.copyFileToContainer(
+          MountableFile.forHostPath(fixtures.resolve(dataset + ".csv")),
+          directory + dataset + ".csv");
+    }
+    String importCall = "CALL os_ingest.import_version('p1', 'v1', 'bucket', 'eu-west-2')";
+    try (Connection connection = connection();
+        Statement statement = connection.createStatement()) {
+      // SECURITY DEFINER lets the non-superuser loader role read the container files.
+      statement.execute(
+          "CREATE SCHEMA aws_s3; "
+              + "CREATE FUNCTION aws_s3.table_import_from_s3("
+              + "t text, c text, o text, b text, k text, r text) RETURNS text LANGUAGE plpgsql "
+              + "SECURITY DEFINER AS $$ "
+              + "BEGIN EXECUTE format('COPY %s (%s) FROM %L WITH %s', t, c, '/tmp/landing/' || k, o); "
+              + "RETURN 'ok'; END $$; "
+              + "CREATE ROLE als_loader NOLOGIN; GRANT " + POSTGRES.getUsername() + " TO als_loader; "
+              + "CREATE ROLE als_reader NOLOGIN; "
+              + "GRANT USAGE ON SCHEMA address_lookup TO als_reader; "
+              + "GRANT SELECT ON address_lookup.address_lookup TO als_reader; "
+              + "GRANT SELECT ON os_data.add_gb_royalmailaddress_v2 TO als_reader "
+              + "WITH GRANT OPTION");
+      long activeGbBefore =
+          scalar(statement, "SELECT count(*) FROM os_data.add_gb_royalmailaddress_v2");
+      statement.execute("SET ROLE als_loader");
+
+      assertImportFails(landing, directory, statement, importCall, "rel-1", gbRows + 1, islRows,
+          "27700", "2.0", "Completeness check failed");
+      assertFalse(
+          tableExists(statement, "os_stage.data_package_manifest WHERE release_id = 'rel-1'"));
+      assertImportFails(landing, directory, statement, importCall, "rel-1", gbRows, islRows,
+          "4258", "2.0", "crs");
+      assertImportFails(landing, directory, statement, importCall, "rel-1", gbRows, islRows,
+          "27700", "3.0", "schemaVersion");
+
+      String gbCsv = Files.readString(fixtures.resolve("add_gb_royalmailaddress.csv"));
+      Path badHeader = landing.resolve("bad-header.csv");
+      Files.writeString(badHeader, gbCsv.replaceFirst("^[^,]+", "not_a_column"));
+      POSTGRES.copyFileToContainer(
+          MountableFile.forHostPath(badHeader), directory + "add_gb_royalmailaddress.csv");
+      writeAndCopyManifest(landing, directory, "rel-1", gbRows, islRows, "27700", "2.0");
+      assertTrue(
+          assertThrows(SQLException.class, () -> statement.execute(importCall))
+              .getMessage()
+              .contains("header"));
+      POSTGRES.copyFileToContainer(
+          MountableFile.forHostPath(fixtures.resolve("add_gb_royalmailaddress.csv")),
+          directory + "add_gb_royalmailaddress.csv");
+
+      statement.execute(importCall);
+      statement.execute(importCall);
+      assertTrue(
+          assertThrows(SQLException.class, () -> statement.execute("CALL os_ingest.promote('rel-1')"))
+              .getMessage()
+              .contains("Indexes are missing"));
+      assertEquals(
+          0,
+          scalar(
+              statement,
+              "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'os_stage_full' "
+                  + "AND table_name LIKE '%_v2' AND column_name = 'release_id' AND column_default IS NOT NULL"));
+      statement.execute("CALL os_ingest.build_indexes('rel-1')");
+      statement.execute("CALL os_ingest.build_indexes('rel-1')");
+
+      statement.execute("RESET ROLE");
+      promoteWhileReading();
+      statement.execute("SET ROLE als_loader");
+      statement.execute("CALL os_ingest.promote('rel-1')");
+      statement.execute("RESET ROLE");
+
+      assertEquals(
+          gbRows + islRows, scalar(statement, "SELECT count(*) FROM address_lookup.address_lookup"));
+      assertEquals(
+          gbRows, scalar(statement, "SELECT count(*) FROM os_data.add_gb_royalmailaddress_v2"));
+      assertEquals(
+          activeGbBefore, scalar(statement, "SELECT count(*) FROM os_prev.add_gb_royalmailaddress_v2"));
+      assertEquals(
+          0,
+          scalar(
+              statement,
+              "SELECT count(*) FROM os_data.add_gb_royalmailaddress_v2 WHERE release_id <> 'rel-1'"));
+      assertEquals(
+          27700,
+          scalar(statement, "SELECT Find_SRID('os_data', 'add_gb_royalmailaddress_v2', 'geometry')"));
+      assertEquals(
+          4258,
+          scalar(statement, "SELECT Find_SRID('os_data', 'add_isl_royalmailaddress_v2', 'geometry')"));
+      assertEquals(1, scalar(statement, "SELECT count(*) FROM os_data.release_history"));
+      assertEquals(
+          1,
+          scalar(
+              statement,
+              "SELECT count(*) FROM os_data.release_history "
+                  + "WHERE release_id = 'rel-1' AND previous IS NULL AND mode = 'FULL'"));
+      assertEquals(
+          2, scalar(statement, "SELECT count(*) FROM pg_indexes WHERE schemaname = 'os_data' "
+              + "AND tablename = 'add_gb_royalmailaddress_v2'"));
+
+      // The loader role created the staging tables; they must end up owned like the active ones.
+      assertEquals(
+          0,
+          scalar(
+              statement,
+              "SELECT count(*) FROM pg_tables WHERE schemaname = 'os_data' "
+                  + "AND tablename LIKE '%_royalmailaddress_v2' AND tableowner <> current_user"));
+      assertEquals(
+          1,
+          scalar(
+              statement,
+              "SELECT count(*) FROM information_schema.role_table_grants WHERE grantee = 'als_reader' "
+                  + "AND table_schema = 'os_data' AND table_name = 'add_gb_royalmailaddress_v2' "
+                  + "AND is_grantable = 'YES'"));
+      statement.execute("SET ROLE als_reader");
+      assertEquals(
+          gbRows + islRows, scalar(statement, "SELECT count(*) FROM address_lookup.address_lookup"));
+      statement.execute("RESET ROLE");
+
+      // A second distinct FULL replaces the populated os_prev generation: os_prev must then hold
+      // rel-1 (not the original tables) while the view and os_data serve rel-2.
+      List<String> gbLines = Files.readAllLines(fixtures.resolve("add_gb_royalmailaddress.csv"));
+      Path shorterGb = landing.resolve("rel-2-gb.csv");
+      Files.write(shorterGb, gbLines.subList(0, gbLines.size() - 1));
+      POSTGRES.copyFileToContainer(
+          MountableFile.forHostPath(shorterGb), directory + "add_gb_royalmailaddress.csv");
+      writeAndCopyManifest(landing, directory, "rel-2", gbRows - 1, islRows, "27700", "2.0",
+          "2026-06-01");
+      statement.execute("SET ROLE als_loader");
+      statement.execute(importCall);
+      statement.execute("CALL os_ingest.build_indexes('rel-2')");
+      statement.execute("CALL os_ingest.promote('rel-2')");
+      statement.execute("RESET ROLE");
+
+      assertEquals(
+          gbRows - 1,
+          scalar(statement, "SELECT count(*) FROM os_data.add_gb_royalmailaddress_v2 "
+              + "WHERE release_id = 'rel-2'"));
+      assertEquals(
+          gbRows - 1, scalar(statement, "SELECT count(*) FROM os_data.add_gb_royalmailaddress_v2"));
+      assertEquals(
+          gbRows,
+          scalar(statement, "SELECT count(*) FROM os_prev.add_gb_royalmailaddress_v2 "
+              + "WHERE release_id = 'rel-1'"));
+      assertEquals(
+          gbRows, scalar(statement, "SELECT count(*) FROM os_prev.add_gb_royalmailaddress_v2"));
+      assertEquals(
+          islRows,
+          scalar(statement, "SELECT count(*) FROM os_prev.add_isl_royalmailaddress_v2 "
+              + "WHERE release_id = 'rel-1'"));
+      assertEquals(
+          gbRows - 1 + islRows,
+          scalar(statement, "SELECT count(*) FROM address_lookup.address_lookup"));
+      assertEquals(2, scalar(statement, "SELECT count(*) FROM os_data.release_history"));
+      assertEquals(
+          0,
+          scalar(statement, "SELECT count(*) FROM pg_tables WHERE schemaname = 'os_prev' "
+              + "AND tablename NOT LIKE '%_royalmailaddress_v2'"));
+
+      statement.execute("SET ROLE als_loader");
+      assertImportFails(landing, directory, statement, importCall, "rel-0", gbRows, islRows,
+          "27700", "2.0", "older than the active data", "2026-04-01");
+      statement.execute("RESET ROLE");
+    }
+  }
+
+  // Reproduces the read/promote deadlock: a reader holds a table lock, promote starts and waits for
+  // it, then a view read arrives. promote must lock the view first, so that read queues behind
+  // promote instead of deadlocking with it once the first reader finishes.
+  private static void promoteWhileReading() throws Exception {
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try (Connection holder = connection();
+        Connection promoter = connection();
+        Connection reader = connection();
+        Statement monitor = connection().createStatement()) {
+      holder.setAutoCommit(false);
+      holder.createStatement().executeQuery("SELECT count(*) FROM os_data.add_isl_royalmailaddress_v2");
+      promoter.createStatement().execute("SET ROLE als_loader");
+
+      Future<?> promotion =
+          executor.submit(
+              () -> {
+                promoter.createStatement().execute("CALL os_ingest.promote('rel-1')");
+                return null;
+              });
+      awaitLockWait(monitor, "CALL os_ingest.promote%");
+      Future<Long> read =
+          executor.submit(
+              () -> scalar(reader.createStatement(), "SELECT count(*) FROM address_lookup.address_lookup"));
+      awaitLockWait(monitor, "SELECT count(*) FROM address_lookup.address_lookup%");
+      holder.commit();
+
+      promotion.get(20, TimeUnit.SECONDS);
+      assertTrue(read.get(20, TimeUnit.SECONDS) > 0);
+    } finally {
+      executor.shutdownNow();
+    }
+  }
+
+  private static void awaitLockWait(Statement monitor, String queryPattern)
+      throws SQLException {
+    String sql =
+        "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' "
+            + "AND pid <> pg_backend_pid() AND query LIKE '" + queryPattern + "'";
+    for (int attempt = 0; attempt < 100; attempt++) {
+      if (scalar(monitor, sql) > 0) {
+        return;
+      }
+      monitor.execute("SELECT pg_sleep(0.02)");
+    }
+    throw new AssertionError("No session waiting for a lock: " + queryPattern);
+  }
+
+  private static void assertImportFails(
+      Path landing, String directory, Statement statement, String importCall, String releaseId,
+      long gbRows, long islRows, String gbSrid, String schemaVersion, String expectedMessage)
+      throws IOException {
+    assertImportFails(landing, directory, statement, importCall, releaseId, gbRows, islRows, gbSrid,
+        schemaVersion, expectedMessage, "2026-05-01");
+  }
+
+  private static void assertImportFails(
+      Path landing, String directory, Statement statement, String importCall, String releaseId,
+      long gbRows, long islRows, String gbSrid, String schemaVersion, String expectedMessage,
+      String target) throws IOException {
+    writeAndCopyManifest(
+        landing, directory, releaseId, gbRows, islRows, gbSrid, schemaVersion, target);
+    SQLException failure = assertThrows(SQLException.class, () -> statement.execute(importCall));
+    assertTrue(failure.getMessage().contains(expectedMessage), failure::getMessage);
+  }
+
+  private static void writeAndCopyManifest(
+      Path landing, String directory, String releaseId, long gbRows, long islRows, String gbSrid,
+      String schemaVersion) throws IOException {
+    writeAndCopyManifest(landing, directory, releaseId, gbRows, islRows, gbSrid, schemaVersion,
+        "2026-05-01");
+  }
+
+  private static void writeAndCopyManifest(
+      Path landing, String directory, String releaseId, long gbRows, long islRows, String gbSrid,
+      String schemaVersion, String target) throws IOException {
+    Files.writeString(
+        landing.resolve("manifest.json"),
+        "{\"releaseId\":\"" + releaseId + "\",\"mode\":\"FULL\",\"target\":\"" + target + "\","
+            + "\"dataPackageId\":\"p1\",\"versionId\":\"v1\","
+            + "\"add_gb_royalmailaddress\":{\"summary\":{\"recordCount\":" + gbRows
+            + ",\"schemaVersion\":\"" + schemaVersion + "\","
+            + "\"crs\":\"http://www.opengis.net/def/crs/EPSG/0/" + gbSrid + "\"}},"
+            + "\"add_isl_royalmailaddress\":{\"summary\":{\"recordCount\":" + islRows
+            + ",\"schemaVersion\":\"2.0\","
+            + "\"crs\":\"http://www.opengis.net/def/crs/EPSG/0/4258\"}}}");
+    POSTGRES.copyFileToContainer(
+        MountableFile.forHostPath(landing.resolve("manifest.json")), directory + "manifest.json");
+  }
+
+  private static boolean tableExists(Statement statement, String fromClause) throws SQLException {
+    return scalar(statement, "SELECT count(*) FROM " + fromClause) > 0;
+  }
+
+  private static long scalar(Statement statement, String sql) throws SQLException {
+    try (ResultSet result = statement.executeQuery(sql)) {
+      result.next();
+      return result.getLong(1);
+    }
   }
 
   private static void assertProductionMigrationsAreRepeatable(Flyway productionFlyway) {
-    assertEquals(9, productionFlyway.migrate().migrationsExecuted);
+    assertEquals(13, productionFlyway.migrate().migrationsExecuted);
     productionFlyway.validate();
     assertEquals(0, productionFlyway.migrate().migrationsExecuted);
   }

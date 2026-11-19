@@ -46,6 +46,11 @@ public final class ExtractionService {
   private static final String CSV_SCAN_STATUS = "CSV_SCAN";
   private static final String CSV_NOT_FOUND = "CSV_NOT_FOUND";
   private static final String STATUS = "status";
+  private static final String VERSION_ID_FIELD = "versionId";
+  private static final String DATASETS_FIELD = "datasets";
+  private static final String ZIP_VERSION_FIELD = "zipVersion";
+  private static final String CSV_KEY_FIELD = "csvKey";
+  private static final String ZIP_KEY_FIELD = "zipKey";
   private static final Logger LOG = LoggerFactory.getLogger(ExtractionService.class.getName());
 
   static class CsvHeaderException extends Exception {
@@ -84,7 +89,7 @@ public final class ExtractionService {
     JsonNode scanObject = input.path("object");
     String scanBucket = required(scanObject, "bucket");
     String s3Key = required(scanObject, "key");
-    String zipVersion = required(scanObject, "versionId");
+    String zipVersion = required(scanObject, VERSION_ID_FIELD);
     var zipObject = KeyLayout.parseLandingObject(s3Key);
     check(zipObject.fileType() == KeyLayout.LandingFileType.ZIP, "Expected ZIP key");
     check(zipObject.dataset() == Dataset.named(dataset), "ZIP dataset mismatch");
@@ -226,12 +231,12 @@ public final class ExtractionService {
       throws Exception {
     JsonNode state =
         store.read(properties.landingBucket(), KeyLayout.unpackStateKey(packageVersion));
-    JsonNode extracted = state == null ? null : state.path("datasets").path(dataset);
+    JsonNode extracted = state == null ? null : state.path(DATASETS_FIELD).path(dataset);
     if (extracted == null
         || !extracted.isObject()
-        || !zipVersion.equals(required(extracted, "zipVersion"))
-        || !csvKey.equals(required(extracted, "csvKey"))
-        || !zipKey.equals(required(extracted, "zipKey"))
+        || !zipVersion.equals(required(extracted, ZIP_VERSION_FIELD))
+        || !csvKey.equals(required(extracted, CSV_KEY_FIELD))
+        || !zipKey.equals(required(extracted, ZIP_KEY_FIELD))
         || !store.exists(properties.landingBucket(), csvKey)) {
       return false;
     }
@@ -255,19 +260,19 @@ public final class ExtractionService {
         stateKey,
         current -> {
           current.put("packageId", packageVersion.packageId());
-          current.put("versionId", packageVersion.versionId());
+          current.put(VERSION_ID_FIELD, packageVersion.versionId());
           current.put("feed", packageVersion.feed().name().toLowerCase(java.util.Locale.ROOT));
-          JsonNode datasets = current.get("datasets");
-          if (datasets == null) datasets = current.putObject("datasets");
+          JsonNode datasets = current.get(DATASETS_FIELD);
+          if (datasets == null) datasets = current.putObject(DATASETS_FIELD);
           check(datasets.isObject(), "Unpack state datasets must be an object");
           ((com.fasterxml.jackson.databind.node.ObjectNode) datasets)
               .set(
                   dataset,
                   JSON.createObjectNode()
-                      .put("status", "EXTRACTED")
-                      .put("zipKey", zipKey)
-                      .put("zipVersion", zipVersion)
-                      .put("csvKey", upload.key())
+                      .put(STATUS, "EXTRACTED")
+                      .put(ZIP_KEY_FIELD, zipKey)
+                      .put(ZIP_VERSION_FIELD, zipVersion)
+                      .put(CSV_KEY_FIELD, upload.key())
                       .put("csvVersion", upload.version())
                       .put("sha256", upload.sha256())
                       .put("updatedAt", Instant.now().toString()));
@@ -289,11 +294,11 @@ public final class ExtractionService {
         current -> {
           current.put("packageId", packageVersion.packageId());
           current.put("feed", packageVersion.feed().name().toLowerCase(java.util.Locale.ROOT));
-          current.put("versionId", packageVersion.versionId());
-          current.put("dataset", dataset);
-          current.put("zipKey", zipKey);
-          current.put("zipVersion", zipVersion);
-          current.put("csvKey", csvKey);
+          current.put(VERSION_ID_FIELD, packageVersion.versionId());
+          current.put(DATASET_FIELD, dataset);
+          current.put(ZIP_KEY_FIELD, zipKey);
+          current.put(ZIP_VERSION_FIELD, zipVersion);
+          current.put(CSV_KEY_FIELD, csvKey);
           current.put("updatedAt", Instant.now().toString());
           return current;
         });

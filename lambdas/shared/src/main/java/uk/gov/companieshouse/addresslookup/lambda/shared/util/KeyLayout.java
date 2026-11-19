@@ -6,6 +6,9 @@ import uk.gov.companieshouse.release.model.Dataset;
 
 /** Shared builders and parsers for Control and Landing S3 keys. */
 public class KeyLayout {
+  private static final String PACKAGE_ID = "package ID";
+  private static final String JSON_EXTENSION = ".json";
+  private static final String DOWNLOADS_PREFIX = "downloads/";
   private static final Pattern COMPONENT = Pattern.compile("[A-Za-z0-9_-]+");
   private static final Pattern CSV_NAME = Pattern.compile("[A-Za-z0-9_-][A-Za-z0-9_.-]*\\.csv");
   private static final Pattern LANDING_OBJECT =
@@ -14,7 +17,7 @@ public class KeyLayout {
               + "(manifest/data_package_manifest\\.json|manifest/unpack_state\\.json|"
               + "downloads/([a-z0-9_]+)\\.zip|"
               + "downloads/([a-z0-9_]+)_orderSummary\\.json|"
-              + "downloads/([a-z0-9_]+)/([A-Za-z0-9_-][A-Za-z0-9_.-]*\\.csv))$");
+              + "downloads/([a-z0-9_]+)/([^/]+))$");
 
   private KeyLayout() {}
 
@@ -40,7 +43,7 @@ public class KeyLayout {
   public record PackageVersion(Feed feed, String packageId, String versionId) {
     public PackageVersion {
       if (feed == null) throw new IllegalArgumentException("Missing feed");
-      requireComponent(packageId, "package ID");
+      requireComponent(packageId, PACKAGE_ID);
       requireComponent(versionId, "version ID");
     }
   }
@@ -57,22 +60,22 @@ public class KeyLayout {
       PackageVersion packageVersion, Dataset dataset, LandingFileType fileType, String fileName) {}
 
   public static String downloadCursorKey(String packageId) {
-    return "cursors/" + requireComponent(packageId, "package ID") + ".json";
+    return "cursors/" + requireComponent(packageId, PACKAGE_ID) + JSON_EXTENSION;
   }
 
   public static String extractionCursorKey(String packageId) {
-    return "cursors/" + requireComponent(packageId, "package ID") + ".extraction.json";
+    return "cursors/" + requireComponent(packageId, PACKAGE_ID) + ".extraction.json";
   }
 
   public static String reconciliationCursorKey(String name) {
-    return "reconciliation/" + requireComponent(name, "reconciliation name") + ".json";
+    return "reconciliation/" + requireComponent(name, "reconciliation name") + JSON_EXTENSION;
   }
 
   public static String checksumKey(String key) {
     return "metadata/checksums/"
         + uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sha(
             key.getBytes(java.nio.charset.StandardCharsets.UTF_8))
-        + ".json";
+        + JSON_EXTENSION;
   }
 
   public static String versionPrefix(PackageVersion version) {
@@ -88,16 +91,16 @@ public class KeyLayout {
   }
 
   public static String downloadZipKey(PackageVersion version, Dataset dataset) {
-    return versionPrefix(version) + "downloads/" + dataset.datasetName() + ".zip";
+    return versionPrefix(version) + DOWNLOADS_PREFIX + dataset.datasetName() + ".zip";
   }
 
   public static String orderSummaryKey(PackageVersion version, Dataset dataset) {
-    return versionPrefix(version) + "downloads/" + dataset.datasetName() + "_orderSummary.json";
+    return versionPrefix(version) + DOWNLOADS_PREFIX + dataset.datasetName() + "_orderSummary.json";
   }
 
   public static String extractedCsvKey(PackageVersion version, Dataset dataset, String fileName) {
     requireCsvName(fileName);
-    return versionPrefix(version) + "downloads/" + dataset.datasetName() + "/" + fileName;
+    return versionPrefix(version) + DOWNLOADS_PREFIX + dataset.datasetName() + "/" + fileName;
   }
 
   public static LandingObject parseLandingObject(String key) {

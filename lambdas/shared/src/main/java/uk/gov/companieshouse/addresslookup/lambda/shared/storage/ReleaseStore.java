@@ -69,29 +69,15 @@ public final class ReleaseStore {
   public ObjectNode updateState(String bucket, String key, UnaryOperator<ObjectNode> update)
       throws IOException {
     for (int attempt = 0; attempt < MAX_STATE_UPDATE_ATTEMPTS; attempt++) {
-      ObjectNode current = JSON.createObjectNode();
-      String eTag = null;
-      if (exists(bucket, key)) {
-        try (var in = s3.getObject(GetObjectRequest.builder().bucket(bucket).key(key).build())) {
-          byte[] bytes = in.readNBytes(1024 * 1024 + 1);
-          check(bytes.length <= 1024 * 1024, "State exceeds 1 MiB");
-          JsonNode parsed = JSON.readTree(bytes);
-          check(parsed != null && parsed.isObject(), "State must be a JSON object");
-          current = (ObjectNode) parsed;
-          eTag = in.response().eTag();
-          check(eTag != null, "State object is missing an ETag");
-        } catch (S3Exception e) {
-          if (e.statusCode() != 404) throw e;
-          continue;
-        }
-      }
+      StateSnapshot snapshot = readState(bucket, key);
+      if (snapshot == null) continue;
 
-      ObjectNode updated = update.apply(current.deepCopy());
+      ObjectNode updated = update.apply(snapshot.value().deepCopy());
       check(updated != null, "State update returned no value");
       var request =
           PutObjectRequest.builder().bucket(bucket).key(key).contentType(JSON_CONTENT_TYPE);
-      if (eTag == null) request.ifNoneMatch("*");
-      else request.ifMatch(eTag);
+      if (snapshot.eTag() == null) request.ifNoneMatch("*");
+      else request.ifMatch(snapshot.eTag());
       try {
         s3.putObject(request.build(), RequestBody.fromString(updated.toString()));
         return updated;
@@ -100,6 +86,24 @@ public final class ReleaseStore {
       }
     }
     throw new IllegalStateException("State update contention; retry invocation");
+  }
+
+  private record StateSnapshot(ObjectNode value, String eTag) {}
+
+  private StateSnapshot readState(String bucket, String key) throws IOException {
+    if (!exists(bucket, key)) return new StateSnapshot(JSON.createObjectNode(), null);
+    try (var in = s3.getObject(GetObjectRequest.builder().bucket(bucket).key(key).build())) {
+      byte[] bytes = in.readNBytes(1024 * 1024 + 1);
+      check(bytes.length <= 1024 * 1024, "State exceeds 1 MiB");
+      JsonNode parsed = JSON.readTree(bytes);
+      check(parsed != null && parsed.isObject(), "State must be a JSON object");
+      String eTag = in.response().eTag();
+      check(eTag != null, "State object is missing an ETag");
+      return new StateSnapshot((ObjectNode) parsed, eTag);
+    } catch (S3Exception e) {
+      if (e.statusCode() == 404) return null;
+      throw e;
+    }
   }
 
   public List<String> keys(String bucket, String prefix) {

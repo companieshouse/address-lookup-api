@@ -64,6 +64,10 @@ class KeyLayoutTest {
         "initial_full/24833/150450/downloads/unknown.zip",
         "initial_full/24833/150450/downloads/add_gb_royalmailaddress/../data.csv",
         "initial_full/24833/150450/downloads/add_gb_royalmailaddress/a..csv",
+        "initial_full/24833/150450/downloads/add_gb_royalmailaddress/data.txt",
+        "initial_full/24833/150450/downloads/add_gb_royalmailaddress/.csv",
+        "initial_full/24833/150450/downloads/add_gb_royalmailaddress/data file.csv",
+        "initial_full/24833/150450/downloads/add_gb_royalmailaddress/data\\file.csv",
         "initial_full/24833/150450/downloads/add_gb_royalmailaddress/data.csv/extra",
         "other/24833/150450/manifest/data_package_manifest.json"
       })

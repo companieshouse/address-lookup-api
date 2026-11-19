@@ -112,7 +112,7 @@ final class ReleaseStoreTest {
             BUCKET,
             key,
             state -> {
-              state.with("datasets").putObject("second").put("status", "EXTRACTED");
+              state.withObject("/datasets").putObject("second").put("status", "EXTRACTED");
               return state;
             });
 

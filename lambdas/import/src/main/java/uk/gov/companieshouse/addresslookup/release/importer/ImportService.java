@@ -181,22 +181,34 @@ public final class ImportService {
     for (var dataset : Dataset.values()) {
       if (context.getRemainingTimeInMillis() < 60000) break;
       try {
-        String key =
-            KeyLayout.extractedCsvKey(packageVersion, dataset, dataset.datasetName() + ".csv");
-        if (!store.exists(bucket, key)) continue;
-        String version = store.version(bucket, key);
-        if (!store.isClean(bucket, key, version)) continue;
-        check(version.equals(store.version(bucket, key)), "CSV changed after scan");
-        var evidence = store.read(bucket, KeyLayout.checksumKey(key));
-        if (evidence == null) continue;
-        check(version.equals(required(evidence, "versionId")), "CSV checksum version mismatch");
-        String checksum = required(evidence, "sha256");
-        check(checksum.matches("[a-f0-9]{64}"), "Invalid CSV checksum evidence");
-        importer.importClean(manifest.id(), dataset, bucket, key, version, checksum, region);
+        importDataset(store, bucket, manifest, packageVersion, dataset, importer, region);
       } catch (Exception failure) {
         failures.add(failure);
       }
     }
     return failures;
+  }
+
+  private static void importDataset(
+      ReleaseStore store,
+      String bucket,
+      ReleaseManifest manifest,
+      KeyLayout.PackageVersion packageVersion,
+      Dataset dataset,
+      DatasetImportService importer,
+      String region)
+      throws Exception {
+    String key =
+        KeyLayout.extractedCsvKey(packageVersion, dataset, dataset.datasetName() + ".csv");
+    if (!store.exists(bucket, key)) return;
+    String version = store.version(bucket, key);
+    if (!store.isClean(bucket, key, version)) return;
+    check(version.equals(store.version(bucket, key)), "CSV changed after scan");
+    var evidence = store.read(bucket, KeyLayout.checksumKey(key));
+    if (evidence == null) return;
+    check(version.equals(required(evidence, "versionId")), "CSV checksum version mismatch");
+    String checksum = required(evidence, "sha256");
+    check(checksum.matches("[a-f0-9]{64}"), "Invalid CSV checksum evidence");
+    importer.importClean(manifest.id(), dataset, bucket, key, version, checksum, region);
   }
 }

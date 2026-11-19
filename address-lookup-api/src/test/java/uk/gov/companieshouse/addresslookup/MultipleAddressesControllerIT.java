@@ -97,7 +97,11 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
         .andExpect(status().isOk())
         .andExpect(
             jsonPath(
-                    "$[?(@.premise == '" + premise + "' && @.addressLine1 == '" + addressLine1 + "')]")
+                    "$[?(@.premise == '"
+                        + premise
+                        + "' && @.addressLine1 == '"
+                        + addressLine1
+                        + "')]")
                 .isNotEmpty());
   }
 
@@ -131,8 +135,7 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
   void shouldReturnBadRequestForMissingPostcodeParameter() throws Exception {
     this.mockMvc
         .perform(
-            get("/address-lookup-api/multiple-addresses")
-                .header(REQUEST_ID.value(), "request_id"))
+            get("/address-lookup-api/multiple-addresses").header(REQUEST_ID.value(), "request_id"))
         .andExpect(status().isBadRequest());
   }
 
@@ -169,7 +172,6 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
         .andExpect(jsonPath("$").isArray())
         .andExpect(jsonPath("$").isEmpty());
   }
-
 
   @Test
   void shouldVerifyAllAddressesHavePremiseField() throws Exception {

@@ -90,7 +90,7 @@ class DiscoveryServiceTest {
 
   private static final String CONTROL_BUCKET = "control-bucket",
       LANDING_BUCKET = "landing-bucket",
-      CURSOR_KEY = "control/address-release/active.json";
+      CURSOR_KEY = "cursors/20780.json";
 
   private static final String TEST_RELEASE_ID = "12345678-1234-1234-1234-123456789abc";
 
@@ -113,6 +113,15 @@ class DiscoveryServiceTest {
             List.of(
                 new DatasetDefault("add_gb_royalmailaddress", "2.0"),
                 new DatasetDefault("add_isl_royalmailaddress", "2.0")));
+    org.mockito.Mockito.lenient()
+        .when(properties.feedForPackage("20780"))
+        .thenReturn(
+            uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.Feed.INITIAL_FULL);
+    org.mockito.Mockito.lenient()
+        .when(
+            properties.packagesForFeed(
+                uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.Feed.DAILY_COU))
+        .thenReturn(List.of("20780"));
 
     discoveryService = new DiscoveryService(s3Client, osClient, commands, properties);
   }
@@ -131,12 +140,11 @@ class DiscoveryServiceTest {
     PutObjectRequest saveManifestRequest =
         PutObjectRequest.builder()
             .bucket(LANDING_BUCKET)
-            .key("acquisitions/2026-10-06/" + TEST_RELEASE_ID + ".json")
-            .ifNoneMatch("*")
+            .key("daily_cou/20780/150104/manifest/data_package_manifest.json")
             .contentType("application/json")
             .build();
 
-    String expectedPlanKey = "acquisitions/2026-10-06/" + TEST_RELEASE_ID + ".json";
+    String expectedPlanKey = "daily_cou/20780/150104/manifest/data_package_manifest.json";
 
     S3PutRequestBodyMatcher<VersionCursor> cursorUpdateMatcher =
         new S3PutRequestBodyMatcher<>(TEST_COU_UPDATE_CURSOR_JSON, VersionCursor.class);
@@ -186,6 +194,8 @@ class DiscoveryServiceTest {
     verify(s3Client).getObject(request);
     verify(s3Client).putObject(eq(updateCursorRequest), argThat(cursorUpdateMatcher));
     verify(s3Client).putObject(eq(saveManifestRequest), argThat(manifestMatcher));
+    verifyOrderSummarySaved("daily_cou/20780/150104", "add_gb_royalmailaddress");
+    verifyOrderSummarySaved("daily_cou/20780/150104", "add_isl_royalmailaddress");
     verify(osClient).json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150035");
     verify(osClient).json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150104");
     verify(osClient)
@@ -211,12 +221,11 @@ class DiscoveryServiceTest {
     PutObjectRequest saveManifestRequest =
         PutObjectRequest.builder()
             .bucket(LANDING_BUCKET)
-            .key("acquisitions/2026-05-01/" + TEST_RELEASE_ID + ".json")
-            .ifNoneMatch("*")
+            .key("initial_full/20780/130989/manifest/data_package_manifest.json")
             .contentType("application/json")
             .build();
 
-    String expectedPlanKey = "acquisitions/2026-05-01/" + TEST_RELEASE_ID + ".json";
+    String expectedPlanKey = "initial_full/20780/130989/manifest/data_package_manifest.json";
 
     S3PutRequestBodyMatcher<VersionCursor> cursorUpdateMatcher =
         new S3PutRequestBodyMatcher<>(TEST_FULL_UPDATE_CURSOR_JSON, VersionCursor.class);
@@ -271,10 +280,25 @@ class DiscoveryServiceTest {
 
     verify(s3Client).putObject(eq(updateCursorRequest), argThat(cursorUpdateMatcher));
     verify(s3Client).putObject(eq(saveManifestRequest), argThat(manifestMatcher));
+    verifyOrderSummarySaved("initial_full/20780/130989", "add_gb_royalmailaddress");
+    verifyOrderSummarySaved("initial_full/20780/130989", "add_isl_royalmailaddress");
 
     verify(commands).send(DOWNLOAD.name(), expectedPlanKey, "add_gb_royalmailaddress");
     verify(commands).send(DOWNLOAD.name(), expectedPlanKey, "add_isl_royalmailaddress");
     assertEquals(TEST_RELEASE_ID, releaseId);
+  }
+
+  private void verifyOrderSummarySaved(String prefix, String dataset) {
+    verify(s3Client)
+        .putObject(
+            argThat(
+                (PutObjectRequest request) ->
+                    request.bucket().equals(LANDING_BUCKET)
+                        && request
+                            .key()
+                            .equals(prefix + "/downloads/" + dataset + "_orderSummary.json")
+                        && request.ifNoneMatch() == null),
+            any(RequestBody.class));
   }
 
   @Test

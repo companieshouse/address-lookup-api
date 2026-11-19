@@ -1,7 +1,6 @@
 package uk.gov.companieshouse.addresslookup.release.importer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -16,7 +15,6 @@ import static org.mockito.Mockito.when;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 
 import com.amazonaws.services.lambda.runtime.Context;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -31,6 +29,7 @@ import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReconciliationCursor;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
+import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
 import uk.gov.companieshouse.addresslookup.release.runtime.ImportProperties;
 import uk.gov.companieshouse.addresslookup.releasecore.service.DatasetImportService;
 import uk.gov.companieshouse.addresslookup.releasecore.service.PromotionService;
@@ -38,18 +37,15 @@ import uk.gov.companieshouse.addresslookup.releasecore.service.ReleaseRegistrati
 import uk.gov.companieshouse.addresslookup.releasecore.state.Release;
 import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseRepository;
 import uk.gov.companieshouse.release.model.Dataset;
-import uk.gov.companieshouse.release.model.ObjectReference;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
 
 @ExtendWith(MockitoExtension.class)
 class ImportServiceTest {
   private static final String BUCKET = "scanned";
   private static final String RELEASE_ID = "12345678-1234-1234-1234-123456789abc";
-  private static final String MANIFEST_KEY = "manifests/2026-10-06/" + RELEASE_ID + ".json";
-  private static final String OBJECT_KEY =
-      "quarantine/csv/"
-          + RELEASE_ID
-          + "/add_gb_royalmailaddress/12345678-1234-1234-1234-123456789abc.csv";
+  private static final KeyLayout.PackageVersion PACKAGE_VERSION =
+      new KeyLayout.PackageVersion(KeyLayout.Feed.DAILY_COU, "20780", "150104");
+  private static final String MANIFEST_KEY = KeyLayout.dataPackageManifestKey(PACKAGE_VERSION);
   private static final String SHA256 = "a".repeat(64);
 
   @Mock private S3Client s3;
@@ -66,6 +62,7 @@ class ImportServiceTest {
   void setUp() {
     service = new ImportService(s3, properties, registration, importer, promotion, releases);
     lenient().when(properties.sweepLimit()).thenReturn(3);
+    lenient().when(properties.controlBucket()).thenReturn("control");
     lenient()
         .when(releases.findTop20ByStatusOrderByValidToAsc(Release.Status.PROCESSING))
         .thenReturn(List.of());
@@ -73,7 +70,7 @@ class ImportServiceTest {
   }
 
   @Test
-  void reconcilesCleanManifestAndIgnoresMissingReadyFiles() throws Exception {
+  void reconcilesCleanManifestAndIgnoresMissingCsvFiles() throws Exception {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
     var manifestNode = JSON.createObjectNode().put("manifest", true);
@@ -84,10 +81,6 @@ class ImportServiceTest {
     when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(true);
     when(store.read(BUCKET, MANIFEST_KEY)).thenReturn(manifestNode);
     when(manifest.id()).thenReturn(id);
-    when(manifest.target()).thenReturn(LocalDate.parse("2026-10-06"));
-    when(store.read(eq(BUCKET), org.mockito.ArgumentMatchers.startsWith("ready/")))
-        .thenReturn(null);
-
     try (MockedStatic<ReleaseManifest> mockedManifest = mockStatic(ReleaseManifest.class)) {
       mockedManifest.when(() -> ReleaseManifest.read(manifestNode)).thenReturn(manifest);
 
@@ -115,17 +108,25 @@ class ImportServiceTest {
   }
 
   @Test
-  void skipsCompletedManifestWithoutReadingIt() throws Exception {
+  void skipsCompletedManifestAfterReadingItsVersionedManifest() throws Exception {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
     var completed = processingRelease();
     completed.complete();
+    var node = JSON.createObjectNode().put("manifest", true);
+    var manifest = mock(ReleaseManifest.class);
     when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
+    when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(true);
+    when(store.read(BUCKET, MANIFEST_KEY)).thenReturn(node);
+    when(manifest.id()).thenReturn(UUID.fromString(RELEASE_ID));
     when(releases.findById(UUID.fromString(RELEASE_ID))).thenReturn(Optional.of(completed));
 
-    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+    try (MockedStatic<ReleaseManifest> mockedManifest = mockStatic(ReleaseManifest.class)) {
+      mockedManifest.when(() -> ReleaseManifest.read(node)).thenReturn(manifest);
+      assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+    }
 
-    verify(store, never()).isClean(any(), any(), any());
+    verify(store).isClean(BUCKET, MANIFEST_KEY, null);
     verify(registration, never()).register(any(), any(), any());
   }
 
@@ -134,8 +135,6 @@ class ImportServiceTest {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
     when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
-    when(releases.findById(UUID.fromString(RELEASE_ID)))
-        .thenReturn(Optional.of(processingRelease()));
     when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(false);
 
     assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
@@ -148,7 +147,6 @@ class ImportServiceTest {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
     when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
-    when(releases.findById(UUID.fromString(RELEASE_ID))).thenReturn(Optional.empty());
     when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(false);
 
     assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
@@ -158,29 +156,92 @@ class ImportServiceTest {
   }
 
   @Test
-  void reportsMalformedManifestKeyForRetry() throws Exception {
+  void ignoresKeysThatAreNotFeedManifests() throws Exception {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
     when(cursor.next())
-        .thenReturn(Optional.of("manifests/2026-10-06/not-a-uuid.json"), Optional.empty());
+        .thenReturn(Optional.of("daily_cou/20780/150104/downloads/not-a-manifest.zip"), Optional.empty());
 
-    var failure =
-        assertThrows(
-            IllegalStateException.class,
-            () -> service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
 
-    assertEquals(1, failure.getSuppressed().length);
-    assertTrue(failure.getSuppressed()[0].getMessage().contains("not-a-uuid.json"));
+    verify(store, never()).isClean(any(), any(), any());
+    verify(registration, never()).register(any(), any(), any());
+  }
+
+  @Test
+  void ignoresNonManifestObjectsFoundUnderFeedRoots() throws Exception {
+    var store = mock(ReleaseStore.class);
+    var cursor = mock(ReconciliationCursor.class);
+    when(cursor.next())
+        .thenReturn(
+            Optional.of(
+                "daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip"),
+            Optional.empty());
+
+    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+
+    verify(store, never()).isClean(any(), any(), any());
+    verify(registration, never()).register(any(), any(), any());
   }
 
   @Test
   void importCsvStartsReconciliationFromConfiguredProperties() throws Exception {
+    when(properties.controlBucket()).thenReturn("control");
     when(properties.landingBucket()).thenReturn(BUCKET);
     when(properties.region()).thenReturn("eu-west-2");
     when(s3.listObjectsV2(any(ListObjectsV2Request.class)))
         .thenReturn(ListObjectsV2Response.builder().build());
 
     assertEquals("RECONCILED", service.importCsv(context));
+  }
+
+  @Test
+  void importsCsvProducedAtExtractionLayoutFromConfiguredFeedManifest() throws Exception {
+    var packageVersion = PACKAGE_VERSION;
+    String manifestKey = KeyLayout.dataPackageManifestKey(packageVersion);
+    String csvKey =
+        KeyLayout.extractedCsvKey(
+            packageVersion,
+            Dataset.ADD_GB_ROYALMAILADDRESS,
+            Dataset.ADD_GB_ROYALMAILADDRESS.datasetName() + ".csv");
+    var extractionOutput = KeyLayout.parseLandingObject(csvKey);
+    assertEquals(packageVersion, extractionOutput.packageVersion());
+    assertEquals(Dataset.ADD_GB_ROYALMAILADDRESS, extractionOutput.dataset());
+    assertEquals(KeyLayout.LandingFileType.CSV, extractionOutput.fileType());
+    UUID id = UUID.fromString(RELEASE_ID);
+    var cursor = mock(ReconciliationCursor.class);
+    var store = mock(ReleaseStore.class);
+    var node = JSON.createObjectNode().put("manifest", true);
+    var evidence = JSON.createObjectNode().put("versionId", "csv-version").put("sha256", SHA256);
+    var manifest = mock(ReleaseManifest.class);
+    when(cursor.next()).thenReturn(Optional.of(manifestKey), Optional.empty());
+    when(store.isClean(BUCKET, manifestKey, null)).thenReturn(true);
+    when(store.read(BUCKET, manifestKey)).thenReturn(node);
+    when(manifest.id()).thenReturn(id);
+    when(releases.findById(id)).thenReturn(Optional.empty());
+    when(store.exists(BUCKET, csvKey)).thenReturn(true);
+    when(store.version(BUCKET, csvKey)).thenReturn("csv-version");
+    when(store.isClean(BUCKET, csvKey, "csv-version")).thenReturn(true);
+    when(store.read(BUCKET, KeyLayout.checksumKey(csvKey))).thenReturn(evidence);
+
+    try (MockedStatic<ReleaseManifest> mockedManifest = mockStatic(ReleaseManifest.class)) {
+      mockedManifest.when(() -> ReleaseManifest.read(node)).thenReturn(manifest);
+
+      assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+    }
+
+    verify(registration)
+        .register(
+            eq(manifest), eq(manifestKey), org.mockito.ArgumentMatchers.matches("[a-f0-9]{64}"));
+    verify(importer)
+        .importClean(
+            id,
+            Dataset.ADD_GB_ROYALMAILADDRESS,
+            BUCKET,
+            csvKey,
+            "csv-version",
+            SHA256,
+            "eu-west-2");
   }
 
   @Test
@@ -227,122 +288,6 @@ class ImportServiceTest {
 
     verify(cursor, never()).next();
     verify(promotion, never()).promote(any());
-  }
-
-  @Test
-  void importsOnlyCleanReadyFiles() throws Exception {
-    var store = mock(ReleaseStore.class);
-    var manifest = mock(ReleaseManifest.class);
-    UUID id = UUID.fromString(RELEASE_ID);
-    when(manifest.id()).thenReturn(id);
-    var reference =
-        JSON.createObjectNode()
-            .put("key", OBJECT_KEY)
-            .put("version", "version-1")
-            .put("sha256", SHA256);
-    when(store.read(BUCKET, "ready/" + RELEASE_ID + "/add_gb_royalmailaddress.json"))
-        .thenReturn(reference);
-    when(store.isReferenceClean(BUCKET, reference)).thenReturn(true);
-    when(importer.importClean(
-            id,
-            Dataset.ADD_GB_ROYALMAILADDRESS,
-            BUCKET,
-            OBJECT_KEY,
-            "version-1",
-            SHA256,
-            "eu-west-2"))
-        .thenReturn(true);
-
-    assertTrue(
-        ImportService.importReady(
-            store, BUCKET, manifest, Dataset.ADD_GB_ROYALMAILADDRESS, importer, "eu-west-2"));
-
-    verify(store).isReferenceClean(BUCKET, reference);
-    verify(importer)
-        .importClean(
-            id,
-            Dataset.ADD_GB_ROYALMAILADDRESS,
-            BUCKET,
-            OBJECT_KEY,
-            "version-1",
-            SHA256,
-            "eu-west-2");
-  }
-
-  @Test
-  void doesNotImportMissingOrUncleanReadyFiles() throws Exception {
-    var store = mock(ReleaseStore.class);
-    var manifest = mock(ReleaseManifest.class);
-    when(manifest.id()).thenReturn(UUID.fromString(RELEASE_ID));
-    var reference =
-        JSON.createObjectNode()
-            .put("key", OBJECT_KEY)
-            .put("version", "version-1")
-            .put("sha256", SHA256);
-    when(store.read(BUCKET, "ready/" + RELEASE_ID + "/add_gb_royalmailaddress.json"))
-        .thenReturn(null, reference);
-    when(store.isReferenceClean(BUCKET, reference)).thenReturn(false);
-
-    assertFalse(
-        ImportService.importReady(
-            store, BUCKET, manifest, Dataset.ADD_GB_ROYALMAILADDRESS, importer, "eu-west-2"));
-    assertFalse(
-        ImportService.importReady(
-            store, BUCKET, manifest, Dataset.ADD_GB_ROYALMAILADDRESS, importer, "eu-west-2"));
-
-    verify(importer, never()).importClean(any(), any(), any(), any(), any(), any(), any());
-  }
-
-  @Test
-  void rejectsReadyFileFromAnotherReleaseOrDataset() {
-    var manifest = mock(ReleaseManifest.class);
-    when(manifest.id()).thenReturn(UUID.fromString(RELEASE_ID));
-    var foreignReference =
-        new ObjectReference(
-            "quarantine/csv/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/add_gb_royalmailaddress/"
-                + "12345678-1234-1234-1234-123456789abc.csv",
-            "version-1",
-            SHA256);
-
-    var failure =
-        assertThrows(
-            IllegalArgumentException.class,
-            () ->
-                ImportService.validateReference(
-                    manifest, Dataset.ADD_GB_ROYALMAILADDRESS, foreignReference));
-
-    assertTrue(failure.getMessage().contains("CSV must belong to release and dataset"));
-  }
-
-  @Test
-  void stopsImportingWhenLambdaIsNearTimeout() {
-    when(context.getRemainingTimeInMillis()).thenReturn(59_999);
-
-    var failures =
-        ImportService.importAvailable(
-            mock(ReleaseStore.class),
-            BUCKET,
-            mock(ReleaseManifest.class),
-            importer,
-            "eu-west-2",
-            context);
-
-    assertTrue(failures.isEmpty());
-  }
-
-  @Test
-  void collectsReadyFileReadFailuresForRetry() throws Exception {
-    var store = mock(ReleaseStore.class);
-    when(store.read(eq(BUCKET), org.mockito.ArgumentMatchers.startsWith("ready/")))
-        .thenThrow(new IllegalStateException("S3 unavailable"));
-
-    var failures =
-        ImportService.importAvailable(
-            store, BUCKET, mock(ReleaseManifest.class), importer, "eu-west-2", context);
-
-    assertEquals(Dataset.values().length, failures.size());
-    assertTrue(
-        failures.stream().allMatch(failure -> failure.getMessage().equals("S3 unavailable")));
   }
 
   private Release processingRelease() {

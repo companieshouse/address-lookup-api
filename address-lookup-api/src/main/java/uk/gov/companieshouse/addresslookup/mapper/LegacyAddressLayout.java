@@ -67,9 +67,9 @@ final class LegacyAddressLayout {
 
   /** Address line 1 made of the street alone. */
   private static final List<Part> STREET_ONLY = List.of(Part.STREET);
+
   /** Address line 1 made of the building number followed by the street, e.g. "16 HIGH STREET". */
-  private static final List<Part> NUMBER_AND_STREET =
-      List.of(Part.BUILDING_NUMBER, Part.STREET);
+  private static final List<Part> NUMBER_AND_STREET = List.of(Part.BUILDING_NUMBER, Part.STREET);
 
   /** One rule for each combination of {@link #DECIDING_PARTS}; exactly one matches any address. */
   static final List<Rule> RULES =

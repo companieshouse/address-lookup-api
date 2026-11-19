@@ -1,21 +1,11 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.util;
 
-import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import uk.gov.companieshouse.release.model.Dataset;
 
-/** Shared S3 key layouts for acquisition objects and their legacy counterparts. */
+/** Shared builders and parsers for Control and Landing S3 keys. */
 public class KeyLayout {
-  private static final String UUID =
-      "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
-  private static final Pattern OBJECT =
-      Pattern.compile("^(zips|csv)/(\\w+-\\w+)/([a-z0-9_]+)\\.(zip|csv)$");
-  private static final Pattern SCANNED_OBJECT =
-      Pattern.compile("^Scanned/(" + UUID + ")/([a-z0-9_]+)\\.(zip|receipt\\.json)$");
-  private static final Pattern MANIFEST =
-      Pattern.compile("^acquisitions/(\\d{4}-\\d{2}-\\d{2})/(" + UUID + ")\\.json$");
   private static final Pattern COMPONENT = Pattern.compile("[A-Za-z0-9_-]+");
   private static final Pattern CSV_NAME = Pattern.compile("[A-Za-z0-9_-][A-Za-z0-9_.-]*\\.csv");
   private static final Pattern LANDING_OBJECT =
@@ -28,8 +18,6 @@ public class KeyLayout {
 
   private KeyLayout() {}
 
-  public record ZipKey(String releaseId, Dataset dataset) {}
-
   public enum Feed {
     INITIAL_FULL("initial_full"),
     DAILY_COU("daily_cou"),
@@ -41,7 +29,7 @@ public class KeyLayout {
       this.prefix = prefix;
     }
 
-    private static Feed fromPrefix(String prefix) {
+    public static Feed fromPrefix(String prefix) {
       for (Feed feed : values()) {
         if (feed.prefix.equals(prefix)) return feed;
       }
@@ -74,6 +62,17 @@ public class KeyLayout {
 
   public static String extractionCursorKey(String packageId) {
     return "cursors/" + requireComponent(packageId, "package ID") + ".extraction.json";
+  }
+
+  public static String reconciliationCursorKey(String name) {
+    return "reconciliation/" + requireComponent(name, "reconciliation name") + ".json";
+  }
+
+  public static String checksumKey(String key) {
+    return "metadata/checksums/"
+        + uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sha(
+            key.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+        + ".json";
   }
 
   public static String versionPrefix(PackageVersion version) {
@@ -111,6 +110,7 @@ public class KeyLayout {
     if (suffix.equals("manifest/data_package_manifest.json")) {
       return new LandingObject(version, null, LandingFileType.MANIFEST, null);
     }
+
     if (suffix.equals("manifest/unpack_state.json")) {
       return new LandingObject(version, null, LandingFileType.UNPACK_STATE, null);
     }
@@ -124,6 +124,14 @@ public class KeyLayout {
     requireCsvName(match.group(8));
     return new LandingObject(
         version, Dataset.named(match.group(7)), LandingFileType.CSV, match.group(8));
+  }
+
+  public static PackageVersion parsePackageVersionManifestKey(String key) {
+    LandingObject object = parseLandingObject(key);
+    if (object.fileType() != LandingFileType.MANIFEST) {
+      throw new IllegalArgumentException("Expected data package manifest key");
+    }
+    return object.packageVersion();
   }
 
   private static String requireComponent(String value, String name) {
@@ -142,68 +150,32 @@ public class KeyLayout {
   public enum FileType {
     ZIP,
     CSV,
-    RECEIPT,
-    MANIFEST
+    MANIFEST,
+    UNPACK_STATE,
+    ORDER_SUMMARY
   }
 
   /** Dataset is absent for release-level manifests. */
-  public record ObjectKey(String releaseId, Dataset dataset, FileType fileType) {}
+  public record ObjectKey(
+      String releaseId, Dataset dataset, FileType fileType, PackageVersion packageVersion) {}
 
-  public static String zipKey(String releaseId, Dataset dataset) {
-    String scannedKey = "Scanned/" + releaseId + "/" + dataset.datasetName() + ".zip";
-    if (SCANNED_OBJECT.matcher(scannedKey).matches()) return scannedKey;
-    return "zips/" + releaseId + "/" + dataset.datasetName() + ".zip";
+  public static String feedManifestPrefix(Feed feed) {
+    return feed.prefix + "/";
   }
 
-  public static String csvKey(String releaseId, Dataset dataset) {
-    return "csv/" + releaseId + "/" + dataset.datasetName() + ".csv";
-  }
-
-  /**
-   * @throws IllegalArgumentException if the key is not an exact supported object key
-   */
+  /** @throws IllegalArgumentException if the key is not an exact Landing key */
   public static ObjectKey parseObjectKey(String key) {
-    if (key == null) throw new IllegalArgumentException("Missing S3 key");
-    Matcher manifest = MANIFEST.matcher(key);
-    if (manifest.matches()) {
-      try {
-        LocalDate.parse(manifest.group(1));
-      } catch (DateTimeParseException e) {
-        throw new IllegalArgumentException("Invalid manifest date", e);
-      }
-      return new ObjectKey(manifest.group(2), null, FileType.MANIFEST);
-    }
-    Matcher scanned = SCANNED_OBJECT.matcher(key);
-    if (scanned.matches()) {
-      return new ObjectKey(
-          scanned.group(1),
-          Dataset.named(scanned.group(2)),
-          "zip".equals(scanned.group(3)) ? FileType.ZIP : FileType.RECEIPT);
-    }
-    Matcher m = OBJECT.matcher(key);
-    if (!m.matches()) throw new IllegalArgumentException("Invalid object key");
-    boolean zipKey = "zip".equals(m.group(4)) && "zips".equals(m.group(1));
-    boolean csvKey = "csv".equals(m.group(4)) && "csv".equals(m.group(1));
-    if (!zipKey && !csvKey) {
-      throw new IllegalArgumentException("Invalid object key");
-    }
-    return new ObjectKey(
-        m.group(2),
-        Dataset.named(m.group(3)),
-        "zip".equals(m.group(4)) ? FileType.ZIP : FileType.CSV);
-  }
-
-  /** @throws IllegalArgumentException if the key is not a valid ZIP key for a supported dataset */
-  public static ZipKey parseZipKey(String key) {
-    ObjectKey object = parseObjectKey(key);
-    if (object.fileType() != FileType.ZIP) throw new IllegalArgumentException("Expected ZIP key");
-    return new ZipKey(object.releaseId(), object.dataset());
-  }
-
-  /** @throws IllegalArgumentException if the key is not a valid CSV key for a supported dataset */
-  public static ObjectKey parseCsvKey(String key) {
-    ObjectKey object = parseObjectKey(key);
-    if (object.fileType() != FileType.CSV) throw new IllegalArgumentException("Expected CSV key");
-    return object;
+    LandingObject landing = parseLandingObject(key);
+    String identity =
+        landing.packageVersion().packageId() + "-" + landing.packageVersion().versionId();
+    FileType type =
+        switch (landing.fileType()) {
+          case ZIP -> FileType.ZIP;
+          case CSV -> FileType.CSV;
+          case MANIFEST -> FileType.MANIFEST;
+          case UNPACK_STATE -> FileType.UNPACK_STATE;
+          case ORDER_SUMMARY -> FileType.ORDER_SUMMARY;
+        };
+    return new ObjectKey(identity, landing.dataset(), type, landing.packageVersion());
   }
 }

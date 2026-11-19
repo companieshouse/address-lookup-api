@@ -62,14 +62,13 @@ public final class ScanResultsService {
       rejectionCode = "INVALID_INPUT";
       decision = reject(payload, parsed, rejectionCode, invalidReason.message(), objectUri);
     } else if ("NO_THREATS_FOUND".equals(result)) {
-      decision =
-          switch (parsed.fileType()) {
-            case ZIP -> "ExtractRequested";
-            case CSV -> "DatasetReady";
-            case RECEIPT -> "ReceiptReady";
-            case MANIFEST -> "ManifestReady";
-          };
-      commands.sendIngestion(decision, payload);
+      decision = switch (parsed.fileType()) {
+        case ZIP -> "ExtractRequested";
+        case CSV -> "DatasetReady";
+        case MANIFEST -> "ManifestReady";
+        case UNPACK_STATE, ORDER_SUMMARY -> "IGNORED_OBJECT";
+      };
+      if (!"IGNORED_OBJECT".equals(decision)) commands.sendIngestion(decision, payload);
     } else {
       rejectionCode = "THREATS_FOUND".equals(result) ? MALWARE_FOUND : "SCAN_INCONCLUSIVE";
       String message =
@@ -104,8 +103,7 @@ public final class ScanResultsService {
     if (parsed == null) return new Validation(null, InvalidReason.INVALID_OBJECT_KEY);
     if (versionId == null) return new Validation(parsed, InvalidReason.MISSING_VERSION_ID);
     return new Validation(
-        parsed,
-        landingBucket.equals(bucket) ? null : InvalidReason.UNKNOWN_BUCKET_FOR_OBJECT_KEY);
+        parsed, landingBucket.equals(bucket) ? null : InvalidReason.UNKNOWN_BUCKET_FOR_OBJECT_KEY);
   }
 
   private String reject(
@@ -144,8 +142,9 @@ public final class ScanResultsService {
     return switch (fileType) {
       case ZIP -> "zip-scan";
       case CSV -> "csv-scan";
-      case RECEIPT -> "receipt-scan";
       case MANIFEST -> "manifest-scan";
+      case UNPACK_STATE -> "unpack-state-scan";
+      case ORDER_SUMMARY -> "order-summary-scan";
     };
   }
 

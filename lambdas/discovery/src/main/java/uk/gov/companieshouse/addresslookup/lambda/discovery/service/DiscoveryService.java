@@ -38,6 +38,7 @@ import uk.gov.companieshouse.addresslookup.lambda.discovery.model.VersionCursor;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
+import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
 import uk.gov.companieshouse.release.model.DatasetDefault;
@@ -68,8 +69,6 @@ public final class DiscoveryService {
   private static final String DATA_PACKAGE_FIELD = "data_package";
   private static final String VERSION_ID_FIELD = "version_id";
   private static final String RELEASE_ID_FIELD = "release_id";
-  private static final String CURSOR_KEY = "control/address-release/active.json";
-  private static final String PATH_KEY_STUB = "acquisitions/%s/%s.json";
 
   private static final String MISSING_CURSOR_FILE_MESSAGE =
       "The active.json Cursor file could not be found in the S3 bucket.";
@@ -100,7 +99,20 @@ public final class DiscoveryService {
   }
 
   private String discover(JsonNode input) throws Exception {
+    SupplyType mode = deriveMode(input);
+    if (mode == COU) {
+      List<String> packageIds = properties.packagesForFeed(KeyLayout.Feed.DAILY_COU);
+      check(!packageIds.isEmpty(), "No daily_cou packages configured in OS_PACKAGES");
+      String result = null;
+      for (String packageId : packageIds) {
+        result = discover(input, packageId);
+      }
+      return result;
+    }
+    return discover(input, null);
+  }
 
+  private String discover(JsonNode input, String configuredPackageId) throws Exception {
     SupplyType mode = deriveMode(input);
 
     LOG.debug("Starting discovery", Map.of("mode", mode.name()));
@@ -108,12 +120,17 @@ public final class DiscoveryService {
     String urlPackageVersionData = "";
     VersionCursor cursor = null;
     String packageId = null;
+    KeyLayout.Feed feed;
     if (mode == FULL) {
       // Get version from input
       JsonNode versionsNode = input.get("versions");
       check(versionsNode != null, "versions node missing from request for FULL mode");
       String versionId = required(versionsNode, VERSION_ID_FIELD);
       packageId = required(versionsNode, DATA_PACKAGE_FIELD);
+      feed = properties.feedForPackage(packageId);
+      check(
+          feed == KeyLayout.Feed.INITIAL_FULL || feed == KeyLayout.Feed.MONTHLY_FULL,
+          "FULL package must be configured as initial_full or monthly_full");
 
       urlPackageVersionData =
           properties
@@ -121,15 +138,17 @@ public final class DiscoveryService {
               .replace("{version}", versionId)
               .replace("{dataPackage}", packageId);
     } else if (mode == COU) {
-      // Get the previous version from the Cursor in the S3 bucket
-      cursor = getCurrentCursor();
-      packageId = cursor.dataPackageId();
+      packageId = configuredPackageId;
+      cursor = getCurrentCursor(packageId);
 
       urlPackageVersionData = getNextVersionUrl(cursor);
       if (urlPackageVersionData == null) {
         LOG.error("Failed to get next version URL", Map.of("mode", mode.name()));
         return "No Next Version URL";
       }
+      feed = KeyLayout.Feed.DAILY_COU;
+    } else {
+      throw new IllegalStateException("Unsupported supply mode");
     }
 
     PackageVersionData packageVersionData = getPackageVersionData(urlPackageVersionData);
@@ -145,6 +164,8 @@ public final class DiscoveryService {
 
     Map<String, OrderSummary> orderSummaries =
         retrieveAndValidateOrderSummaries(datasetDownloadsMap);
+    var packageVersion =
+        new KeyLayout.PackageVersion(feed, packageId, packageVersionData.id());
 
     LocalDate targetDate = calculateTargetDateIfThereIsAValidOne(orderSummaries);
 
@@ -152,6 +173,7 @@ public final class DiscoveryService {
       return NO_COMMON_CONTIGUOUS_RELEASE_RESPONSE;
     }
     LOG.debug("Calculated target date", Map.of("target_date", targetDate.toString()));
+    saveOrderSummaries(orderSummaries, packageVersion);
 
     ReleaseManifest releaseManifest =
         generateReleaseManifest(
@@ -165,7 +187,10 @@ public final class DiscoveryService {
     LOG.debug(
         "Generated release manifest", Map.of(RELEASE_ID_FIELD, releaseManifest.id().toString()));
 
-    final String planKey = saveManifestReturnPlanKey(releaseManifest);
+    final String planKey =
+        saveManifestReturnPlanKey(
+            releaseManifest,
+            packageVersion);
 
     datasets.stream()
         .map(DatasetDefault::name)
@@ -177,7 +202,7 @@ public final class DiscoveryService {
             packageVersionData.id(),
             targetDate.format(DateTimeFormatter.ISO_LOCAL_DATE));
 
-    saveOrUpdateCursorToS3Bucket(cursor);
+    saveOrUpdateCursorToS3Bucket(cursor, packageId);
 
     String releaseId = releaseManifest.id().toString();
     LOG.info("Discovery completed successfully", Map.of(RELEASE_ID_FIELD, releaseId));
@@ -191,38 +216,35 @@ public final class DiscoveryService {
     return SupplyType.valueOf(mode);
   }
 
-  private VersionCursor getCurrentCursor() throws Exception {
+  private VersionCursor getCurrentCursor(String packageId) throws Exception {
+    String cursorKey = KeyLayout.downloadCursorKey(packageId);
 
     ResponseInputStream<GetObjectResponse> response =
         s3Client.getObject(
-            GetObjectRequest.builder().bucket(properties.controlBucket()).key(CURSOR_KEY).build());
+            GetObjectRequest.builder().bucket(properties.controlBucket()).key(cursorKey).build());
 
     check(response != null, MISSING_CURSOR_FILE_MESSAGE);
     return JSON.readValue(response, VersionCursor.class);
   }
 
-  private void saveOrUpdateCursorToS3Bucket(Object payload) throws JsonProcessingException {
-    saveToS3Bucket(payload, properties.controlBucket(), CURSOR_KEY, false);
+  private void saveOrUpdateCursorToS3Bucket(Object payload, String packageId)
+      throws JsonProcessingException {
+    saveToS3Bucket(payload, properties.controlBucket(), KeyLayout.downloadCursorKey(packageId));
   }
 
-  private void saveNewOnlyToS3Bucket(Object payload, String key) throws JsonProcessingException {
-    saveToS3Bucket(payload, properties.landingBucket(), key, true);
-  }
-
-  private void saveToS3Bucket(Object payload, String bucket, String key, boolean ifNoneMatch)
+  private void saveToS3Bucket(Object payload, String bucket, String key)
       throws JsonProcessingException {
     try {
       s3Client.putObject(
           PutObjectRequest.builder()
               .bucket(bucket)
               .key(key)
-              .ifNoneMatch(ifNoneMatch ? "*" : null)
               .contentType("application/json")
               .build(),
           RequestBody.fromString(JSON.writeValueAsString(payload)));
     } catch (S3Exception e) {
       LOG.error("Failed to save to S3", e, Map.of("bucket", bucket, "key", key));
-      if (e.statusCode() != 412) throw e;
+      throw e;
     }
   }
 
@@ -405,12 +427,25 @@ public final class DiscoveryService {
     return UUID.nameUUIDFromBytes(json.getBytes(StandardCharsets.UTF_8));
   }
 
-  private String saveManifestReturnPlanKey(ReleaseManifest releaseManifest)
+  private String saveManifestReturnPlanKey(
+      ReleaseManifest releaseManifest, KeyLayout.PackageVersion packageVersion)
       throws JsonProcessingException {
-    String pathKey = String.format(PATH_KEY_STUB, releaseManifest.target(), releaseManifest.id());
+    String pathKey = KeyLayout.dataPackageManifestKey(packageVersion);
 
-    saveNewOnlyToS3Bucket(releaseManifest.json(), pathKey);
+    saveToS3Bucket(releaseManifest.json(), properties.landingBucket(), pathKey);
     return pathKey;
+  }
+
+  private void saveOrderSummaries(
+      Map<String, OrderSummary> orderSummaries, KeyLayout.PackageVersion packageVersion)
+      throws JsonProcessingException {
+    for (var entry : orderSummaries.entrySet()) {
+      saveToS3Bucket(
+          entry.getValue(),
+          properties.landingBucket(),
+          KeyLayout.orderSummaryKey(
+          packageVersion, uk.gov.companieshouse.release.model.Dataset.named(entry.getKey())));
+    }
   }
 
   private void publishDownloadCommands(String planKey, String dataset)

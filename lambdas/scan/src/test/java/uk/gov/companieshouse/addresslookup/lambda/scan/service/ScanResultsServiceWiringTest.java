@@ -23,8 +23,7 @@ class ScanResultsServiceWiringTest {
   void springCreatesServiceFromPropertiesWithoutStringBeansOrSourceBucket() {
     try (var context = new AnnotationConfigApplicationContext()) {
       context.registerBean(Commands.class, () -> commands);
-      context.registerBean(
-          AcquisitionProperties.class, () -> properties("landing-bucket"));
+      context.registerBean(AcquisitionProperties.class, () -> properties("landing-bucket"));
       context.register(ScanResultsService.class);
       context.refresh();
 

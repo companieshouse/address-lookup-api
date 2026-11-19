@@ -15,7 +15,7 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CompletedPart;
 import software.amazon.awssdk.services.s3.model.S3Exception;
-import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport;
+import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
 
@@ -64,22 +64,49 @@ public final class StreamingS3 {
   }
 
   public Uploaded put(InputStream in, String bucket, String key, String expectedMd5, long limit)
-      throws IOException, NoSuchAlgorithmException, ChecksumMismatchException,
+      throws IOException,
+          NoSuchAlgorithmException,
+          ChecksumMismatchException,
           ExistingObjectVerificationException {
-    var verifier = expectedMd5 == null ? ChecksumVerifier.none() : ChecksumVerifier.md5(expectedMd5);
-    return put(in, new ObjectTarget(bucket, key), limit, verifier, ExistingObjectPolicy.failOnConflict());
+    var verifier =
+        expectedMd5 == null ? ChecksumVerifier.none() : ChecksumVerifier.md5(expectedMd5);
+    return put(
+        in, new ObjectTarget(bucket, key), limit, verifier, ExistingObjectPolicy.failOnConflict());
   }
 
   public Uploaded putIdempotent(InputStream in, String bucket, String key, long limit)
-      throws IOException, NoSuchAlgorithmException, ChecksumMismatchException,
+      throws IOException,
+          NoSuchAlgorithmException,
+          ChecksumMismatchException,
           ExistingObjectVerificationException {
     return put(in, new ObjectTarget(bucket, key), limit, ChecksumVerifier.none(), reuseExisting);
   }
 
+  public Uploaded putOverwrite(InputStream in, String bucket, String key, long limit)
+      throws IOException,
+          NoSuchAlgorithmException,
+          ChecksumMismatchException,
+          ExistingObjectVerificationException {
+    return putOverwrite(in, bucket, key, null, limit);
+  }
+
+  public Uploaded putOverwrite(
+      InputStream in, String bucket, String key, String expectedMd5, long limit)
+      throws IOException,
+          NoSuchAlgorithmException,
+          ChecksumMismatchException,
+          ExistingObjectVerificationException {
+    return put(
+        in,
+        new ObjectTarget(bucket, key),
+        limit,
+        expectedMd5 == null ? ChecksumVerifier.none() : ChecksumVerifier.md5(expectedMd5),
+        ExistingObjectPolicy.failOnConflict(),
+        true);
+  }
+
   public static String checksumKey(String key) {
-    return "metadata/checksums/"
-        + RuntimeSupport.sha(key.getBytes(java.nio.charset.StandardCharsets.UTF_8))
-        + ".json";
+    return KeyLayout.checksumKey(key);
   }
 
   private Uploaded put(
@@ -88,7 +115,23 @@ public final class StreamingS3 {
       long limit,
       ChecksumVerifier verifier,
       ExistingObjectPolicy policy)
-      throws IOException, NoSuchAlgorithmException, ChecksumMismatchException,
+      throws IOException,
+          NoSuchAlgorithmException,
+          ChecksumMismatchException,
+          ExistingObjectVerificationException {
+    return put(in, target, limit, verifier, policy, false);
+  }
+
+  private Uploaded put(
+      InputStream in,
+      ObjectTarget target,
+      long limit,
+      ChecksumVerifier verifier,
+      ExistingObjectPolicy policy,
+      boolean overwrite)
+      throws IOException,
+          NoSuchAlgorithmException,
+          ChecksumMismatchException,
           ExistingObjectVerificationException {
     String uploadId =
         s3.createMultipartUpload(b -> b.bucket(target.bucket()).key(target.key())).uploadId();
@@ -99,11 +142,11 @@ public final class StreamingS3 {
 
       // Complete the multipart upload only after proving the supplier checksum matches.
       verifier.verify(streamed.md5());
-      String version = completeUpload(target, uploadId, streamed, policy);
+      String version = completeUpload(target, uploadId, streamed, policy, overwrite);
 
       var uploaded =
           new Uploaded(target.key(), version, streamed.sha256(), streamed.md5(), streamed.bytes());
-      saveChecksumEvidence(target, uploaded, policy);
+      saveChecksumEvidence(target, uploaded, policy, overwrite);
       return uploaded;
     } catch (Exception e) {
       abortIncompleteUpload(target, uploadId, e);
@@ -112,7 +155,8 @@ public final class StreamingS3 {
   }
 
   /** Streams the input into bounded parts, hashing as it goes; never re-reads the object from S3. */
-  private StreamedParts uploadParts(InputStream in, ObjectTarget target, String uploadId, long limit)
+  private StreamedParts uploadParts(
+      InputStream in, ObjectTarget target, String uploadId, long limit)
       throws IOException, NoSuchAlgorithmException {
     var parts = new ArrayList<CompletedPart>();
     var digests = new Digests();
@@ -129,8 +173,7 @@ public final class StreamingS3 {
       }
       total += bytes.length;
       check(
-          total <= limit && parts.size() < MAX_PARTS,
-          "Object exceeds configured streaming budget");
+          total <= limit && parts.size() < MAX_PARTS, "Object exceeds configured streaming budget");
 
       digests.update(bytes);
       parts.add(uploadPart(target, uploadId, parts.size() + 1, bytes));
@@ -155,12 +198,21 @@ public final class StreamingS3 {
   }
 
   private String completeUpload(
-      ObjectTarget target, String uploadId, StreamedParts streamed, ExistingObjectPolicy policy)
+      ObjectTarget target,
+      String uploadId,
+      StreamedParts streamed,
+      ExistingObjectPolicy policy,
+      boolean overwrite)
       throws ExistingObjectVerificationException {
     try {
       var result =
-          s3.completeMultipartUpload(
-              b ->
+          overwrite
+              ? s3.completeMultipartUpload(b ->
+                  b.bucket(target.bucket())
+                      .key(target.key())
+                      .uploadId(uploadId)
+                      .multipartUpload(m -> m.parts(streamed.parts())))
+              : s3.completeMultipartUpload(b ->
                   b.bucket(target.bucket())
                       .key(target.key())
                       .uploadId(uploadId)
@@ -175,15 +227,21 @@ public final class StreamingS3 {
     }
   }
 
-  /** Stores immutable checksum evidence separately from the receipt used by the workflow. */
+  /** Stores checksum evidence separately from the uploaded object. */
   private void saveChecksumEvidence(
-      ObjectTarget target, Uploaded uploaded, ExistingObjectPolicy policy) throws IOException {
+      ObjectTarget target, Uploaded uploaded, ExistingObjectPolicy policy, boolean overwrite)
+      throws IOException {
     String checksumKey = checksumKey(target.key());
     String evidence = JSON.writeValueAsString(evidenceOf(target, uploaded));
     try {
-      s3.putObject(
-          b -> b.bucket(target.bucket()).key(checksumKey).ifNoneMatch("*"),
-          RequestBody.fromString(evidence));
+      if (overwrite) {
+        s3.putObject(
+            b -> b.bucket(target.bucket()).key(checksumKey), RequestBody.fromString(evidence));
+      } else {
+        s3.putObject(
+            b -> b.bucket(target.bucket()).key(checksumKey).ifNoneMatch("*"),
+            RequestBody.fromString(evidence));
+      }
       LOG.info(
           "Multipart upload completed",
           Map.of(
@@ -196,6 +254,7 @@ public final class StreamingS3 {
               "version",
               uploaded.version()));
     } catch (S3Exception e) {
+      if (overwrite) throw e;
       if (!ReleaseStore.isPreconditionFailed(e)) {
         throw e;
       }
@@ -205,12 +264,18 @@ public final class StreamingS3 {
 
   private static Map<String, Object> evidenceOf(ObjectTarget target, Uploaded uploaded) {
     return Map.of(
-        BUCKET_FIELD, target.bucket(),
-        KEY_FIELD, target.key(),
-        "versionId", uploaded.version(),
-        "md5", uploaded.md5(),
-        "sha256", uploaded.sha256(),
-        "bytes", uploaded.bytes());
+        BUCKET_FIELD,
+        target.bucket(),
+        KEY_FIELD,
+        target.key(),
+        "versionId",
+        uploaded.version(),
+        "md5",
+        uploaded.md5(),
+        "sha256",
+        uploaded.sha256(),
+        "bytes",
+        uploaded.bytes());
   }
 
   static String requireVersioned(String version) {
@@ -237,7 +302,8 @@ public final class StreamingS3 {
     private final MessageDigest sha256;
 
     Digests() throws NoSuchAlgorithmException {
-      // MD5 only verifies download integrity against the checksum published by OS; not used for security.
+      // MD5 only verifies download integrity against the checksum published by OS; not used for
+      // security.
       this.md5 = MessageDigest.getInstance("MD5"); // NOSONAR java:S4790
       this.sha256 = MessageDigest.getInstance(SHA_256);
     }

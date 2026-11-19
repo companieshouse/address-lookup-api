@@ -12,9 +12,7 @@ import uk.gov.companieshouse.addresslookup.model.LegacyAddress;
 public interface LegacyAddressMapper {
 
   @Mapping(target = "premise", expression = "java(toPremise(address))")
-  @Mapping(
-      target = "addressLine1",
-      expression = "java(toAddressLine1(address))")
+  @Mapping(target = "addressLine1", expression = "java(toAddressLine1(address))")
   @Mapping(
       target = "addressLine2",
       expression =

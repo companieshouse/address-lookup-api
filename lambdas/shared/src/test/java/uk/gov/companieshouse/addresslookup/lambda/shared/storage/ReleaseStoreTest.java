@@ -25,16 +25,14 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.testsupport.FakeS3;
 
 final class ReleaseStoreTest {
   private static final String BUCKET = "landing-bucket";
-  private static final String KEY = "Scanned/zip.zip";
-  private static final String ID = "4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56";
-  private static final String DATASET = "add_gb_royalmailaddress";
+  private static final String KEY = "daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip";
 
   private final FakeS3 s3 = new FakeS3();
   private final ReleaseStore store = new ReleaseStore(s3.client());
 
   @Test
   void readReturnsNullWhenKeyDoesNotExist() throws Exception {
-    assertNull(store.read(BUCKET, "acquisitions/missing.json"));
+    assertNull(store.read(BUCKET, "missing.json"));
   }
 
   @Test
@@ -104,6 +102,25 @@ final class ReleaseStoreTest {
   }
 
   @Test
+  void updateStatePreservesConcurrentFieldsAndRetriesConditionalConflict() throws Exception {
+    String key = "initial_full/24833/150450/manifest/unpack_state.json";
+    s3.objects.put(key, "{\"datasets\":{\"first\":{\"status\":\"EXTRACTED\"}}}".getBytes());
+    s3.putConflicts = 1;
+
+    var updated =
+        store.updateState(
+            BUCKET,
+            key,
+            state -> {
+              state.with("datasets").putObject("second").put("status", "EXTRACTED");
+              return state;
+            });
+
+    assertEquals("EXTRACTED", updated.path("datasets").path("first").path("status").asText());
+    assertEquals("EXTRACTED", updated.path("datasets").path("second").path("status").asText());
+  }
+
+  @Test
   void versionReturnsTheVersionedObjectId() {
     s3.versions.put(KEY, "abc123");
 
@@ -170,7 +187,8 @@ final class ReleaseStoreTest {
     s3.scanStatus.put(KEY, ReleaseStore.CLEAN);
     var ref = JSON.createObjectNode().put("s3Key", KEY).put("version", "certified-version");
 
-    var failure = assertThrows(IllegalArgumentException.class, () -> store.isReferenceClean(BUCKET, ref));
+    var failure =
+        assertThrows(IllegalArgumentException.class, () -> store.isReferenceClean(BUCKET, ref));
 
     assertEquals("Object changed after certification: " + KEY, failure.getMessage());
   }
@@ -193,45 +211,6 @@ final class ReleaseStoreTest {
     assertEquals(
         "looked-up",
         ReleaseStore.objectVersion(store, BUCKET, JSON.createObjectNode().put("s3Key", KEY)));
-  }
-
-  @Test
-  void planKeyIsBuiltFromTargetAndReleaseId() {
-    var plan = JSON.createObjectNode().put("target", "2026-05-16").put("releaseId", ID);
-
-    assertEquals("acquisitions/2026-05-16/" + ID + ".json", ReleaseStore.planKey(plan));
-  }
-
-  @Test
-  void receiptKeyDiffersForDownloadAndOtherSteps() {
-    assertEquals(
-        "Scanned/" + ID + "/" + DATASET + ".receipt.json",
-        ReleaseStore.receiptKey(ID, DATASET, "download"));
-    assertEquals(
-        "control/" + ID + "/" + DATASET + "/extract.json",
-        ReleaseStore.receiptKey(ID, DATASET, "extract"));
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> ReleaseStore.receiptKey("not-a-uuid", DATASET, "download"));
-  }
-
-  @Test
-  void downloadZipKeyUsesScannedPrefix() {
-    assertEquals(
-        "Scanned/" + ID + "/" + DATASET + ".zip", ReleaseStore.downloadZipKey(ID, DATASET));
-  }
-
-  @Test
-  void receiptRoundTripsAnUploadRecord() throws Exception {
-    assertNull(store.receipt(BUCKET, ID, DATASET, "extract"));
-    var upload = new StreamingS3.Uploaded("quarantine/csv/x.csv", "v9", "sha", "md5", 42L);
-
-    store.receipt(BUCKET, ID, DATASET, "extract", upload);
-
-    var saved = store.receipt(BUCKET, ID, DATASET, "extract");
-    assertEquals("quarantine/csv/x.csv", saved.path("key").asText());
-    assertEquals("v9", saved.path("version").asText());
-    assertEquals(42L, saved.path("bytes").asLong());
   }
 
   private static S3Client clientListingKey(String key) {

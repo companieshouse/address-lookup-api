@@ -22,8 +22,7 @@ class LegacyAddressMapperTest {
 
   private final LegacyAddressMapper mapper = Mappers.getMapper(LegacyAddressMapper.class);
 
-  @Mock
-  private RoyalMailAddressLookup address;
+  @Mock private RoyalMailAddressLookup address;
 
   static Stream<Arguments> layouts() {
     return Stream.of(

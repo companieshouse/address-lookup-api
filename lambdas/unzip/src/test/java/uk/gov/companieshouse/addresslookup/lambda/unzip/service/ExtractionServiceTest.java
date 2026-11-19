@@ -1,5 +1,6 @@
 package uk.gov.companieshouse.addresslookup.lambda.unzip.service;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -8,7 +9,6 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 import com.amazonaws.services.lambda.runtime.Context;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -47,15 +47,15 @@ import software.amazon.awssdk.services.s3.model.Tag;
 import software.amazon.awssdk.services.s3.model.UploadPartResponse;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
-import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
+import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
+import uk.gov.companieshouse.release.model.Dataset;
 import uk.gov.companieshouse.release.model.DatasetCatalog;
 
 @ExtendWith(MockitoExtension.class)
 final class ExtractionServiceTest {
   private static final String DATASET = "add_gb_royalmailaddress";
   private static final String ID = "12345678-1234-1234-1234-123456789abc";
-  private static final String ZIP_KEY = "Scanned/" + ID + "/" + DATASET + ".zip";
-  private static final String RECEIPT_KEY = ReleaseStore.receiptKey(ID, DATASET, "extract");
+  private static final String ZIP_KEY = "daily_cou/20780/150104/downloads/" + DATASET + ".zip";
   private static final String SOURCE = "landing";
   private static final String CHECKED = SOURCE;
 
@@ -66,10 +66,7 @@ final class ExtractionServiceTest {
   @Mock private Context context;
   private final Map<StoredObject, byte[]> objects = new HashMap<>();
   private byte[] uploaded;
-  private boolean failReceiptOnce;
   private boolean failEvidenceOnce;
-  private boolean conflictReceiptOnce;
-  private boolean conflictingReceiptOnce;
   private ExtractionService service;
 
   @BeforeEach
@@ -112,7 +109,7 @@ final class ExtractionServiceTest {
             throw new IllegalStateException(
                 "Missing fixture: " + request.bucket() + "/" + request.key());
           return new ResponseInputStream<>(
-              GetObjectResponse.builder().build(),
+              GetObjectResponse.builder().eTag("fixture-etag").build(),
               AbortableInputStream.create(new ByteArrayInputStream(content)));
         });
     lenient()
@@ -288,9 +285,34 @@ final class ExtractionServiceTest {
 
     assertEquals("CSV_SCAN", service.unzip(event(), context));
     assertEquals(csv, new String(uploaded, StandardCharsets.UTF_8));
-    JsonNode receipt = capturedReceipt();
-    assertEquals(2, receipt.path("zipFileCount").asInt());
-    assertEquals(csvKey(), receipt.path("key").asText());
+    assertTrue(objects.containsKey(stored(CHECKED, csvKey())));
+    var parsedCsv = KeyLayout.parseLandingObject(csvKey());
+    assertEquals(KeyLayout.LandingFileType.CSV, parsedCsv.fileType());
+    assertEquals("20780", parsedCsv.packageVersion().packageId());
+    assertEquals("150104", parsedCsv.packageVersion().versionId());
+  }
+
+  @Test
+  void acceptsDownloadOutputAndProducesImportLayoutCsv() throws Exception {
+    var packageVersion =
+        new KeyLayout.PackageVersion(KeyLayout.Feed.DAILY_COU, "20780", "150104");
+    String downloadOutputKey =
+        KeyLayout.downloadZipKey(packageVersion, Dataset.named(DATASET));
+    assertEquals(ZIP_KEY, downloadOutputKey);
+    cleanZip(validZip());
+    stubUpload();
+
+    assertEquals("CSV_SCAN", service.unzip(event(downloadOutputKey), context));
+
+    String extractedKey = csvKey();
+    assertEquals(
+        KeyLayout.extractedCsvKey(
+            packageVersion, Dataset.named(DATASET), DATASET + ".csv"),
+        extractedKey);
+    var importInput = KeyLayout.parseLandingObject(extractedKey);
+    assertEquals(packageVersion, importInput.packageVersion());
+    assertEquals(KeyLayout.LandingFileType.CSV, importInput.fileType());
+    assertTrue(objects.containsKey(stored(CHECKED, extractedKey)));
   }
 
   @Test
@@ -299,14 +321,24 @@ final class ExtractionServiceTest {
     stubUpload();
 
     assertEquals("CSV_SCAN", service.unzip(event(), context));
-    JsonNode receipt = capturedReceipt();
-    assertEquals(ID, receipt.path("releaseId").asText());
-    assertEquals(DATASET, receipt.path("dataset").asText());
-    assertEquals("Scanned/" + ID + "/" + DATASET + ".csv", receipt.path("key").asText());
-    assertEquals("csv-version", receipt.path("version").asText());
-    assertTrue(receipt.path("sha256").asText().matches("[a-f0-9]{64}"));
-    assertEquals("zip-version", receipt.path("zipVersion").asText());
-    assertEquals(csvKey(), receipt.path("key").asText());
+    assertTrue(objects.containsKey(stored(CHECKED, csvKey())));
+    var unpackState =
+        uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON.readTree(
+            objects.get(stored(CHECKED, KeyLayout.unpackStateKey(
+                new KeyLayout.PackageVersion(KeyLayout.Feed.DAILY_COU, "20780", "150104")))));
+    assertEquals(
+        "zip-version",
+        unpackState
+            .path("datasets")
+            .path(DATASET)
+            .path("zipVersion")
+            .asText());
+    assertEquals(
+        csvKey(),
+        unpackState.path("datasets").path(DATASET).path("csvKey").asText());
+    assertTrue(
+        objects.containsKey(
+            stored("control", KeyLayout.extractionCursorKey("20780"))));
     verify(s3)
         .getObjectTagging(
             argThat((GetObjectTaggingRequest request) ->
@@ -323,7 +355,7 @@ final class ExtractionServiceTest {
   }
 
   @Test
-  void eventFailureAfterExtractReceiptIsWritten() throws Exception {
+  void eventFailureAfterCsvIsWritten() throws Exception {
     cleanZip(validZip());
     stubUpload();
     doThrow(new IllegalStateException("EventBridge unavailable"))
@@ -331,13 +363,12 @@ final class ExtractionServiceTest {
         .send("CSV_SCAN", DATASET);
     var request = event();
     assertThrows(IllegalStateException.class, () -> service.unzip(request, context));
-    JsonNode receipt = capturedReceipt();
-    assertEquals("EXTRACTED", receipt.path("status").asText());
+    assertTrue(objects.containsKey(stored(CHECKED, csvKey())));
     verify(commands).send("CSV_SCAN", DATASET);
   }
 
   @Test
-  void repeatedCallRetriesEvent() throws Exception {
+  void repeatedCallUsesUnpackStateAndRetriesEventWithoutReuploading() throws Exception {
     cleanZip(validZip());
     stubUpload();
 
@@ -346,11 +377,11 @@ final class ExtractionServiceTest {
 
     verify(s3, times(1)).createMultipartUpload(any(Consumer.class));
     verify(commands, times(2)).send("CSV_SCAN", DATASET);
-    assertEquals(csvKey(), capturedReceipt().path("key").asText());
+    assertTrue(objects.containsKey(stored(CHECKED, csvKey())));
   }
 
   @Test
-  void retriesFailedEventWithoutExtractingAgain() throws Exception {
+  void failedEventRetryUsesUnpackStateWithoutReuploading() throws Exception {
     cleanZip(validZip());
     stubUpload();
     doThrow(new IllegalStateException("EventBridge unavailable"))
@@ -364,22 +395,6 @@ final class ExtractionServiceTest {
 
     verify(s3, times(1)).createMultipartUpload(any(Consumer.class));
     verify(commands, times(2)).send("CSV_SCAN", DATASET);
-  }
-
-  @Test
-  void recoversFromFailedReceipt() throws Exception {
-    cleanZip(validZip());
-    stubUpload();
-    failReceiptOnce = true;
-    var request = event();
-
-    assertThrows(S3Exception.class, () -> service.unzip(request, context));
-    assertTrue(objects.containsKey(stored(CHECKED, csvKey())));
-    assertEquals("CSV_SCAN", service.unzip(request, context));
-
-    verify(s3, times(2)).createMultipartUpload(any(Consumer.class));
-    verify(commands).send("CSV_SCAN", DATASET);
-    assertEquals("csv-version", capturedReceipt().path("version").asText());
   }
 
   @Test
@@ -403,63 +418,14 @@ final class ExtractionServiceTest {
   }
 
   @Test
-  void acceptsMatchingReceipt() throws Exception {
-    cleanZip(validZip());
-    stubUpload();
-    conflictReceiptOnce = true;
-
-    assertEquals("CSV_SCAN", service.unzip(event(), context));
-
-    verify(commands).send("CSV_SCAN", DATASET);
-    assertEquals("csv-version", capturedReceipt().path("version").asText());
-  }
-
-  @Test
-  void rejectsConflictingReceipt() throws Exception {
-    cleanZip(validZip());
-    stubUpload();
-    conflictingReceiptOnce = true;
-    var request = event();
-
-    assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));
-
-    verifyNoInteractions(commands);
-  }
-
-  @Test
-  void rejectsCsvWithDifferentContent() throws Exception {
+  void overwritesExistingCsvForSamePackageVersion() throws Exception {
     cleanZip(validZip());
     stubUpload();
     objects.put(stored(CHECKED, csvKey()), "different CSV".getBytes(StandardCharsets.UTF_8));
-    var request = event();
 
-    assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));
-    verifyNoInteractions(commands);
-  }
-
-  @Test
-  void rejectsReceiptForDifferentZipVersion() throws Exception {
-    cleanZip(validZip());
-    var receipt =
-        """
-        {
-          "releaseId": "%s",
-          "dataset": "%s",
-          "zipS3Key": "%s",
-          "zipVersion": "other-version",
-          "key": "%s",
-          "status": "EXTRACTED",
-          "version": "csv-version",
-          "sha256": "abc"
-        }
-        """
-            .formatted(ID, DATASET, ZIP_KEY, csvKey());
-    objects.put(stored(SOURCE, RECEIPT_KEY), receipt.getBytes(StandardCharsets.UTF_8));
-    var request = event();
-
-    assertThrows(IllegalArgumentException.class, () -> service.unzip(request, context));
-    verify(s3, never()).createMultipartUpload(any(Consumer.class));
-    verifyNoInteractions(commands);
+    assertEquals("CSV_SCAN", service.unzip(event(), context));
+    assertArrayEquals(uploaded, objects.get(stored(CHECKED, csvKey())));
+    verify(commands).send("CSV_SCAN", DATASET);
   }
 
   // Helper methods
@@ -551,57 +517,26 @@ final class ExtractionServiceTest {
     lenient()
         .when(s3.completeMultipartUpload(any(Consumer.class)))
         .thenAnswer(call -> {
-          if (objects.containsKey(stored(CHECKED, csvKey())))
-            throw S3Exception.builder().statusCode(412).build();
           objects.put(stored(CHECKED, csvKey()), uploaded);
           return CompleteMultipartUploadResponse.builder().versionId("csv-version").build();
         });
   }
 
-  private JsonNode capturedReceipt() throws Exception {
-    assertTrue(objects.containsKey(stored(SOURCE, RECEIPT_KEY)));
-    return uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON.readTree(
-        objects.get(stored(SOURCE, RECEIPT_KEY)));
-  }
-
   private PutObjectResponse recordObject(PutObjectRequest request, RequestBody body)
       throws Exception {
-    if (failReceiptOnce && RECEIPT_KEY.equals(request.key())) {
-      failReceiptOnce = false;
-      throw S3Exception.builder().statusCode(503).message("S3 unavailable").build();
-    }
     if (failEvidenceOnce && request.key().startsWith("metadata/checksums/")) {
       failEvidenceOnce = false;
       throw S3Exception.builder().statusCode(503).message("S3 unavailable").build();
     }
-    if (objects.containsKey(stored(request.bucket(), request.key())))
-      throw S3Exception.builder().statusCode(412).build();
     try (var in = body.contentStreamProvider().newStream()) {
       byte[] contents = in.readAllBytes();
-      if (conflictingReceiptOnce && RECEIPT_KEY.equals(request.key())) {
-        conflictingReceiptOnce = false;
-        var conflicting =
-            uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON
-                .readTree(contents)
-                .deepCopy();
-        ((com.fasterxml.jackson.databind.node.ObjectNode) conflicting)
-            .put("zipVersion", "other-version");
-        objects.put(
-            stored(request.bucket(), request.key()),
-            conflicting.toString().getBytes(StandardCharsets.UTF_8));
-        throw S3Exception.builder().statusCode(412).build();
-      }
       objects.put(stored(request.bucket(), request.key()), contents);
-    }
-    if (conflictReceiptOnce && RECEIPT_KEY.equals(request.key())) {
-      conflictReceiptOnce = false;
-      throw S3Exception.builder().statusCode(412).build();
     }
     return PutObjectResponse.builder().build();
   }
 
   private static String csvKey() {
-    return ReleaseStore.extractedCsvKey(ID, DATASET);
+    return "daily_cou/20780/150104/downloads/" + DATASET + "/" + DATASET + ".csv";
   }
 
   private static StoredObject stored(String bucket, String key) {
@@ -609,16 +544,24 @@ final class ExtractionServiceTest {
   }
 
   private static Map<String, Object> event() {
-    return event(1);
+    return event(1, ZIP_KEY);
   }
 
   private static Map<String, Object> event(int schemaVersion) {
+    return event(schemaVersion, ZIP_KEY);
+  }
+
+  private static Map<String, Object> event(String zipKey) {
+    return event(1, zipKey);
+  }
+
+  private static Map<String, Object> event(int schemaVersion, String zipKey) {
     return Map.of(
         "detail",
         Map.of(
             "schemaVersion", schemaVersion,
             "releaseId", ID,
             "dataset", DATASET,
-            "object", Map.of("bucket", SOURCE, "key", ZIP_KEY, "versionId", "zip-version")));
+            "object", Map.of("bucket", SOURCE, "key", zipKey, "versionId", "zip-version")));
   }
 }

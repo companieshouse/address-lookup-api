@@ -8,6 +8,7 @@ import java.util.UUID;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
+import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
 
 /** A listing position, not processing state. Every retained key is revisited on the next sweep. */
 public final class ReconciliationCursor {
@@ -20,7 +21,7 @@ public final class ReconciliationCursor {
     this.s3 = s3;
     this.bucket = bucket;
     this.prefix = prefix;
-    this.cursorKey = "reconciliation/" + name + ".json";
+    this.cursorKey = KeyLayout.reconciliationCursorKey(name);
   }
 
   /**

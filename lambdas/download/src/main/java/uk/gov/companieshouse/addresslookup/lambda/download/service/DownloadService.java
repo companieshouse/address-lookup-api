@@ -5,7 +5,6 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
-import java.time.Instant;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -13,6 +12,7 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Acquisition
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
+import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
 import uk.gov.companieshouse.release.model.Dataset;
@@ -47,9 +47,18 @@ public final class DownloadService {
     var store = new ReleaseStore(s3);
     String landingBucket = properties.landingBucket();
 
-    validatePlanKey(downloadCommandPlanKey);
+    KeyLayout.PackageVersion packageVersion;
+    try {
+      packageVersion = KeyLayout.parsePackageVersionManifestKey(downloadCommandPlanKey);
+    } catch (IllegalArgumentException e) {
+      throw new IllegalArgumentException("Invalid plan key", e);
+    }
     var manifest =
         readManifest(store, landingBucket, downloadCommandPlanKey, downloadCommandDataset);
+    check(
+        packageVersion.packageId().equals(required(manifest, "dataPackageId"))
+            && packageVersion.versionId().equals(required(manifest, "versionId")),
+        "Manifest package/version does not match its Landing key");
 
     String manifestReleaseId = releaseId(manifest).toString();
     LOG.info(
@@ -61,17 +70,6 @@ public final class DownloadService {
             downloadCommandDataset,
             "plan_key",
             downloadCommandPlanKey));
-
-    // The receipt makes retries idempotent: if the exact release/dataset was already downloaded,
-    // do not fetch the supplier ZIP again.
-    if (store.receipt(landingBucket, manifestReleaseId, downloadCommandDataset, "download")
-        != null) {
-      LOG.info(
-          "Download skipped because receipt already exists",
-          Map.of(
-              LOG_RELEASE_ID, manifestReleaseId, DOWNLOAD_COMMAND_DATASET, downloadCommandDataset));
-      return "SKIPPED";
-    }
 
     // Read only the dataset requested by the EventBridge command.
     var datasetJsonObj = manifest.path(downloadCommandDataset);
@@ -85,7 +83,8 @@ public final class DownloadService {
     check(expectedDatasetMd5.matches("(?i)[0-9a-f]{32}"), "Invalid ZIP MD5");
 
     String datasetUrl = required(datasetZipJsonObj, "url");
-    String zipUploadS3Path = ReleaseStore.downloadZipKey(manifestReleaseId, downloadCommandDataset);
+    String zipUploadS3Path =
+        KeyLayout.downloadZipKey(packageVersion, Dataset.named(downloadCommandDataset));
 
     String sanitizedDatasetUrl = sanitizeUrl(datasetUrl);
     LOG.info(
@@ -105,27 +104,13 @@ public final class DownloadService {
     try (var inputStream = os.download(datasetUrl)) {
       var upload =
           new StreamingS3(s3, () -> context.getRemainingTimeInMillis())
-              .put(
+              .putOverwrite(
                   inputStream,
                   landingBucket,
                   zipUploadS3Path,
                   expectedDatasetMd5,
                   properties.maxZipBytes());
 
-      // prepare the download receipt
-      store.downloadReceipt(
-          landingBucket,
-          new ReleaseStore.DownloadReceipt(
-              manifestReleaseId,
-              downloadCommandDataset,
-              datasetFileName,
-              expectedDatasetMd5,
-              datasetUrl,
-              Instant.now()),
-          upload);
-
-      String receiptLocationS3Path =
-          ReleaseStore.receiptKey(manifestReleaseId, downloadCommandDataset, "download");
       LOG.info(
           "Download completed",
           Map.of(
@@ -134,9 +119,7 @@ public final class DownloadService {
               DOWNLOAD_COMMAND_DATASET,
               downloadCommandDataset,
               "s3_key",
-              upload.key(),
-              "receipt_key",
-              receiptLocationS3Path));
+              upload.key()));
     } catch (StreamingS3.ChecksumMismatchException e) {
       LOG.error(
           "Download checksum mismatch",
@@ -178,13 +161,6 @@ public final class DownloadService {
             && !input.get(DOWNLOAD_COMMAND_DATASET).asText().isBlank(),
         "Missing detail.dataset in download command");
     return input;
-  }
-
-  // Restricts S3 reads to canonical acquisition manifests.
-  private static void validatePlanKey(String planKey) {
-    check(
-        planKey.matches("acquisitions/\\d{4}-\\d{2}-\\d{2}/[0-9a-fA-F-]{36}\\.json"),
-        "Invalid plan key");
   }
 
   // A missing plan fails the invocation. The plan key has already passed format validation.

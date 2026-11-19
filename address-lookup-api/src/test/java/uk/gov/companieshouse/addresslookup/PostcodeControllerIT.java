@@ -79,15 +79,7 @@ class PostcodeControllerIT extends AddressTestBaseIT {
   // ========================
 
   @ParameterizedTest
-  @ValueSource(
-      strings = {
-        "   ",
-        "A",
-        "INVALID",
-        "INVALID@POSTCODE",
-        "BT557KLEXTRA",
-        "12345"
-      })
+  @ValueSource(strings = {"   ", "A", "INVALID", "INVALID@POSTCODE", "BT557KLEXTRA", "12345"})
   void shouldReturnBadRequestForInvalidPostcodes(String postcode) throws Exception {
     this.mockMvc
         .perform(

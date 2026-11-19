@@ -4,9 +4,13 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import software.amazon.awssdk.annotations.NotNull;
+import software.amazon.awssdk.core.exception.SdkClientException;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
+
+import java.io.IOException;
 
 public abstract class AbstractRequestHandlerImpl<I, O> implements RequestHandler<I, O> {
 
@@ -26,10 +30,13 @@ public abstract class AbstractRequestHandlerImpl<I, O> implements RequestHandler
         // Depending upon the Throwable type, handle as a Transient Failure
         // or Permanent Failure
         switch (exception) {
-            case PermanentFailureException pfe -> handlePermanentException(pfe);
+            case TransientFailureException pfe -> handleTransientException(pfe);
             case IllegalArgumentException iae -> handlePermanentException(iae);
             case Commands.CommandDispatchException cde -> handleCommandDispatchException(cde);
-            default -> handleTransientException(exception);
+            case IOException ioe -> handleTransientException(ioe);
+            case SdkClientException sdke -> handleTransientException(sdke);
+            case S3Exception s3e when s3e.isRetryableException() -> handleTransientException(s3e);
+            default -> handlePermanentException(exception);
         }
         return failureResponse();
     }

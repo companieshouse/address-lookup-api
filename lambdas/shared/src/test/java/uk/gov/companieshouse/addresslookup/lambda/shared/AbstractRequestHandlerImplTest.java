@@ -6,7 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -27,8 +27,12 @@ class AbstractRequestHandlerImplTest {
     @Mock
     private Context context;
 
-    private final AbstractRequestHandlerImpl<Map<String, Object>, String> testHandler =
-            new TestRequestHandlerImpl();
+    private AbstractRequestHandlerImpl<Map<String, Object>, String> testHandler;
+
+    @BeforeEach
+    void setUp() {
+        testHandler = new TestRequestHandlerImpl(testService);
+    }
 
     @Test
     void shouldReturnSuccessForNoExceptionsHappyPath() throws Exception {
@@ -48,10 +52,10 @@ class AbstractRequestHandlerImplTest {
     }
 
     @Test
-    void shouldThrowAwsServiceExceptionForTransientFailureException() throws Exception {
+    void shouldThrowRuntimeExceptionForTransientFailureException() throws Exception {
         when(testService.run()).thenThrow(TransientFailureException.builder().description("Something went wrong but might be OK with a retry").build());
         Map<String, Object> request = Map.of();
-        assertThrows(AwsServiceException.class, () -> {
+        assertThrows(RuntimeException.class, () -> {
             testHandler.handleRequest(request, context);
         });
     }
@@ -89,24 +93,28 @@ class AbstractRequestHandlerImplTest {
     }
 
     @Test
-    void shouldThrowAwsServiceExceptionForAnyOtherRuntimeException() throws Exception {
+    void shouldReturnFailureForAnyOtherRuntimeException() throws Exception {
         Exception exception = new RuntimeException("Something wrong that was not anticipated, so try again");
 
         when(testService.run()).thenThrow(exception);
 
         Map<String, Object> request = Map.of();
-        assertThrows(AwsServiceException.class, () -> {
-            testHandler.handleRequest(request, context);
-        });
+        assertEquals("FAILURE", testHandler.handleRequest(request, context));
     }
 
     private class TestRequestHandlerImpl extends
             AbstractRequestHandlerImpl<Map<String, Object>, String> {
 
+        private TestService testService;
+
+        TestRequestHandlerImpl(TestService testService) {
+            this.testService = testService;
+        }
+
         @Override
         protected String requestOperation(Map<String, Object> request, Context context)
                 throws PermanentFailureException, TransientFailureException {
-            return testService.run();
+            return this.testService.run();
         }
 
         @Override

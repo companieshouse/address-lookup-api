@@ -38,4 +38,24 @@ final class RuntimeSupportTest {
 
     assertEquals(RuntimeSupport.class, constructor.newInstance().getClass());
   }
+
+  @Test
+  void testGetExceptionTextWithMessage() {
+    final String TEST_MESSAGE = "Test Message";
+
+    Exception exception = new RuntimeException(TEST_MESSAGE);
+
+    String exceptionText = RuntimeSupport.getExceptionText(exception);
+
+    assertEquals(TEST_MESSAGE, exceptionText);
+  }
+
+  @Test
+  void testGetExceptionTextNoMessage() {
+    Exception exception = new RuntimeException();
+
+    String exceptionText = RuntimeSupport.getExceptionText(exception);
+
+    assertEquals("RuntimeException", exceptionText);
+  }
 }

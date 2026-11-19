@@ -102,7 +102,7 @@ Run `bash scripts/tests/test_concourse.sh` for isolated helper regressions.
 
 ## Requirements
 
-Use Java 21 or a compatible later runtime, Maven, Make, and Bash. Maven
+Use Java 25 or a compatible later runtime, Maven, Make, and Bash. Maven
 dependencies must be available through your configured repositories.
 Compose and PostGIS integration tests need a running Docker engine.
 The lifecycle script additionally requires `jq`, `curl`, `lsof`, `ps`, and

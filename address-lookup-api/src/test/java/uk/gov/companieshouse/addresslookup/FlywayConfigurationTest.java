@@ -71,7 +71,7 @@ class FlywayConfigurationTest {
         Properties flywayProperties =
                 loadProperties("/META-INF/maven/org.flywaydb/flyway-core/pom.properties");
 
-        assertEquals("13.10.0", flywayProperties.getProperty("version"));
+        assertEquals("13.13.0", flywayProperties.getProperty("version"));
         assertTrue(
                 ClassUtils.isPresent(
                         "org.flywaydb.database.postgresql.PostgreSQLDatabaseType",

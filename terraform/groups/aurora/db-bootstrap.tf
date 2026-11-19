@@ -12,7 +12,7 @@ module "db_bootstrap" {
 
   environment    = var.environment
   function_name  = local.db_bootstrap_function_name
-  lambda_runtime = "java21"
+  lambda_runtime = "java25"
   lambda_handler = "uk.gov.companieshouse.addresslookup.dbbootstrap.Handler::handleRequest"
 
   lambda_code_s3_bucket = var.release_bucket_name

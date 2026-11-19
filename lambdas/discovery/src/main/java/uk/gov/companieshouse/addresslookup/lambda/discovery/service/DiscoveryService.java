@@ -164,8 +164,7 @@ public final class DiscoveryService {
 
     Map<String, OrderSummary> orderSummaries =
         retrieveAndValidateOrderSummaries(datasetDownloadsMap);
-    var packageVersion =
-        new KeyLayout.PackageVersion(feed, packageId, packageVersionData.id());
+    var packageVersion = new KeyLayout.PackageVersion(feed, packageId, packageVersionData.id());
 
     LocalDate targetDate = calculateTargetDateIfThereIsAValidOne(orderSummaries);
 
@@ -187,10 +186,7 @@ public final class DiscoveryService {
     LOG.debug(
         "Generated release manifest", Map.of(RELEASE_ID_FIELD, releaseManifest.id().toString()));
 
-    final String planKey =
-        saveManifestReturnPlanKey(
-            releaseManifest,
-            packageVersion);
+    final String planKey = saveManifestReturnPlanKey(releaseManifest, packageVersion);
 
     datasets.stream()
         .map(DatasetDefault::name)
@@ -444,7 +440,7 @@ public final class DiscoveryService {
           entry.getValue(),
           properties.landingBucket(),
           KeyLayout.orderSummaryKey(
-          packageVersion, uk.gov.companieshouse.release.model.Dataset.named(entry.getKey())));
+              packageVersion, uk.gov.companieshouse.release.model.Dataset.named(entry.getKey())));
     }
   }
 

@@ -66,8 +66,8 @@ public final class ReleaseStore {
         RequestBody.fromString(value.toString()));
   }
 
-  public ObjectNode updateState(
-      String bucket, String key, UnaryOperator<ObjectNode> update) throws IOException {
+  public ObjectNode updateState(String bucket, String key, UnaryOperator<ObjectNode> update)
+      throws IOException {
     for (int attempt = 0; attempt < MAX_STATE_UPDATE_ATTEMPTS; attempt++) {
       ObjectNode current = JSON.createObjectNode();
       String eTag = null;
@@ -88,7 +88,8 @@ public final class ReleaseStore {
 
       ObjectNode updated = update.apply(current.deepCopy());
       check(updated != null, "State update returned no value");
-      var request = PutObjectRequest.builder().bucket(bucket).key(key).contentType(JSON_CONTENT_TYPE);
+      var request =
+          PutObjectRequest.builder().bucket(bucket).key(key).contentType(JSON_CONTENT_TYPE);
       if (eTag == null) request.ifNoneMatch("*");
       else request.ifMatch(eTag);
       try {

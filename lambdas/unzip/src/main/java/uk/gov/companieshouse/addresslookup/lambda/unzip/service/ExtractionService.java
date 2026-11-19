@@ -118,10 +118,8 @@ public final class ExtractionService {
     String csvKey =
         KeyLayout.extractedCsvKey(
             zipObject.packageVersion(), Dataset.named(table.name()), table.name() + ".csv");
-    if (alreadyExtracted(
-        store, zipObject.packageVersion(), dataset, s3Key, zipVersion, csvKey)) {
-      recordExtractionCursor(
-          store, zipObject.packageVersion(), dataset, s3Key, zipVersion, csvKey);
+    if (alreadyExtracted(store, zipObject.packageVersion(), dataset, s3Key, zipVersion, csvKey)) {
+      recordExtractionCursor(store, zipObject.packageVersion(), dataset, s3Key, zipVersion, csvKey);
       commands.send(CSV_SCAN_STATUS, dataset);
       return CSV_SCAN_STATUS;
     }
@@ -185,21 +183,9 @@ public final class ExtractionService {
             new StreamingS3(s3, context::getRemainingTimeInMillis)
                 .putOverwrite(csv, checked, csvKey, max);
 
-        recordUnpackState(
-            store,
-            checked,
-            packageVersion,
-            table.name(),
-            zipKey,
-            zipVersion,
-            result);
+        recordUnpackState(store, checked, packageVersion, table.name(), zipKey, zipVersion, result);
         recordExtractionCursor(
-            store,
-            packageVersion,
-            table.name(),
-            zipKey,
-            zipVersion,
-            result.key());
+            store, packageVersion, table.name(), zipKey, zipVersion, result.key());
 
         String releaseId = packageVersion.packageId() + "-" + packageVersion.versionId();
         LOG.info(

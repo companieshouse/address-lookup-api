@@ -291,13 +291,10 @@ class DiscoveryServiceTest {
   private void verifyOrderSummarySaved(String prefix, String dataset) {
     verify(s3Client)
         .putObject(
-            argThat(
-                (PutObjectRequest request) ->
-                    request.bucket().equals(LANDING_BUCKET)
-                        && request
-                            .key()
-                            .equals(prefix + "/downloads/" + dataset + "_orderSummary.json")
-                        && request.ifNoneMatch() == null),
+            argThat((PutObjectRequest request) ->
+                request.bucket().equals(LANDING_BUCKET)
+                    && request.key().equals(prefix + "/downloads/" + dataset + "_orderSummary.json")
+                    && request.ifNoneMatch() == null),
             any(RequestBody.class));
   }
 

@@ -294,10 +294,8 @@ final class ExtractionServiceTest {
 
   @Test
   void acceptsDownloadOutputAndProducesImportLayoutCsv() throws Exception {
-    var packageVersion =
-        new KeyLayout.PackageVersion(KeyLayout.Feed.DAILY_COU, "20780", "150104");
-    String downloadOutputKey =
-        KeyLayout.downloadZipKey(packageVersion, Dataset.named(DATASET));
+    var packageVersion = new KeyLayout.PackageVersion(KeyLayout.Feed.DAILY_COU, "20780", "150104");
+    String downloadOutputKey = KeyLayout.downloadZipKey(packageVersion, Dataset.named(DATASET));
     assertEquals(ZIP_KEY, downloadOutputKey);
     cleanZip(validZip());
     stubUpload();
@@ -306,8 +304,7 @@ final class ExtractionServiceTest {
 
     String extractedKey = csvKey();
     assertEquals(
-        KeyLayout.extractedCsvKey(
-            packageVersion, Dataset.named(DATASET), DATASET + ".csv"),
+        KeyLayout.extractedCsvKey(packageVersion, Dataset.named(DATASET), DATASET + ".csv"),
         extractedKey);
     var importInput = KeyLayout.parseLandingObject(extractedKey);
     assertEquals(packageVersion, importInput.packageVersion());
@@ -324,21 +321,16 @@ final class ExtractionServiceTest {
     assertTrue(objects.containsKey(stored(CHECKED, csvKey())));
     var unpackState =
         uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON.readTree(
-            objects.get(stored(CHECKED, KeyLayout.unpackStateKey(
-                new KeyLayout.PackageVersion(KeyLayout.Feed.DAILY_COU, "20780", "150104")))));
+            objects.get(
+                stored(
+                    CHECKED,
+                    KeyLayout.unpackStateKey(
+                        new KeyLayout.PackageVersion(
+                            KeyLayout.Feed.DAILY_COU, "20780", "150104")))));
     assertEquals(
-        "zip-version",
-        unpackState
-            .path("datasets")
-            .path(DATASET)
-            .path("zipVersion")
-            .asText());
-    assertEquals(
-        csvKey(),
-        unpackState.path("datasets").path(DATASET).path("csvKey").asText());
-    assertTrue(
-        objects.containsKey(
-            stored("control", KeyLayout.extractionCursorKey("20780"))));
+        "zip-version", unpackState.path("datasets").path(DATASET).path("zipVersion").asText());
+    assertEquals(csvKey(), unpackState.path("datasets").path(DATASET).path("csvKey").asText());
+    assertTrue(objects.containsKey(stored("control", KeyLayout.extractionCursorKey("20780"))));
     verify(s3)
         .getObjectTagging(
             argThat((GetObjectTaggingRequest request) ->

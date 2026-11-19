@@ -62,12 +62,13 @@ public final class ScanResultsService {
       rejectionCode = "INVALID_INPUT";
       decision = reject(payload, parsed, rejectionCode, invalidReason.message(), objectUri);
     } else if ("NO_THREATS_FOUND".equals(result)) {
-      decision = switch (parsed.fileType()) {
-        case ZIP -> "ExtractRequested";
-        case CSV -> "DatasetReady";
-        case MANIFEST -> "ManifestReady";
-        case UNPACK_STATE, ORDER_SUMMARY -> "IGNORED_OBJECT";
-      };
+      decision =
+          switch (parsed.fileType()) {
+            case ZIP -> "ExtractRequested";
+            case CSV -> "DatasetReady";
+            case MANIFEST -> "ManifestReady";
+            case UNPACK_STATE, ORDER_SUMMARY -> "IGNORED_OBJECT";
+          };
       if (!"IGNORED_OBJECT".equals(decision)) commands.sendIngestion(decision, payload);
     } else {
       rejectionCode = "THREATS_FOUND".equals(result) ? MALWARE_FOUND : "SCAN_INCONCLUSIVE";

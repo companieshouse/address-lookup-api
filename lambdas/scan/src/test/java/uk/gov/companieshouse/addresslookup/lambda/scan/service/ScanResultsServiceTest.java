@@ -39,11 +39,9 @@ class ScanResultsServiceTest {
       "daily_cou/20780/150104/manifest/data_package_manifest.json";
   private static final String BUCKET = "landing-bucket";
   private static final String CLEAN_BUCKET = BUCKET;
-  private static final String KEY =
-      "daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip";
+  private static final String KEY = "daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip";
   private static final String CSV_KEY =
-      "daily_cou/20780/150104/downloads/add_gb_royalmailaddress/"
-          + "add_gb_royalmailaddress.csv";
+      "daily_cou/20780/150104/downloads/add_gb_royalmailaddress/" + "add_gb_royalmailaddress.csv";
   private static final String VERSION = "3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY";
 
   private record PublishedEvent(String type, JsonNode detail) {}
@@ -415,10 +413,18 @@ class ScanResultsServiceTest {
         Arguments.of("unknown bucket", event("other-bucket", KEY, VERSION, "NO_THREATS_FOUND")),
         Arguments.of(
             "unknown dataset",
-            event(BUCKET, "daily_cou/20780/150104/downloads/unknown.zip", VERSION, "NO_THREATS_FOUND")),
+            event(
+                BUCKET,
+                "daily_cou/20780/150104/downloads/unknown.zip",
+                VERSION,
+                "NO_THREATS_FOUND")),
         Arguments.of(
             "unsafe path",
-            event(BUCKET, "daily_cou/../150104/downloads/add_gb_builtaddress.zip", VERSION, "NO_THREATS_FOUND")),
+            event(
+                BUCKET,
+                "daily_cou/../150104/downloads/add_gb_builtaddress.zip",
+                VERSION,
+                "NO_THREATS_FOUND")),
         Arguments.of(
             "incorrect extension for prefix",
             event(

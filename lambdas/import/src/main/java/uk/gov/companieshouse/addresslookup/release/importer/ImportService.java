@@ -57,6 +57,7 @@ public final class ImportService {
                 new ReconciliationCursor(
                     s3,
                     controlBucket,
+                    bucket,
                     KeyLayout.feedManifestPrefix(feed),
                     "imports-" + feed.name()))
             .toList();

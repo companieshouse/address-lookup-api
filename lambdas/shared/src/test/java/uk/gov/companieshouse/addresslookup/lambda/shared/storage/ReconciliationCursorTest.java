@@ -20,7 +20,7 @@ final class ReconciliationCursorTest {
 
   @BeforeEach
   void setUp() {
-    cursor = new ReconciliationCursor(s3.client(), "bucket", "incoming/", "sweep");
+    cursor = new ReconciliationCursor(s3.client(), "bucket", "bucket", "incoming/", "sweep");
   }
 
   private void store(String key) {

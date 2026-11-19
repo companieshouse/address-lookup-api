@@ -3,6 +3,7 @@ package uk.gov.companieshouse.addresslookup.lambda.download.service;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.releaseId;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.detail;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.getExceptionText;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sanitizeUrl;
 
@@ -171,7 +172,7 @@ public final class DownloadService {
       LOG.error(UPLOAD_FAILED_MESSAGE, exception);
       throw PermanentFailureException.builder()
               .description(exception.getMessage())
-              .cause(exception.getCause())
+              .cause(exception)
               .reasonCode("UNRECOGNISED_DIGEST_SCHEME")
               .releaseId(manifestReleaseId)
               .build();
@@ -262,7 +263,7 @@ public final class DownloadService {
             DOWNLOAD_COMMAND_DATASET,
             Objects.toString(dataset),
             "checksum_mismatch",
-            Objects.toString(exception.getMessage())));
+            getExceptionText(exception)));
     throw PermanentFailureException.builder()
             .description(CHECKSUM_FAILURE_MESSAGE)
             .dataset(Dataset.named(dataset))

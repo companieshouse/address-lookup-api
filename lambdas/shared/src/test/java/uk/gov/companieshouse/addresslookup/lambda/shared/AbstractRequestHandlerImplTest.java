@@ -84,7 +84,7 @@ class AbstractRequestHandlerImplTest {
     }
 
     @Test
-    void shouldForIllegalArgumentException() throws Exception {
+    void shouldReturnFailureForIllegalArgumentException() throws Exception {
         IllegalArgumentException exception = new IllegalArgumentException("Parameter missing");
         when(testService.run()).thenThrow(exception);
         String response = testHandler.handleRequest(Map.of(), context);

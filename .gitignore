@@ -24,3 +24,7 @@ http-client.private.env.json
 
 # IntelliJ HTTP Client download output
 /downloads/
+
+# AWS Lambda
+template.yml
+template.yaml

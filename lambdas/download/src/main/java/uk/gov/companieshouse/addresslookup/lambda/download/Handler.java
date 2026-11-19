@@ -1,5 +1,6 @@
 package uk.gov.companieshouse.addresslookup.lambda.download;
 
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.getExceptionText;
 import com.amazonaws.services.lambda.runtime.Context;
 import uk.gov.companieshouse.addresslookup.lambda.download.service.DownloadService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.AbstractRequestHandlerImpl;
@@ -10,7 +11,6 @@ import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
 
 import java.util.Map;
-import java.util.Objects;
 
 public final class Handler extends AbstractRequestHandlerImpl<Map<String,Object>,String> {
     private final DownloadService service =
@@ -32,14 +32,14 @@ public final class Handler extends AbstractRequestHandlerImpl<Map<String,Object>
     protected void handlePermanentException(Exception permanentException) {
         LOG.error("An unrecoverable error occurred which attempting the download",
                 permanentException,
-                Map.of("Error", Objects.toString(permanentException.getMessage())));
+                Map.of("Error", getExceptionText(permanentException)));
     }
 
     @Override
     protected void handleTransientException(Exception transientException) {
         LOG.error("download failed; durable state allows retry",
                 transientException,
-                Map.of("Error", Objects.toString(transientException.getMessage())));
+                Map.of("Error", getExceptionText(transientException)));
 
         throw new RuntimeException("download failed; durable state allows retry",transientException);
     }

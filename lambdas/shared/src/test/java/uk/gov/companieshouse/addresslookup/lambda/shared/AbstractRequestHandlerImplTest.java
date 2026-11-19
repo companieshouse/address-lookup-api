@@ -1,6 +1,7 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -9,6 +10,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
@@ -102,10 +105,25 @@ class AbstractRequestHandlerImplTest {
         assertEquals("FAILURE", testHandler.handleRequest(request, context));
     }
 
-    private class TestRequestHandlerImpl extends
+    @ParameterizedTest
+    @CsvSource({
+            "java.io.IOException, false",
+            "java.lang.IllegalArgumentException, true"
+    })
+    void testIsPermanent(String exceptionClassName, boolean isPermanent) throws Exception {
+        final String TEST_MESSAGE = "Test Message";
+
+        Class<?> exceptionClass = Class.forName(exceptionClassName);
+        Exception exception = (Exception)exceptionClass
+                .getConstructor(String.class).newInstance(TEST_MESSAGE);
+        assertInstanceOf(exceptionClass, exception);
+        assertEquals(isPermanent, testHandler.isPermanent(exception));
+    }
+
+    private static class TestRequestHandlerImpl extends
             AbstractRequestHandlerImpl<Map<String, Object>, String> {
 
-        private TestService testService;
+        private final TestService testService;
 
         TestRequestHandlerImpl(TestService testService) {
             this.testService = testService;

@@ -26,29 +26,35 @@ public abstract class AbstractRequestHandlerImpl<I, O> implements RequestHandler
 
     protected abstract O requestOperation(I request, Context context) throws PermanentFailureException, TransientFailureException;
 
+    protected boolean isPermanent(Exception exception) {
+        return switch (exception) {
+            case TransientFailureException ignore -> false;
+            case IllegalArgumentException ignore -> true;
+            case Commands.CommandDispatchException cde -> handleCommandDispatchException(cde);
+            case IOException ignore -> false;
+            case SdkClientException ignore -> false;
+            default -> true;
+        };
+    }
+
     private O handleExceptions(@NotNull Exception exception) {
         // Depending upon the Throwable type, handle as a Transient Failure
         // or Permanent Failure
-        switch (exception) {
-            case TransientFailureException pfe -> handleTransientException(pfe);
-            case IllegalArgumentException iae -> handlePermanentException(iae);
-            case Commands.CommandDispatchException cde -> handleCommandDispatchException(cde);
-            case IOException ioe -> handleTransientException(ioe);
-            case SdkClientException sdke -> handleTransientException(sdke);
-            case S3Exception s3e when s3e.isRetryableException() -> handleTransientException(s3e);
-            default -> handlePermanentException(exception);
+        if (isPermanent(exception)) {
+            handlePermanentException(exception);
+        } else {
+            handleTransientException(exception);
         }
         return failureResponse();
     }
 
     protected abstract O failureResponse();
 
-    private void handleCommandDispatchException(Commands.CommandDispatchException commandDispatchException) {
+    private boolean handleCommandDispatchException(Commands.CommandDispatchException commandDispatchException) {
         if (commandDispatchException.getCause() instanceof JsonProcessingException) {
-            handlePermanentException(commandDispatchException);
-        } else {
-            handleTransientException(commandDispatchException);
+            return true;
         }
+        return false;
     }
 
     protected abstract void handlePermanentException(Exception permanentException);

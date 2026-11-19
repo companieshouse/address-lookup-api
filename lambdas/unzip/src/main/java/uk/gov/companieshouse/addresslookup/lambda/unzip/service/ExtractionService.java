@@ -80,8 +80,7 @@ public final class ExtractionService {
     this.s3 = s3;
     this.properties = properties;
     this.commands = commands;
-    AcquisitionProperties.required(properties.sourceBucket(), "SOURCE_BUCKET");
-    AcquisitionProperties.required(properties.scannedBucket(), "SCANNED_BUCKET");
+    AcquisitionProperties.required(properties.landingBucket(), "LANDING_BUCKET");
   }
 
   public String unzip(Map<String, Object> event, Context context) throws Exception {
@@ -101,11 +100,11 @@ public final class ExtractionService {
     String s3Key = required(scanObject, "key");
     String zipVersion = required(scanObject, "versionId");
 
-    check(scanBucket.equals(properties.sourceBucket()), "Unexpected ZIP bucket");
+    check(scanBucket.equals(properties.landingBucket()), "Unexpected ZIP bucket");
     check(s3Key.equals("Scanned/" + releaseId + "/" + table.name() + ".zip"), "Unexpected ZIP key");
 
     var store = new ReleaseStore(s3);
-    String checked = properties.scannedBucket();
+    String checked = properties.landingBucket();
     String extractedCsvKey = ReleaseStore.extractedCsvKey(releaseId, table.name());
 
     if (!store.isClean(scanBucket, s3Key, zipVersion)) {

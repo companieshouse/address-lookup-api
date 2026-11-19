@@ -5,12 +5,12 @@ Build target and Lambda runtime: Java 25.
 Stateless router for GuardDuty Malware Protection scan results (EventBridge, `aws.guardduty`).
 Download ZIPs at `Scanned/<UUID releaseId>/<dataset>.zip` are accepted; the release ID is
 copied unchanged into the published event. EventBridge rules must include the `Scanned/` prefix.
-The shared `KeyLayout` accepts ZIPs at `zips/<releaseId>/<dataset>.zip` in the ingest bucket and
-CSV files at `csv/<releaseId>/<dataset>.csv` in the clean/scanned bucket.
+The shared `KeyLayout` accepts ZIPs at `zips/<releaseId>/<dataset>.zip` and CSV files at
+`csv/<releaseId>/<dataset>.csv` in the Landing bucket.
 Download receipts at `Scanned/<UUID releaseId>/<dataset>.receipt.json` are accepted in
-`INGEST_BUCKET`. Scan routes their scan results without reading the receipt contents.
+the Landing bucket. Scan routes their scan results without reading the receipt contents.
 Acquisition manifests at `acquisitions/<YYYY-MM-DD>/<UUID releaseId>.json` are also accepted in
-`INGEST_BUCKET`. The date must be valid. Scan derives the release ID from the key, does not read
+the Landing bucket. The date must be valid. Scan derives the release ID from the key, does not read
 the manifest and does not compare the path date with the manifest's target date.
 Include the `acquisitions/` prefix in the GuardDuty-to-Scan EventBridge rule.
 
@@ -21,8 +21,7 @@ Include the `acquisitions/` prefix in the GuardDuty-to-Scan EventBridge rule.
 | `UNSUPPORTED`, `ACCESS_DENIED`, `FAILED`, unknown | `StepRejected{SCAN_INCONCLUSIVE}` |
 | invalid input | `StepRejected{INVALID_INPUT}` |
 
-Config: `INGEST_BUCKET`, `SCANNED_BUCKET` (clean CSV bucket), `EVENT_BUS`. Scan does not require
-`SOURCE_BUCKET`.
+Config: `LANDING_BUCKET`, `EVENT_BUS`. Scan does not require `CONTROL_BUCKET`.
 IAM: `events:PutEvents` on the bus only; no S3 access. Duplicate events are republished; a
 PutEvents failure fails the invocation so retry/DLQ applies.
 
@@ -47,7 +46,7 @@ Unzip receives the exact bucket, key and version ID reported by GuardDuty.
     "releaseId": "12345678-1234-1234-1234-123456789abc",
     "dataset": "add_gb_builtaddress",
     "object": {
-      "bucket": "<ingest bucket>",
+      "bucket": "<Landing bucket>",
       "key": "Scanned/12345678-1234-1234-1234-123456789abc/add_gb_builtaddress.zip",
       "versionId": "v1"
     }
@@ -90,7 +89,7 @@ EventBridge consumer for `ReceiptReady` if needed; do not route it to CSV Import
     "releaseId": "f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4",
     "dataset": "add_gb_royalmailaddress",
     "object": {
-      "bucket": "<ingest bucket>",
+      "bucket": "<Landing bucket>",
       "key": "Scanned/f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4/add_gb_royalmailaddress.receipt.json",
       "versionId": "r1"
     }
@@ -113,7 +112,7 @@ are not included in the notification or read by Scan.
     "schemaVersion": 1,
     "releaseId": "f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4",
     "object": {
-      "bucket": "<ingest bucket>",
+      "bucket": "<Landing bucket>",
       "key": "acquisitions/2026-10-15/f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4.json",
       "versionId": "m1"
     }
@@ -136,14 +135,14 @@ no `dataset` field. As with other files, invalid manifest inputs publish `INVALI
     "releaseId": "12345678-1234-1234-1234-123456789abc",
     "dataset": "add_gb_builtaddress",
     "object": {
-      "bucket": "<ingest bucket>",
+      "bucket": "<Landing bucket>",
       "key": "Scanned/12345678-1234-1234-1234-123456789abc/add_gb_builtaddress.zip",
       "versionId": "v1"
     },
     "step": "zip-scan",
     "code": "MALWARE_FOUND",
     "message": "Example.Malware",
-    "objectUri": "s3://<ingest bucket>/Scanned/12345678-1234-1234-1234-123456789abc/add_gb_builtaddress.zip"
+    "objectUri": "s3://<Landing bucket>/Scanned/12345678-1234-1234-1234-123456789abc/add_gb_builtaddress.zip"
   }
 }
 ```

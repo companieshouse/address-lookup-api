@@ -40,8 +40,8 @@ class ScanResultsServiceTest {
   private static final String RECEIPT_RELEASE = "f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4";
   private static final String RECEIPT_KEY =
       "Scanned/" + RECEIPT_RELEASE + "/add_gb_royalmailaddress.receipt.json";
-  private static final String BUCKET = "ingest-bucket";
-  private static final String CLEAN_BUCKET = "clean-bucket";
+  private static final String BUCKET = "landing-bucket";
+  private static final String CLEAN_BUCKET = BUCKET;
   private static final String KEY = "zips/20780-131061/add_gb_royalmailaddress.zip";
   private static final String CSV_KEY = "csv/20780-131061/add_gb_royalmailaddress.csv";
   private static final String VERSION = "3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY";
@@ -61,7 +61,6 @@ class ScanResultsServiceTest {
     var properties =
         new AcquisitionProperties(
             null,
-            CLEAN_BUCKET,
             BUCKET,
             "event-bus",
             null,
@@ -273,8 +272,8 @@ class ScanResultsServiceTest {
   }
 
   @Test
-  void cleanCsvInIngestBucketIsRejected() throws Exception {
-    service.scan(event(BUCKET, CSV_KEY, VERSION, "NO_THREATS_FOUND"));
+  void cleanCsvInAnotherBucketIsRejected() throws Exception {
+    service.scan(event("other-bucket", CSV_KEY, VERSION, "NO_THREATS_FOUND"));
 
     assertEquals(List.of("StepRejected"), types());
     assertEquals("INVALID_INPUT", detail(0).get("code").asText());
@@ -458,7 +457,7 @@ class ScanResultsServiceTest {
     return Stream.of(
         Arguments.of(
             "manifest in wrong bucket",
-            event(CLEAN_BUCKET, MANIFEST_KEY, VERSION, "NO_THREATS_FOUND")),
+            event("other-bucket", MANIFEST_KEY, VERSION, "NO_THREATS_FOUND")),
         Arguments.of(
             "manifest missing version", event(BUCKET, MANIFEST_KEY, null, "NO_THREATS_FOUND")),
         Arguments.of(
@@ -476,7 +475,7 @@ class ScanResultsServiceTest {
     return Stream.of(
         Arguments.of(
             "receipt in wrong bucket",
-            event(CLEAN_BUCKET, RECEIPT_KEY, VERSION, "NO_THREATS_FOUND")),
+            event("other-bucket", RECEIPT_KEY, VERSION, "NO_THREATS_FOUND")),
         Arguments.of(
             "receipt missing version", event(BUCKET, RECEIPT_KEY, null, "NO_THREATS_FOUND")));
   }

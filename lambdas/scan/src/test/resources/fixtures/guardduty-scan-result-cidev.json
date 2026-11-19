@@ -5,7 +5,7 @@
   "detail-type": "GuardDuty Malware Protection Object Scan Result",
   "detail": {
     "s3ObjectDetails": {
-      "bucketName": "ingest-bucket",
+      "bucketName": "landing-bucket",
       "objectKey": "zips/20780-131061/add_gb_royalmailaddress.zip",
       "versionId": "3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY"
     },

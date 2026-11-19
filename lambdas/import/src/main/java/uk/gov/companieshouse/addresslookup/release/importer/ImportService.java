@@ -51,7 +51,7 @@ public final class ImportService {
   }
 
   public String importCsv(Context context) throws Exception {
-    String bucket = properties.scannedBucket();
+    String bucket = properties.landingBucket();
     return reconcile(
         new ReleaseStore(s3),
         new ReconciliationCursor(s3, bucket, "manifests/", "imports"),

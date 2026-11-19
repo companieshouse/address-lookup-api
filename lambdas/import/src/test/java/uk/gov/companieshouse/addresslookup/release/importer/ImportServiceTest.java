@@ -175,7 +175,7 @@ class ImportServiceTest {
 
   @Test
   void importCsvStartsReconciliationFromConfiguredProperties() throws Exception {
-    when(properties.scannedBucket()).thenReturn(BUCKET);
+    when(properties.landingBucket()).thenReturn(BUCKET);
     when(properties.region()).thenReturn("eu-west-2");
     when(s3.listObjectsV2(any(ListObjectsV2Request.class)))
         .thenReturn(ListObjectsV2Response.builder().build());

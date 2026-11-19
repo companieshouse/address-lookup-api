@@ -24,7 +24,7 @@ import software.amazon.awssdk.services.s3.model.S3Object;
 import uk.gov.companieshouse.addresslookup.lambda.shared.testsupport.FakeS3;
 
 final class ReleaseStoreTest {
-  private static final String BUCKET = "source-bucket";
+  private static final String BUCKET = "landing-bucket";
   private static final String KEY = "Scanned/zip.zip";
   private static final String ID = "4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56";
   private static final String DATASET = "add_gb_royalmailaddress";

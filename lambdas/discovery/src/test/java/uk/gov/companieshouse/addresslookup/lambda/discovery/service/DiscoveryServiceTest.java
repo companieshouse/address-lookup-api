@@ -88,7 +88,8 @@ class DiscoveryServiceTest {
         }
       """;
 
-  private static final String TEST_SOURCE_BUCKET = "source-bucket",
+  private static final String CONTROL_BUCKET = "control-bucket",
+      LANDING_BUCKET = "landing-bucket",
       CURSOR_KEY = "control/address-release/active.json";
 
   private static final String TEST_RELEASE_ID = "12345678-1234-1234-1234-123456789abc";
@@ -120,16 +121,16 @@ class DiscoveryServiceTest {
   void shouldReturnReleaseIdForCOURequestValidDatasetAndSuccessfullySent() throws Exception {
 
     GetObjectRequest request =
-        GetObjectRequest.builder().bucket(TEST_SOURCE_BUCKET).key(CURSOR_KEY).build();
+        GetObjectRequest.builder().bucket(CONTROL_BUCKET).key(CURSOR_KEY).build();
     PutObjectRequest updateCursorRequest =
         PutObjectRequest.builder()
-            .bucket(TEST_SOURCE_BUCKET)
+            .bucket(CONTROL_BUCKET)
             .key(CURSOR_KEY)
             .contentType("application/json")
             .build();
     PutObjectRequest saveManifestRequest =
         PutObjectRequest.builder()
-            .bucket(TEST_SOURCE_BUCKET)
+            .bucket(LANDING_BUCKET)
             .key("acquisitions/2026-10-06/" + TEST_RELEASE_ID + ".json")
             .ifNoneMatch("*")
             .contentType("application/json")
@@ -145,7 +146,8 @@ class DiscoveryServiceTest {
             ReleaseManifest.read(
                 JSON.readTree(readFileFromClasspath("output/output-manifest-COU.json"))));
 
-    when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+    when(properties.controlBucket()).thenReturn(CONTROL_BUCKET);
+    when(properties.landingBucket()).thenReturn(LANDING_BUCKET);
     when(properties.osHttpURLTemplate())
         .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
 
@@ -202,13 +204,13 @@ class DiscoveryServiceTest {
   void shouldReturnReleaseIdForFULLRequestValidDatasetAndSuccessfullySent() throws Exception {
     PutObjectRequest updateCursorRequest =
         PutObjectRequest.builder()
-            .bucket(TEST_SOURCE_BUCKET)
+            .bucket(CONTROL_BUCKET)
             .key(CURSOR_KEY)
             .contentType("application/json")
             .build();
     PutObjectRequest saveManifestRequest =
         PutObjectRequest.builder()
-            .bucket(TEST_SOURCE_BUCKET)
+            .bucket(LANDING_BUCKET)
             .key("acquisitions/2026-05-01/" + TEST_RELEASE_ID + ".json")
             .ifNoneMatch("*")
             .contentType("application/json")
@@ -224,7 +226,8 @@ class DiscoveryServiceTest {
             ReleaseManifest.read(
                 JSON.readTree(readFileFromClasspath("output/output-manifest-Full.json"))));
 
-    when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+    when(properties.controlBucket()).thenReturn(CONTROL_BUCKET);
+    when(properties.landingBucket()).thenReturn(LANDING_BUCKET);
     when(properties.osHttpURLTemplate())
         .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
 
@@ -279,9 +282,9 @@ class DiscoveryServiceTest {
       throws Exception {
 
     GetObjectRequest request =
-        GetObjectRequest.builder().bucket(TEST_SOURCE_BUCKET).key(CURSOR_KEY).build();
+        GetObjectRequest.builder().bucket(CONTROL_BUCKET).key(CURSOR_KEY).build();
 
-    when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+    when(properties.controlBucket()).thenReturn(CONTROL_BUCKET);
     when(properties.osHttpURLTemplate())
         .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
 
@@ -373,7 +376,7 @@ class DiscoveryServiceTest {
   @Test
   void shouldThrowExceptionForCOUWithNoCursor() {
 
-    when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+    when(properties.controlBucket()).thenReturn(CONTROL_BUCKET);
 
     try {
       discoveryService.discover(COU_REQUEST_JSON);
@@ -383,7 +386,7 @@ class DiscoveryServiceTest {
           "The active.json Cursor file could not be found in the S3 bucket.",
           throwable.getMessage());
       verify(s3Client)
-          .getObject(GetObjectRequest.builder().bucket(TEST_SOURCE_BUCKET).key(CURSOR_KEY).build());
+          .getObject(GetObjectRequest.builder().bucket(CONTROL_BUCKET).key(CURSOR_KEY).build());
     }
   }
 
@@ -443,9 +446,9 @@ class DiscoveryServiceTest {
   void shouldThrowExceptionNoPackageVersionDataReturnedFromOS() throws Exception {
 
     GetObjectRequest request =
-        GetObjectRequest.builder().bucket(TEST_SOURCE_BUCKET).key(CURSOR_KEY).build();
+        GetObjectRequest.builder().bucket(CONTROL_BUCKET).key(CURSOR_KEY).build();
 
-    when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+    when(properties.controlBucket()).thenReturn(CONTROL_BUCKET);
 
     when(properties.osHttpURLTemplate())
         .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");

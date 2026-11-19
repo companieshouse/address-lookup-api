@@ -42,7 +42,7 @@ class HandlerTest {
                 {
                   "s3ObjectDetails":
                   {
-                    "bucketName":"ingest-bucket",
+                    "bucketName":"landing-bucket",
                     "versionId":"3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY",
                     "objectKey":"acquisitions/2026-10-15/f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4.json"
                   },

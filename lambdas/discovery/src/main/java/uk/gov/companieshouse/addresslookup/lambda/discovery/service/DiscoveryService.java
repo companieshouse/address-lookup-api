@@ -195,33 +195,33 @@ public final class DiscoveryService {
 
     ResponseInputStream<GetObjectResponse> response =
         s3Client.getObject(
-            GetObjectRequest.builder().bucket(properties.sourceBucket()).key(CURSOR_KEY).build());
+            GetObjectRequest.builder().bucket(properties.controlBucket()).key(CURSOR_KEY).build());
 
     check(response != null, MISSING_CURSOR_FILE_MESSAGE);
     return JSON.readValue(response, VersionCursor.class);
   }
 
   private void saveOrUpdateCursorToS3Bucket(Object payload) throws JsonProcessingException {
-    saveToS3Bucket(payload, CURSOR_KEY, false);
+    saveToS3Bucket(payload, properties.controlBucket(), CURSOR_KEY, false);
   }
 
   private void saveNewOnlyToS3Bucket(Object payload, String key) throws JsonProcessingException {
-    saveToS3Bucket(payload, key, true);
+    saveToS3Bucket(payload, properties.landingBucket(), key, true);
   }
 
-  private void saveToS3Bucket(Object payload, String key, boolean ifNoneMatch)
+  private void saveToS3Bucket(Object payload, String bucket, String key, boolean ifNoneMatch)
       throws JsonProcessingException {
     try {
       s3Client.putObject(
           PutObjectRequest.builder()
-              .bucket(properties.sourceBucket())
+              .bucket(bucket)
               .key(key)
               .ifNoneMatch(ifNoneMatch ? "*" : null)
               .contentType("application/json")
               .build(),
           RequestBody.fromString(JSON.writeValueAsString(payload)));
     } catch (S3Exception e) {
-      LOG.error("Failed to save to S3", e, Map.of("bucket", properties.sourceBucket(), "key", key));
+      LOG.error("Failed to save to S3", e, Map.of("bucket", bucket, "key", key));
       if (e.statusCode() != 412) throw e;
     }
   }

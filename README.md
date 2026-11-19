@@ -224,9 +224,8 @@ handlers that use them; they are not API startup requirements.
 | --- | --- | --- |
 | `OS_API_KEY` | Authenticates the acquisition client's OS requests. | No default; required when the OS client is used. |
 | `OS_PACKAGES` | Declared acquisition package-configuration field. | Unset; not directly consumed by the checked-in handlers. |
-| `SOURCE_BUCKET` | Source acquisition storage. | Unset; configure for handlers using source storage. |
-| `SCANNED_BUCKET` | Scanned destination storage, also used by the importer. | Unset; configure for handlers using scanned storage. |
-| `INGEST_BUCKET` | Ingest bucket used by the scan-results handler. | No default; required by that handler. |
+| `CONTROL_BUCKET` | Unscanned storage for acquisition cursors and operational control state. | Unset; configure for handlers using control storage. |
+| `LANDING_BUCKET` | GuardDuty-scanned storage for manifests and downloaded or extracted data. | Unset; configure for handlers using landing storage. |
 | `EVENT_BUS` | EventBridge bus for acquisition commands. | No default; required when publishing commands. |
 | `MAX_ZIP_BYTES` | Maximum ZIP size in bytes. | `21474836480` (20 GiB) |
 | `MAX_EXTRACTED_BYTES` | Maximum extracted size in bytes. | `1073741824` (1 GiB) |
@@ -236,7 +235,7 @@ handlers that use them; they are not API startup requirements.
 ### Import and release settings
 
 The importer reads `lambdas/import/src/main/resources/importer.properties`
-and requires `SCANNED_BUCKET` from the acquisition settings above.
+and requires `LANDING_BUCKET` from the acquisition settings above.
 `MAX_PRIMARY_CSV_BYTES` belongs to the release-core local CSV reader.
 These settings do not control Flyway's hardcoded local SQL fixtures.
 

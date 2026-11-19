@@ -56,8 +56,8 @@ final class ExtractionServiceTest {
   private static final String ID = "12345678-1234-1234-1234-123456789abc";
   private static final String ZIP_KEY = "Scanned/" + ID + "/" + DATASET + ".zip";
   private static final String RECEIPT_KEY = ReleaseStore.receiptKey(ID, DATASET, "extract");
-  private static final String SOURCE = "source";
-  private static final String CHECKED = "checked";
+  private static final String SOURCE = "landing";
+  private static final String CHECKED = SOURCE;
 
   private record StoredObject(String bucket, String key) {}
 
@@ -79,9 +79,8 @@ final class ExtractionServiceTest {
             s3,
             commands,
             new AcquisitionProperties(
+                "control",
                 SOURCE,
-                CHECKED,
-                "ingest",
                 "events",
                 "key",
                 "packages",
@@ -215,12 +214,11 @@ final class ExtractionServiceTest {
   }
 
   @Test
-  void constructorRequiresScannedBucket() {
+  void constructorRequiresLandingBucket() {
     var properties =
         new AcquisitionProperties(
-            SOURCE,
+            "control",
             " ",
-            "ingest",
             "events",
             "key",
             "packages",
@@ -236,7 +234,7 @@ final class ExtractionServiceTest {
         assertThrows(
             IllegalArgumentException.class, () -> new ExtractionService(s3, commands, properties));
 
-    assertEquals("Missing SCANNED_BUCKET", failure.getMessage());
+    assertEquals("Missing LANDING_BUCKET", failure.getMessage());
   }
 
   @Test
@@ -470,9 +468,8 @@ final class ExtractionServiceTest {
         s3,
         commands,
         new AcquisitionProperties(
+            "control",
             SOURCE,
-            CHECKED,
-            "ingest",
             "events",
             "key",
             "packages",
@@ -502,7 +499,7 @@ final class ExtractionServiceTest {
         .thenAnswer(call ->
             HeadObjectResponse.builder()
                 .versionId(
-                    CHECKED.equals(call.getArgument(0, HeadObjectRequest.class).bucket())
+                    csvKey().equals(call.getArgument(0, HeadObjectRequest.class).key())
                         ? "csv-version"
                         : "zip-version")
                 .build());

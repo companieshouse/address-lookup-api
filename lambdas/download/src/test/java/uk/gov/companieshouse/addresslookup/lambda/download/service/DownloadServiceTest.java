@@ -46,7 +46,7 @@ import uk.gov.companieshouse.logging.StructuredLogger;
 final class DownloadServiceTest {
   private static final Logger STRUCTURED_LOGGER =
       (Logger) LoggerFactory.getLogger(StructuredLogger.class);
-  private static final String BUCKET = "source-bucket";
+  private static final String BUCKET = "landing-bucket";
   private static final String PLAN_KEY =
       "acquisitions/2026-05-16/4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json";
   private static final String RELEASE_ID = "4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56";
@@ -436,8 +436,7 @@ final class DownloadServiceTest {
 
   private static AcquisitionProperties properties() {
     return new AcquisitionProperties(
-        BUCKET,
-        "scanned-bucket",
+        "control-bucket",
         BUCKET,
         "event-bus",
         "redacted",

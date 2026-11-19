@@ -10,9 +10,8 @@ import uk.gov.companieshouse.release.model.DatasetDefault;
 
 @ConfigurationProperties("acquisition")
 public record AcquisitionProperties(
-    String sourceBucket,
-    String scannedBucket,
-    String ingestBucket,
+    String controlBucket,
+    String landingBucket,
     String eventBus,
     String osApiKey,
     String packages,

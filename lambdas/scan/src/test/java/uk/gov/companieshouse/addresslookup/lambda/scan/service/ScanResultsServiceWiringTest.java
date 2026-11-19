@@ -24,7 +24,7 @@ class ScanResultsServiceWiringTest {
     try (var context = new AnnotationConfigApplicationContext()) {
       context.registerBean(Commands.class, () -> commands);
       context.registerBean(
-          AcquisitionProperties.class, () -> properties("ingest-bucket", "scanned-bucket"));
+          AcquisitionProperties.class, () -> properties("landing-bucket"));
       context.register(ScanResultsService.class);
       context.refresh();
 
@@ -33,9 +33,9 @@ class ScanResultsServiceWiringTest {
   }
 
   @ParameterizedTest
-  @CsvSource({", scanned-bucket, INGEST_BUCKET", "ingest-bucket, , SCANNED_BUCKET"})
-  void missingBucketFailsExplicitly(String ingestBucket, String scannedBucket, String name) {
-    var properties = properties(ingestBucket, scannedBucket);
+  @CsvSource({", LANDING_BUCKET"})
+  void missingBucketFailsExplicitly(String landingBucket, String name) {
+    var properties = properties(landingBucket);
 
     var failure =
         assertThrows(
@@ -44,11 +44,10 @@ class ScanResultsServiceWiringTest {
     assertEquals("Missing " + name, failure.getMessage());
   }
 
-  private static AcquisitionProperties properties(String ingestBucket, String scannedBucket) {
+  private static AcquisitionProperties properties(String landingBucket) {
     return new AcquisitionProperties(
         null,
-        scannedBucket,
-        ingestBucket,
+        landingBucket,
         "event-bus",
         null,
         null,

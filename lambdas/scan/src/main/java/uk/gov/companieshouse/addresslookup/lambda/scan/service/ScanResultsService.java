@@ -30,13 +30,11 @@ public final class ScanResultsService {
   private static final String MALWARE_FOUND = "MALWARE_FOUND";
 
   private final Commands commands;
-  private final String ingestBucket;
-  private final String cleanBucket;
+  private final String landingBucket;
 
   public ScanResultsService(Commands commands, AcquisitionProperties properties) {
     this.commands = commands;
-    this.ingestBucket = required(properties.ingestBucket(), "INGEST_BUCKET");
-    this.cleanBucket = required(properties.scannedBucket(), "SCANNED_BUCKET");
+    this.landingBucket = required(properties.landingBucket(), "LANDING_BUCKET");
   }
 
   public String scan(Map<String, Object> event) throws Exception {
@@ -105,9 +103,9 @@ public final class ScanResultsService {
     }
     if (parsed == null) return new Validation(null, InvalidReason.INVALID_OBJECT_KEY);
     if (versionId == null) return new Validation(parsed, InvalidReason.MISSING_VERSION_ID);
-    String expectedBucket = parsed.fileType() == FileType.CSV ? cleanBucket : ingestBucket;
     return new Validation(
-        parsed, expectedBucket.equals(bucket) ? null : InvalidReason.UNKNOWN_BUCKET_FOR_OBJECT_KEY);
+        parsed,
+        landingBucket.equals(bucket) ? null : InvalidReason.UNKNOWN_BUCKET_FOR_OBJECT_KEY);
   }
 
   private String reject(

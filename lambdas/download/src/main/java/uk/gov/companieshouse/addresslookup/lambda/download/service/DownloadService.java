@@ -33,7 +33,7 @@ public final class DownloadService {
     this.s3 = s3;
     this.os = os;
     this.properties = properties;
-    AcquisitionProperties.required(properties.sourceBucket(), "SOURCE_BUCKET");
+    AcquisitionProperties.required(properties.landingBucket(), "LANDING_BUCKET");
   }
 
   public String download(Map<String, Object> event, Context context) throws Exception {
@@ -45,11 +45,11 @@ public final class DownloadService {
             .name();
 
     var store = new ReleaseStore(s3);
-    String sourceBucket = properties.sourceBucket();
+    String landingBucket = properties.landingBucket();
 
     validatePlanKey(downloadCommandPlanKey);
     var manifest =
-        readManifest(store, sourceBucket, downloadCommandPlanKey, downloadCommandDataset);
+        readManifest(store, landingBucket, downloadCommandPlanKey, downloadCommandDataset);
 
     String manifestReleaseId = releaseId(manifest).toString();
     LOG.info(
@@ -64,7 +64,7 @@ public final class DownloadService {
 
     // The receipt makes retries idempotent: if the exact release/dataset was already downloaded,
     // do not fetch the supplier ZIP again.
-    if (store.receipt(sourceBucket, manifestReleaseId, downloadCommandDataset, "download")
+    if (store.receipt(landingBucket, manifestReleaseId, downloadCommandDataset, "download")
         != null) {
       LOG.info(
           "Download skipped because receipt already exists",
@@ -107,14 +107,14 @@ public final class DownloadService {
           new StreamingS3(s3, () -> context.getRemainingTimeInMillis())
               .put(
                   inputStream,
-                  sourceBucket,
+                  landingBucket,
                   zipUploadS3Path,
                   expectedDatasetMd5,
                   properties.maxZipBytes());
 
       // prepare the download receipt
       store.downloadReceipt(
-          sourceBucket,
+          landingBucket,
           new ReleaseStore.DownloadReceipt(
               manifestReleaseId,
               downloadCommandDataset,

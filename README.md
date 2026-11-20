@@ -273,6 +273,13 @@ missing or stale artefacts are overwritten at the deterministic key.
 
 ### Import and release settings
 
+Landing key support recognises all six Royal Mail, Built Address and Prebuild Address
+feature types, including package `26088`. CSV keys use
+`<feed>/<packageId>/<versionId>/downloads/<feature type>/<entry>.csv`.
+`KeyLayout.LandingObject.isMainCsv()` identifies `<feature type>.csv`; other safe
+CSV entry names are supported as sub-tables. This is key support only: extraction
+and database import remain limited to the pinned Royal Mail catalogue.
+
 The importer reads `lambdas/import/src/main/resources/importer.properties`
 and requires both `CONTROL_BUCKET` for reconciliation cursors and `LANDING_BUCKET`
 for manifests and scanned data.

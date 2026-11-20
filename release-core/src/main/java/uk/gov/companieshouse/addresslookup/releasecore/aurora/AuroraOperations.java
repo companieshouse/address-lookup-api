@@ -92,7 +92,7 @@ public class AuroraOperations {
   }
 
   public void requireEmptyLiveTables() throws Exception {
-    for (var dataset : Dataset.values()) {
+    for (var dataset : DatasetCatalog.datasets()) {
       Long rows =
           jdbc.queryForObject(
               "SELECT count(*) FROM " + DatasetCatalog.table(dataset).data(), Long.class);

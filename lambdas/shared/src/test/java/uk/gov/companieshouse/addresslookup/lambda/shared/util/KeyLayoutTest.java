@@ -50,6 +50,31 @@ class KeyLayoutTest {
   }
 
   @Test
+  void supportsMainAndSubTableCsvKeysForAllSixDatasetsAndFeeds() {
+    for (var feed : KeyLayout.Feed.values()) {
+      var version = new KeyLayout.PackageVersion(feed, "26088", "150450");
+      for (var dataset : Dataset.values()) {
+        String main = KeyLayout.extractedCsvKey(version, dataset, dataset.datasetName() + ".csv");
+        assertTrue(KeyLayout.parseLandingObject(main).isMainCsv());
+        assertFalse(
+            KeyLayout.parseLandingObject(KeyLayout.downloadZipKey(version, dataset)).isMainCsv());
+        for (String entry : new String[] {dataset.datasetName() + "_altadd.csv", "sub-table_01.csv"}) {
+          String key = KeyLayout.extractedCsvKey(version, dataset, entry);
+          assertEquals(
+              KeyLayout.versionPrefix(version) + "downloads/" + dataset.datasetName() + "/" + entry,
+              key);
+          var parsed = KeyLayout.parseLandingObject(key);
+          assertEquals(version, parsed.packageVersion());
+          assertEquals(dataset, parsed.dataset());
+          assertEquals(entry, parsed.fileName());
+          assertFalse(parsed.isMainCsv());
+          assertEquals(KeyLayout.FileType.CSV, KeyLayout.parseObjectKey(key).fileType());
+        }
+      }
+    }
+  }
+
+  @Test
   void buildsPerPackageCursorKeys() {
     assertEquals("cursors/24833.json", KeyLayout.downloadCursorKey("24833"));
     assertEquals("cursors/24833.extraction.json", KeyLayout.extractionCursorKey("24833"));

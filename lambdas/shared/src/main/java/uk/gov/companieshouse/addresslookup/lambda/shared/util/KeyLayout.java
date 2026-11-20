@@ -56,7 +56,13 @@ public class KeyLayout {
   }
 
   public record LandingObject(
-      PackageVersion packageVersion, Dataset dataset, LandingFileType fileType, String fileName) {}
+      PackageVersion packageVersion, Dataset dataset, LandingFileType fileType, String fileName) {
+    public boolean isMainCsv() {
+      return fileType == LandingFileType.CSV
+          && dataset != null
+          && (dataset.datasetName() + ".csv").equals(fileName);
+    }
+  }
 
   public static String downloadCursorKey(String packageId) {
     return "cursors/" + requireComponent(packageId, PACKAGE_ID) + JSON_EXTENSION;

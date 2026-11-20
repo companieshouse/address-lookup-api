@@ -18,6 +18,7 @@ import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseRepository;
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
 import uk.gov.companieshouse.release.model.Dataset;
+import uk.gov.companieshouse.release.model.DatasetCatalog;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
 
 /**
@@ -184,7 +185,7 @@ public final class ImportService {
       String region,
       Context context) {
     var failures = new ArrayList<Exception>();
-    for (var dataset : Dataset.values()) {
+    for (var dataset : DatasetCatalog.datasets()) {
       if (context.getRemainingTimeInMillis() < 60000) break;
       try {
         importDataset(store, bucket, manifest, packageVersion, dataset, importer, region);

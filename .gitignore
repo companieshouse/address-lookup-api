@@ -23,6 +23,8 @@ http/http-client.private.env.json
 .scannerwork/
 
 # IntelliJ HTTP Client download output
+/downloads/
+
 /http/downloads/
 
 # Editor-specific files (use a global gitignore)
@@ -31,3 +33,7 @@ http/http-client.private.env.json
 
 # Seed CSVs downloaded from the OS API; never commit
 /database/local/data/
+
+# AWS Lambda
+template.yml
+template.yaml

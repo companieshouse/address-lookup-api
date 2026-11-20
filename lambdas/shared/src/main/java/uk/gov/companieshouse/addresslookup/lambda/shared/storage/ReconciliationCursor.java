@@ -5,22 +5,35 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 import java.io.IOException;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Predicate;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
+import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
 
 /** A listing position, not processing state. Every retained key is revisited on the next sweep. */
 public final class ReconciliationCursor {
   private final S3Client s3;
-  private final String bucket;
+  private final String controlBucket;
+  private final String landingBucket;
   private final String prefix;
   private final String cursorKey;
+  private final Predicate<String> accepts;
 
-  public ReconciliationCursor(S3Client s3, String bucket, String prefix, String name) {
+  public ReconciliationCursor(
+      S3Client s3, String controlBucket, String landingBucket, String prefix, String name) {
+    this(s3, controlBucket, landingBucket, prefix, name, key -> true);
+  }
+
+  public ReconciliationCursor(
+      S3Client s3, String controlBucket, String landingBucket, String prefix, String name,
+      Predicate<String> accepts) {
     this.s3 = s3;
-    this.bucket = bucket;
+    this.controlBucket = controlBucket;
+    this.landingBucket = landingBucket;
     this.prefix = prefix;
-    this.cursorKey = "reconciliation/" + name + ".json";
+    this.cursorKey = KeyLayout.reconciliationCursorKey(name);
+    this.accepts = accepts;
   }
 
   /**
@@ -42,11 +55,12 @@ public final class ReconciliationCursor {
   private Position readPosition() throws IOException {
     var present =
         s3.listObjectsV2(
-            ListObjectsV2Request.builder().bucket(bucket).prefix(cursorKey).maxKeys(1).build());
+            ListObjectsV2Request.builder().bucket(controlBucket).prefix(cursorKey).maxKeys(1).build());
     if (present.contents().stream().noneMatch(o -> cursorKey.equals(o.key()))) {
       return new Position(null, null);
     }
-    try (var in = s3.getObject(GetObjectRequest.builder().bucket(bucket).key(cursorKey).build())) {
+    try (var in =
+        s3.getObject(GetObjectRequest.builder().bucket(controlBucket).key(cursorKey).build())) {
       var bytes = in.readNBytes(4097);
       check(bytes.length <= 4096, "Reconciliation cursor too large");
       String after = required(JSON.readTree(bytes), "after");
@@ -58,7 +72,7 @@ public final class ReconciliationCursor {
   /** Returns false when another invocation advanced the cursor first. */
   private boolean claim(String key, String etag) {
     var request =
-        PutObjectRequest.builder().bucket(bucket).key(cursorKey).contentType("application/json");
+        PutObjectRequest.builder().bucket(controlBucket).key(cursorKey).contentType("application/json");
     if (etag == null) request.ifNoneMatch("*");
     else request.ifMatch(etag);
     // The nonce avoids an identical ETag when a sweep returns to the same key.
@@ -76,17 +90,20 @@ public final class ReconciliationCursor {
   private record Position(String after, String etag) {}
 
   private Optional<String> firstAfter(String key) {
-    return s3
-        .listObjectsV2(
+    String token = null;
+    do {
+      var page = s3.listObjectsV2(
             ListObjectsV2Request.builder()
-                .bucket(bucket)
+                .bucket(landingBucket)
                 .prefix(prefix)
                 .startAfter(key)
-                .maxKeys(1)
-                .build())
-        .contents()
-        .stream()
-        .map(S3Object::key)
-        .findFirst();
+                .continuationToken(token)
+                .maxKeys(1000)
+                .build());
+      var match = page.contents().stream().map(S3Object::key).filter(accepts).findFirst();
+      if (match.isPresent()) return match;
+      token = page.nextContinuationToken();
+    } while (token != null);
+    return Optional.empty();
   }
 }

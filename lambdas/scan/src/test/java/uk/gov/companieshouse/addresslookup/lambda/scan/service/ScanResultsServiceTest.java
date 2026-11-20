@@ -34,16 +34,14 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.EventPublic
 
 @ExtendWith(MockitoExtension.class)
 class ScanResultsServiceTest {
-  private static final String MANIFEST_RELEASE = "f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4";
+  private static final String MANIFEST_RELEASE = "20780-150104";
   private static final String MANIFEST_KEY =
-      "acquisitions/2026-10-15/" + MANIFEST_RELEASE + ".json";
-  private static final String RECEIPT_RELEASE = "f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4";
-  private static final String RECEIPT_KEY =
-      "Scanned/" + RECEIPT_RELEASE + "/add_gb_royalmailaddress.receipt.json";
-  private static final String BUCKET = "ingest-bucket";
-  private static final String CLEAN_BUCKET = "clean-bucket";
-  private static final String KEY = "zips/20780-131061/add_gb_royalmailaddress.zip";
-  private static final String CSV_KEY = "csv/20780-131061/add_gb_royalmailaddress.csv";
+      "daily_cou/20780/150104/manifest/data_package_manifest.json";
+  private static final String BUCKET = "landing-bucket";
+  private static final String CLEAN_BUCKET = BUCKET;
+  private static final String KEY = "daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip";
+  private static final String CSV_KEY =
+      "daily_cou/20780/150104/downloads/add_gb_royalmailaddress/" + "add_gb_royalmailaddress.csv";
   private static final String VERSION = "3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY";
 
   private record PublishedEvent(String type, JsonNode detail) {}
@@ -61,7 +59,6 @@ class ScanResultsServiceTest {
     var properties =
         new AcquisitionProperties(
             null,
-            CLEAN_BUCKET,
             BUCKET,
             "event-bus",
             null,
@@ -162,75 +159,9 @@ class ScanResultsServiceTest {
   }
 
   @Test
-  void cleanReceiptPublishesOnlyReceiptReadyWithExactObject() throws Exception {
-    assertEquals(
-        "ReceiptReady", service.scan(event(BUCKET, RECEIPT_KEY, VERSION, "NO_THREATS_FOUND")));
-    assertEquals(List.of("ReceiptReady"), types());
-    assertEquals(
-        JSON.valueToTree(
-            Map.of(
-                "schemaVersion",
-                1,
-                "releaseId",
-                RECEIPT_RELEASE,
-                "dataset",
-                "add_gb_royalmailaddress",
-                "object",
-                Map.of("bucket", BUCKET, "key", RECEIPT_KEY, "versionId", VERSION))),
-        detail(0));
-  }
-
-  @Test
-  void infectedReceiptPublishesOnlyRejectionWithThreatNames() throws Exception {
-    service.scan(eventWithThreats(BUCKET, RECEIPT_KEY, VERSION));
-    assertEquals(List.of("StepRejected"), types());
-    assertEquals("MALWARE_FOUND", detail(0).path("code").asText());
-    assertEquals("receipt-scan", detail(0).path("step").asText());
-    assertEquals("Example.Malware", detail(0).path("message").asText());
-    assertEquals(RECEIPT_KEY, detail(0).path("object").path("key").asText());
-    assertEquals(VERSION, detail(0).path("object").path("versionId").asText());
-  }
-
-  @ParameterizedTest(name = "receipt result: {0}")
-  @ValueSource(strings = {"FAILED", "UNSUPPORTED", "ACCESS_DENIED", "UNKNOWN"})
-  void inconclusiveReceiptsPublishOnlyRejections(String result) throws Exception {
-    service.scan(event(BUCKET, RECEIPT_KEY, VERSION, result));
-    assertEquals(List.of("StepRejected"), types());
-    assertEquals("SCAN_INCONCLUSIVE", detail(0).path("code").asText());
-    assertEquals("receipt-scan", detail(0).path("step").asText());
-    assertEquals(result, detail(0).path("message").asText());
-  }
-
-  @ParameterizedTest(name = "{0}")
-  @MethodSource("invalidReceiptEvents")
-  void receiptRequiresIngestBucketAndVersion(String scenario, Map<String, Object> input)
-      throws Exception {
-    service.scan(input);
-    assertEquals(List.of("StepRejected"), types());
-    assertEquals("INVALID_INPUT", detail(0).path("code").asText());
-    assertEquals("receipt-scan", detail(0).path("step").asText());
-    assertEquals(RECEIPT_KEY, detail(0).path("object").path("key").asText());
-  }
-
-  @Test
-  void duplicateReceiptsAreRepublished() throws Exception {
-    var input = event(BUCKET, RECEIPT_KEY, VERSION, "NO_THREATS_FOUND");
-    service.scan(input);
-    service.scan(input);
-    assertEquals(List.of("ReceiptReady", "ReceiptReady"), types());
-  }
-
-  @Test
-  void receiptRejectedPublicationPropagates() {
-    var input = event(BUCKET, RECEIPT_KEY, VERSION, "NO_THREATS_FOUND");
-    rejectEntries = true;
-    assertThrows(EventPublicationException.class, () -> service.scan(input));
-  }
-
-  @Test
-  void scannedZipPreservesUuidReleaseAndExactObject() throws Exception {
-    String releaseId = "f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4";
-    String key = "Scanned/" + releaseId + "/add_isl_royalmailaddress.zip";
+  void feedZipPreservesPackageVersionAndExactObject() throws Exception {
+    String releaseId = "20780-150104";
+    String key = "daily_cou/20780/150104/downloads/add_isl_royalmailaddress.zip";
     service.scan(event(BUCKET, key, VERSION, "NO_THREATS_FOUND"));
     assertEquals(List.of("ExtractRequested"), types());
     JsonNode payload = detail(0);
@@ -249,7 +180,7 @@ class ScanResultsServiceTest {
     JsonNode d = detail(0);
     assertTrue(d.get("schemaVersion").isInt());
     assertEquals(1, d.get("schemaVersion").intValue());
-    assertEquals("20780-131061", d.get("releaseId").asText());
+    assertEquals("20780-150104", d.get("releaseId").asText());
     assertEquals("add_gb_royalmailaddress", d.get("dataset").asText());
     assertEquals(BUCKET, d.path("object").get("bucket").asText());
     assertEquals(KEY, d.path("object").get("key").asText());
@@ -265,7 +196,7 @@ class ScanResultsServiceTest {
     JsonNode d = detail(0);
     assertTrue(d.get("schemaVersion").isInt());
     assertEquals(1, d.get("schemaVersion").intValue());
-    assertEquals("20780-131061", d.get("releaseId").asText());
+    assertEquals("20780-150104", d.get("releaseId").asText());
     assertEquals("add_gb_royalmailaddress", d.get("dataset").asText());
     assertEquals(CLEAN_BUCKET, d.path("object").get("bucket").asText());
     assertEquals(CSV_KEY, d.path("object").get("key").asText());
@@ -273,8 +204,8 @@ class ScanResultsServiceTest {
   }
 
   @Test
-  void cleanCsvInIngestBucketIsRejected() throws Exception {
-    service.scan(event(BUCKET, CSV_KEY, VERSION, "NO_THREATS_FOUND"));
+  void cleanCsvInAnotherBucketIsRejected() throws Exception {
+    service.scan(event("other-bucket", CSV_KEY, VERSION, "NO_THREATS_FOUND"));
 
     assertEquals(List.of("StepRejected"), types());
     assertEquals("INVALID_INPUT", detail(0).get("code").asText());
@@ -352,7 +283,7 @@ class ScanResultsServiceTest {
 
   @Test
   void invalidKeyPreservesExactObjectAndUri() throws Exception {
-    String key = "Scanned/not-a-uuid/unknown file.zip";
+    String key = "daily_cou/20780/150104/downloads/unknown file.zip";
     service.scan(event(BUCKET, key, VERSION, "NO_THREATS_FOUND"));
 
     assertEquals(
@@ -429,7 +360,12 @@ class ScanResultsServiceTest {
   @ParameterizedTest(name = "dataset: {0}")
   @ValueSource(strings = {"add_gb_royalmailaddress", "add_isl_royalmailaddress"})
   void eachDatasetIsRoutedIndependently(String dataset) throws Exception {
-    service.scan(event(BUCKET, "zips/r-1/" + dataset + ".zip", VERSION, "NO_THREATS_FOUND"));
+    service.scan(
+        event(
+            BUCKET,
+            "daily_cou/20780/150104/downloads/" + dataset + ".zip",
+            VERSION,
+            "NO_THREATS_FOUND"));
     assertEquals(List.of("ExtractRequested"), types());
     assertEquals(dataset, detail(0).get("dataset").asText());
   }
@@ -458,27 +394,18 @@ class ScanResultsServiceTest {
     return Stream.of(
         Arguments.of(
             "manifest in wrong bucket",
-            event(CLEAN_BUCKET, MANIFEST_KEY, VERSION, "NO_THREATS_FOUND")),
+            event("other-bucket", MANIFEST_KEY, VERSION, "NO_THREATS_FOUND")),
         Arguments.of(
             "manifest missing version", event(BUCKET, MANIFEST_KEY, null, "NO_THREATS_FOUND")),
         Arguments.of(
             "manifest blank version", event(BUCKET, MANIFEST_KEY, " ", "NO_THREATS_FOUND")),
         Arguments.of(
-            "manifest invalid date",
+            "unsupported old manifest layout",
             event(
                 BUCKET,
-                "acquisitions/2026-02-30/" + MANIFEST_RELEASE + ".json",
+                "acquisitions/2026-02-30/12345678-1234-1234-1234-123456789abc.json",
                 VERSION,
                 "NO_THREATS_FOUND")));
-  }
-
-  private static Stream<Arguments> invalidReceiptEvents() {
-    return Stream.of(
-        Arguments.of(
-            "receipt in wrong bucket",
-            event(CLEAN_BUCKET, RECEIPT_KEY, VERSION, "NO_THREATS_FOUND")),
-        Arguments.of(
-            "receipt missing version", event(BUCKET, RECEIPT_KEY, null, "NO_THREATS_FOUND")));
   }
 
   private static Stream<Arguments> invalidEvents() {
@@ -486,15 +413,23 @@ class ScanResultsServiceTest {
         Arguments.of("unknown bucket", event("other-bucket", KEY, VERSION, "NO_THREATS_FOUND")),
         Arguments.of(
             "unknown dataset",
-            event(BUCKET, "zips/20780-131061/unknown.zip", VERSION, "NO_THREATS_FOUND")),
+            event(
+                BUCKET,
+                "daily_cou/20780/150104/downloads/unknown.zip",
+                VERSION,
+                "NO_THREATS_FOUND")),
         Arguments.of(
             "unsafe path",
-            event(BUCKET, "zips/../add_gb_builtaddress.zip", VERSION, "NO_THREATS_FOUND")),
+            event(
+                BUCKET,
+                "daily_cou/../150104/downloads/add_gb_builtaddress.zip",
+                VERSION,
+                "NO_THREATS_FOUND")),
         Arguments.of(
             "incorrect extension for prefix",
             event(
                 BUCKET,
-                "zips/20780-131061/add_gb_royalmailaddress.csv",
+                "daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip.csv",
                 VERSION,
                 "NO_THREATS_FOUND")),
         Arguments.of("missing version", event(BUCKET, KEY, null, "NO_THREATS_FOUND")),

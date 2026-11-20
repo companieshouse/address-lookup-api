@@ -56,7 +56,7 @@ public class AuroraOperations {
     verifyCount(dataset, type, id, rows);
   }
 
-  public void importLocal(Dataset dataset, SupplyType type, UUID id, InputStream csv, long rows) {
+  public void importStream(Dataset dataset, SupplyType type, UUID id, InputStream csv, long rows) {
     begin(dataset, type, id);
     String sql =
         "COPY "
@@ -92,7 +92,7 @@ public class AuroraOperations {
   }
 
   public void requireEmptyLiveTables() throws Exception {
-    for (var dataset : Dataset.values()) {
+    for (var dataset : DatasetCatalog.datasets()) {
       Long rows =
           jdbc.queryForObject(
               "SELECT count(*) FROM " + DatasetCatalog.table(dataset).data(), Long.class);

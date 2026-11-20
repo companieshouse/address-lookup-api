@@ -3,23 +3,20 @@ package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
-import com.fasterxml.jackson.databind.JsonNode;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectTaggingRequest;
-import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
-import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.model.S3Exception;
-import software.amazon.awssdk.services.s3.model.Tag;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.IntConsumer;
+import java.util.function.UnaryOperator;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.*;
 
 /** S3 progress records and scan evidence; no database dependency. */
 public final class ReleaseStore {
@@ -27,22 +24,48 @@ public final class ReleaseStore {
   private static final String JSON_CONTENT_TYPE = "application/json";
   private static final String FIELD_S3_KEY = "s3Key";
   private static final String FIELD_VERSION = "version";
-  private static final String SCANNED_PREFIX = "Scanned/";
+  private static final int MAX_STATE_UPDATE_ATTEMPTS = 5;
   private final S3Client s3;
+  private final IntConsumer backoff;
 
   public ReleaseStore(S3Client s3) {
+    this(s3, ReleaseStore::pauseBeforeRetry);
+  }
+
+  ReleaseStore(S3Client s3, IntConsumer backoff) {
     this.s3 = s3;
+    this.backoff = backoff;
+  }
+
+  private static void pauseBeforeRetry(int attempt) {
+    try {
+      Thread.sleep(ThreadLocalRandom.current().nextLong(25, 101) * attempt);
+    } catch (InterruptedException interrupted) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("State update retry interrupted", interrupted);
+    }
   }
 
   public JsonNode read(String bucket, String key) throws IOException {
     // Prefix-scoped ListBucket grants need not reveal missing keys through GET's 404/403
     // distinction.
-    // Check the exact permitted key before reading optional receipts.
+    // Check the exact permitted key before reading optional state records.
     var existing =
         s3.listObjectsV2(
             ListObjectsV2Request.builder().bucket(bucket).prefix(key).maxKeys(1).build());
     if (existing.contents().stream().noneMatch(o -> key.equals(o.key()))) return null;
-    try (var in = s3.getObject(GetObjectRequest.builder().bucket(bucket).key(key).build())) {
+    return readObject(bucket, key, null);
+  }
+
+  /** Reads a specific immutable S3 object version. */
+  public JsonNode read(String bucket, String key, String version) throws IOException {
+    check(version != null && !version.isBlank(), "S3 version is required");
+    return readObject(bucket, key, version);
+  }
+
+  private JsonNode readObject(String bucket, String key, String version) throws IOException {
+    var request = GetObjectRequest.builder().bucket(bucket).key(key).versionId(version).build();
+    try (var in = s3.getObject(request)) {
       byte[] bytes = in.readNBytes(1024 * 1024 + 1);
       check(bytes.length <= 1024 * 1024, "Manifest exceeds 1 MiB");
       return JSON.readTree(bytes);
@@ -50,6 +73,12 @@ public final class ReleaseStore {
       if (e.statusCode() == 404) return null;
       throw e;
     }
+  }
+
+  public InputStream open(String bucket, String key, String version) {
+    check(version != null && !version.isBlank(), "S3 version is required");
+    return s3.getObject(
+        GetObjectRequest.builder().bucket(bucket).key(key).versionId(version).build());
   }
 
   public void immutable(String bucket, String key, JsonNode value) {
@@ -74,6 +103,47 @@ public final class ReleaseStore {
         RequestBody.fromString(value.toString()));
   }
 
+  public ObjectNode updateState(String bucket, String key, UnaryOperator<ObjectNode> update)
+      throws IOException {
+    for (int attempt = 0; attempt < MAX_STATE_UPDATE_ATTEMPTS; attempt++) {
+      if (attempt > 0) backoff.accept(attempt);
+      StateSnapshot snapshot = readState(bucket, key);
+      if (snapshot == null) continue;
+
+      ObjectNode updated = update.apply(snapshot.value().deepCopy());
+      check(updated != null, "State update returned no value");
+      var request =
+          PutObjectRequest.builder().bucket(bucket).key(key).contentType(JSON_CONTENT_TYPE);
+      if (snapshot.eTag() == null) request.ifNoneMatch("*");
+      else request.ifMatch(snapshot.eTag());
+      try {
+        s3.putObject(request.build(), RequestBody.fromString(updated.toString()));
+        return updated;
+      } catch (S3Exception e) {
+        if (e.statusCode() != 409 && !isPreconditionFailed(e)) throw e;
+      }
+    }
+    throw new IllegalStateException("State update contention; retry invocation");
+  }
+
+  private record StateSnapshot(ObjectNode value, String eTag) {}
+
+  private StateSnapshot readState(String bucket, String key) throws IOException {
+    if (!exists(bucket, key)) return new StateSnapshot(JSON.createObjectNode(), null);
+    try (var in = s3.getObject(GetObjectRequest.builder().bucket(bucket).key(key).build())) {
+      byte[] bytes = in.readNBytes(1024 * 1024 + 1);
+      check(bytes.length <= 1024 * 1024, "State exceeds 1 MiB");
+      JsonNode parsed = JSON.readTree(bytes);
+      check(parsed != null && parsed.isObject(), "State must be a JSON object");
+      String eTag = in.response().eTag();
+      check(eTag != null, "State object is missing an ETag");
+      return new StateSnapshot((ObjectNode) parsed, eTag);
+    } catch (S3Exception e) {
+      if (e.statusCode() == 404) return null;
+      throw e;
+    }
+  }
+
   public List<String> keys(String bucket, String prefix) {
     var keys = new ArrayList<String>();
     String token = null;
@@ -89,6 +159,13 @@ public final class ReleaseStore {
       token = page.nextContinuationToken();
     } while (token != null);
     return keys;
+  }
+
+  public boolean exists(String bucket, String key) {
+    var result =
+        s3.listObjectsV2(
+            ListObjectsV2Request.builder().bucket(bucket).prefix(key).maxKeys(1).build());
+    return result.contents().stream().anyMatch(object -> key.equals(object.key()));
   }
 
   public String version(String bucket, String key) {
@@ -135,77 +212,6 @@ public final class ReleaseStore {
     return ref.hasNonNull(FIELD_VERSION)
         ? required(ref, FIELD_VERSION)
         : store.version(bucket, objectKey(ref));
-  }
-
-  public static String planKey(JsonNode plan) {
-    return "acquisitions/" + required(plan, "target") + "/" + required(plan, "releaseId") + ".json";
-  }
-
-  public static String receiptKey(String id, String dataset, String step) {
-    UUID release = UUID.fromString(id);
-    if ("download".equals(step)) {
-      return SCANNED_PREFIX + release + "/" + dataset + ".receipt.json";
-    }
-    return "control/" + release + "/" + dataset + "/" + step + ".json";
-  }
-
-  public static String extractedCsvKey(String id, String dataset) {
-    return SCANNED_PREFIX + UUID.fromString(id) + "/" + dataset + ".csv";
-  }
-
-  public static String downloadZipKey(String id, String dataset) {
-    return SCANNED_PREFIX + UUID.fromString(id) + "/" + dataset + ".zip";
-  }
-
-  public JsonNode receipt(String bucket, String id, String dataset, String step)
-      throws IOException {
-    return read(bucket, receiptKey(id, dataset, step));
-  }
-
-  public void receipt(
-      String bucket, String id, String dataset, String step, StreamingS3.Uploaded upload) {
-    immutable(bucket, receiptKey(id, dataset, step), JSON.valueToTree(upload));
-  }
-
-  /** Supplier ZIP details recorded in the download receipt. */
-  public record DownloadReceipt(
-      String releaseId,
-      String dataset,
-      String fileName,
-      String expectedMd5,
-      String sourceUrl,
-      Instant downloadedAt) {}
-
-  public void downloadReceipt(String bucket, DownloadReceipt details, StreamingS3.Uploaded upload) {
-    var receipt = JSON.createObjectNode();
-    receipt.put("releaseId", details.releaseId());
-    receipt.put("dataset", details.dataset());
-    receipt.put("fileName", details.fileName());
-    receipt.put(FIELD_S3_KEY, upload.key());
-    receipt.put("downloadedBytes", upload.bytes());
-    receipt.put("calculatedMd5", upload.md5());
-    receipt.put("expectedMd5", details.expectedMd5());
-    receipt.put("status", "DOWNLOADED");
-    receipt.put("downloadedAt", details.downloadedAt().toString());
-    receipt.put("sourceUrl", details.sourceUrl());
-    immutable(bucket, receiptKey(details.releaseId(), details.dataset(), "download"), receipt);
-  }
-
-  public void receipt(
-      String bucket, String releaseId, String dataset, String step, JsonNode receipt) {
-    immutable(bucket, receiptKey(releaseId, dataset, step), receipt);
-  }
-
-  public void receiptOnce(
-      String bucket, String releaseId, String dataset, String step, JsonNode receipt) {
-    s3.putObject(
-        PutObjectRequest.builder()
-            .bucket(bucket)
-            .key(receiptKey(releaseId, dataset, step))
-            .ifNoneMatch("*")
-            .contentType(JSON_CONTENT_TYPE)
-            .build(),
-        RequestBody.fromString(receipt.toString()));
   }
 
   public static boolean isPreconditionFailed(S3Exception e) {

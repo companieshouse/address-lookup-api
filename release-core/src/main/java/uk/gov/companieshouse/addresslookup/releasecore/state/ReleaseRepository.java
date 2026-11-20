@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
 public interface ReleaseRepository extends JpaRepository<Release, UUID> {
+  Optional<Release> findByManifestKey(String manifestKey);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select r from Release r where r.id=:id")
   Optional<Release> lock(@org.springframework.data.repository.query.Param("id") UUID id);

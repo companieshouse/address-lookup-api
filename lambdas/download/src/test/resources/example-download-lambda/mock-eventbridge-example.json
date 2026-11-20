@@ -2,7 +2,7 @@
   "source": "os.acquisition",
   "detail-type": "DOWNLOAD",
   "detail": {
-    "planKey": "acquisitions/2026-05-16/4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json",
+    "planKey": "initial_full/12345/159159/manifest/data_package_manifest.json",
     "dataset": "add_gb_royalmailaddress"
   }
 }

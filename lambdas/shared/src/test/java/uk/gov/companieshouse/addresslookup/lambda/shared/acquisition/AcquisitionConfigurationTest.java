@@ -52,9 +52,8 @@ final class AcquisitionConfigurationTest {
 
   private static AcquisitionProperties properties(String osApiKey, String eventBus) {
     return new AcquisitionProperties(
-        "source-bucket",
-        "scanned-bucket",
-        "ingest-bucket",
+        "control-bucket",
+        "landing-bucket",
         eventBus,
         osApiKey,
         "{}",

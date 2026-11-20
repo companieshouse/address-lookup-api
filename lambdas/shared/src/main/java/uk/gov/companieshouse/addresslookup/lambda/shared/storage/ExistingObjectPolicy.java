@@ -5,10 +5,12 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
 /**
- * Strategy for what to do when S3 reports that the object, or its checksum evidence, already
- * exists (conditional write precondition failed).
+ * Controls overwrite behaviour and handling of object or checksum evidence conflicts.
  */
 interface ExistingObjectPolicy {
+  default boolean overwritesExisting() {
+    return false;
+  }
 
   /** Returns the version of the existing object to use, or rethrows {@code conflict}. */
   String resolveObjectConflict(
@@ -22,7 +24,12 @@ interface ExistingObjectPolicy {
 
   /** Existing objects are an error. */
   static ExistingObjectPolicy failOnConflict() {
-    return new FailOnConflict();
+    return new FailOnConflict(false);
+  }
+
+  /** Overwrite at the same key; unexpected conditional conflicts still fail the invocation. */
+  static ExistingObjectPolicy overwrite() {
+    return new FailOnConflict(true);
   }
 
   /** Existing objects are accepted only when identical to the freshly streamed bytes. */

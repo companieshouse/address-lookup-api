@@ -30,13 +30,11 @@ public final class ScanResultsService {
   private static final String MALWARE_FOUND = "MALWARE_FOUND";
 
   private final Commands commands;
-  private final String ingestBucket;
-  private final String cleanBucket;
+  private final String landingBucket;
 
   public ScanResultsService(Commands commands, AcquisitionProperties properties) {
     this.commands = commands;
-    this.ingestBucket = required(properties.ingestBucket(), "INGEST_BUCKET");
-    this.cleanBucket = required(properties.scannedBucket(), "SCANNED_BUCKET");
+    this.landingBucket = required(properties.landingBucket(), "LANDING_BUCKET");
   }
 
   public String scan(Map<String, Object> event) throws Exception {
@@ -68,10 +66,10 @@ public final class ScanResultsService {
           switch (parsed.fileType()) {
             case ZIP -> "ExtractRequested";
             case CSV -> "DatasetReady";
-            case RECEIPT -> "ReceiptReady";
             case MANIFEST -> "ManifestReady";
+            case UNPACK_STATE, ORDER_SUMMARY -> "IGNORED_OBJECT";
           };
-      commands.sendIngestion(decision, payload);
+      if (!"IGNORED_OBJECT".equals(decision)) commands.sendIngestion(decision, payload);
     } else {
       rejectionCode = "THREATS_FOUND".equals(result) ? MALWARE_FOUND : "SCAN_INCONCLUSIVE";
       String message =
@@ -105,9 +103,8 @@ public final class ScanResultsService {
     }
     if (parsed == null) return new Validation(null, InvalidReason.INVALID_OBJECT_KEY);
     if (versionId == null) return new Validation(parsed, InvalidReason.MISSING_VERSION_ID);
-    String expectedBucket = parsed.fileType() == FileType.CSV ? cleanBucket : ingestBucket;
     return new Validation(
-        parsed, expectedBucket.equals(bucket) ? null : InvalidReason.UNKNOWN_BUCKET_FOR_OBJECT_KEY);
+        parsed, landingBucket.equals(bucket) ? null : InvalidReason.UNKNOWN_BUCKET_FOR_OBJECT_KEY);
   }
 
   private String reject(
@@ -146,8 +143,9 @@ public final class ScanResultsService {
     return switch (fileType) {
       case ZIP -> "zip-scan";
       case CSV -> "csv-scan";
-      case RECEIPT -> "receipt-scan";
       case MANIFEST -> "manifest-scan";
+      case UNPACK_STATE -> "unpack-state-scan";
+      case ORDER_SUMMARY -> "order-summary-scan";
     };
   }
 

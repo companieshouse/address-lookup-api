@@ -37,7 +37,6 @@ public final class DownloadService {
   private static final String DOWNLOAD_COMMAND_DATASET = "dataset";
   private static final String LOG_RELEASE_ID = "release_id";
 
-  private static final String UPLOAD_FAILED_MESSAGE = "Upload failed";
   private static final String CHECKSUM_FAILURE_MESSAGE = "Download failure, checksum mismatch";
   private static final String ZIP_FILE_UPLOAD_ERROR_MESSAGE = "Error occurred whilst attempting to verify if the ZIP file has previously been stored in the S3 bucket.";
 
@@ -167,7 +166,7 @@ public final class DownloadService {
                       expectedDatasetMd5,
                       properties.maxZipBytes());
     } catch (StreamingS3.ChecksumMismatchException e) {
-      handleChecksumException(e, manifestReleaseId, downloadCommandDataset, zipUploadS3Path);
+      handleChecksumException(e, manifestReleaseId, downloadCommandDataset);
     } catch (StreamingS3.ExistingObjectVerificationException exception) {
       handleExistingObjectVerificationException(exception, downloadCommandDataset, manifestReleaseId);
     } catch (NoSuchAlgorithmException exception) {
@@ -193,17 +192,7 @@ public final class DownloadService {
               .releaseId(manifestReleaseId)
               .build();
     }
-    LOG.error(UPLOAD_FAILED_MESSAGE, Map.of(
-            LOG_RELEASE_ID,
-            Objects.toString(manifestReleaseId),
-            DOWNLOAD_COMMAND_DATASET,
-            Objects.toString(downloadCommandDataset)));
-    throw PermanentFailureException.builder()
-            .description(UPLOAD_FAILED_MESSAGE)
-            .dataset(Dataset.named(downloadCommandDataset))
-            .reasonCode(REASON_CODE_ZIP_FILE_UPLOAD_FAILURE)
-            .releaseId(manifestReleaseId)
-            .build();
+    return null;
   }
 
   // Restricts S3 reads to canonical acquisition manifests.
@@ -264,22 +253,16 @@ public final class DownloadService {
   }
 
   private void handleChecksumException(StreamingS3.ChecksumMismatchException exception,
-                                       String releaseId, String dataset, String s3Key)
-          throws TransientFailureException {
-    LOG.error("Download checksum mismatch", exception, Map.of(
-            "outcome",
-            "TRANSIENT_FAILURE",
-            "reason_code",
-            "CHECKSUM_MISMATCH",
+                                       String releaseId, String dataset) throws PermanentFailureException {
+    LOG.error("Download checksum mismatch", Map.of(
             LOG_RELEASE_ID,
             Objects.toString(releaseId),
             DOWNLOAD_COMMAND_DATASET,
             Objects.toString(dataset),
-            "s3_key",
-            Objects.toString(s3Key),
-            "checksum_mismatch_detail",
+            "checksum_mismatch",
             getExceptionText(exception)));
-    throw TransientFailureException.builder()
+    throw PermanentFailureException.builder()
+            .cause(exception.getCause())
             .description(CHECKSUM_FAILURE_MESSAGE)
             .dataset(Dataset.named(dataset))
             .reasonCode("CHECKSUM_MISMATCH")
@@ -309,12 +292,15 @@ public final class DownloadService {
     }
   }
 
-  private boolean isExistingObjectVerificationExceptionTransient(StreamingS3.ExistingObjectVerificationException exception) {
+  private static boolean isExistingObjectVerificationExceptionTransient(StreamingS3.ExistingObjectVerificationException exception) {
     return switch (exception.getCause()) {
       case IOException ignored -> true;
-      case S3Exception s3e when s3e.isRetryableException() -> true;
+      case S3Exception s3e -> isStatusRetryable(s3e);
       default -> false;
     };
   }
 
+  private static boolean isStatusRetryable(S3Exception s3Exception) {
+    return  (s3Exception.statusCode() >= 500) ;
+  }
 }

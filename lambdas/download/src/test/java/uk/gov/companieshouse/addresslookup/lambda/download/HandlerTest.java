@@ -1,7 +1,6 @@
 package uk.gov.companieshouse.addresslookup.lambda.download;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.amazonaws.services.lambda.runtime.Context;
@@ -76,31 +75,29 @@ class HandlerTest {
     }
 
     @Test
-    void shouldThrowExceptionForPermanentFailureException() throws Exception {
+    void shouldReturnFailureForPermanentFailureException() throws Exception {
         final String EXCEPTION_TEXT = "Something went wrong!!";
-        doTestForPermanentFailure(PermanentFailureException.builder().description(EXCEPTION_TEXT).build());
+        doTestForExceptionReturningFailure(PermanentFailureException.builder().description(EXCEPTION_TEXT).build());
     }
 
     @Test
-    void shouldThrowExceptionForNPE() throws Exception {
-        doTestForPermanentFailure(new NullPointerException());
+    void shouldReturnFailureForNPE() throws Exception {
+        doTestForExceptionReturningFailure(new NullPointerException());
     }
 
     @Test
-    void shouldThrowExceptionForS3404Exception() throws Exception {
+    void shouldReturnFailureForS3404Exception() throws Exception {
 
         S3Exception.Builder exceptionBuilder = S3Exception.builder().statusCode(404);
-        doTestForPermanentFailure(exceptionBuilder.build());
+        doTestForExceptionReturningFailure(exceptionBuilder.build());
     }
 
-    private void doTestForPermanentFailure(Exception exception) throws Exception {
+    private void doTestForExceptionReturningFailure(Exception exception) throws Exception {
         Mockito.when(service.download(TEST_EVENT, context))
                 .thenThrow(exception);
 
-        Exception failure = assertThrows(LambdaFailureRuntimeException.class,
-                () -> handler.handleRequest(TEST_EVENT, context));
+        String response = handler.handleRequest(TEST_EVENT, context);
 
-        assertEquals("Download failed and a retry will not succeed", failure.getMessage());
-        assertSame(exception, failure.getCause());
+        assertEquals("FAILURE", response);
     }
 }

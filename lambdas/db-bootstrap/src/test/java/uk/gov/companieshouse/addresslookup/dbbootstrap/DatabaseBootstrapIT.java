@@ -56,12 +56,12 @@ class DatabaseBootstrapIT {
             .baselineOnMigrate(false)
             .createSchemas(false)
             .load();
-    assertEquals(9, flyway.migrate().migrationsExecuted);
+    assertEquals(13, flyway.migrate().migrationsExecuted);
     flyway.validate();
     assertEquals(
         List.of(
             "2026.001", "2026.002", "2026.003", "2026.004", "2026.005", "2026.006", "2026.007",
-            "2026.008", "2026.009"),
+            "2026.008", "2026.009", "2026.010", "2026.011", "2026.012", "2026.013"),
         List.of(flyway.info().applied()).stream()
             .map(migration -> migration.getVersion().getVersion())
             .toList());
@@ -80,11 +80,11 @@ class DatabaseBootstrapIT {
           statement.executeQuery(
               """
               SELECT count(*) FROM pg_namespace
-              WHERE nspname IN ('os_control', 'os_stage', 'os_data', 'os_prev', 'os_ingest', 'address_lookup')
+              WHERE nspname IN ('os_control', 'os_stage', 'os_stage_full', 'os_data', 'os_prev', 'os_ingest', 'address_lookup')
                 AND nspowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)
               """)) {
         assertTrue(result.next());
-        assertEquals(6, result.getInt(1));
+        assertEquals(7, result.getInt(1));
       }
     }
     try (Connection connection = connect(master)) {

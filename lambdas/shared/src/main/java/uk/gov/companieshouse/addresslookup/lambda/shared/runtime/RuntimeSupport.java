@@ -8,6 +8,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Supplier;
 import uk.gov.companieshouse.release.model.ReleaseJson;
 
@@ -73,5 +74,9 @@ public final class RuntimeSupport {
         + (uri.getRawPath() == null ? "" : uri.getRawPath())
         + (uri.getRawQuery() == null ? "" : "?***")
         + (uri.getRawFragment() == null ? "" : "#" + uri.getRawFragment());
+  }
+
+  public static String getExceptionText(Exception exception) {
+    return Objects.toString(exception.getMessage(), exception.getClass().getSimpleName());
   }
 }

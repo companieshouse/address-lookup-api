@@ -396,7 +396,7 @@ final class ExtractionServiceTest {
 
     verify(s3, times(1)).createMultipartUpload(any(Consumer.class));
     verify(s3, never())
-        .getObjectTagging(argThat(request -> csvKey().equals(request.key())));
+        .getObjectTagging(argThat((GetObjectTaggingRequest request) -> csvKey().equals(request.key())));
     verify(commands, times(2)).send("CSV_SCAN", DATASET);
   }
 

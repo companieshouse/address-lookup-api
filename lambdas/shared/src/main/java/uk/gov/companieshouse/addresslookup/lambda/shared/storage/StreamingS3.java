@@ -1,6 +1,7 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -183,10 +184,7 @@ public final class StreamingS3 {
   }
 
   private String completeUpload(
-      ObjectTarget target,
-      String uploadId,
-      StreamedParts streamed,
-      ExistingObjectPolicy policy)
+      ObjectTarget target, String uploadId, StreamedParts streamed, ExistingObjectPolicy policy)
       throws ExistingObjectVerificationException {
     try {
       var result =
@@ -213,8 +211,7 @@ public final class StreamingS3 {
 
   /** Stores checksum evidence separately from the uploaded object. */
   private void saveChecksumEvidence(
-      ObjectTarget target, Uploaded uploaded, ExistingObjectPolicy policy)
-      throws IOException {
+      ObjectTarget target, Uploaded uploaded, ExistingObjectPolicy policy) throws IOException {
     String checksumKey = checksumKey(target.key());
     String evidence = JSON.writeValueAsString(evidenceOf(target, uploaded));
     try {

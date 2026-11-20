@@ -1,6 +1,8 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -9,9 +11,9 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.UnaryOperator;
-import java.util.function.IntConsumer;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.IntConsumer;
+import java.util.function.UnaryOperator;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;

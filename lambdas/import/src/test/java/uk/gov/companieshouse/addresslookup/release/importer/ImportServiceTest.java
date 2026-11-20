@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
@@ -17,6 +18,7 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 
 import com.amazonaws.services.lambda.runtime.Context;
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
@@ -66,6 +68,7 @@ class ImportServiceTest {
   private static final KeyLayout.PackageVersion PACKAGE_VERSION =
       new KeyLayout.PackageVersion(KeyLayout.Feed.DAILY_COU, "20780", "150104");
   private static final String MANIFEST_KEY = KeyLayout.dataPackageManifestKey(PACKAGE_VERSION);
+  private static final String MANIFEST_VERSION = "manifest-version";
   private static final String SHA256 = "a".repeat(64);
 
   @Mock private S3Client s3;
@@ -98,8 +101,9 @@ class ImportServiceTest {
     UUID id = UUID.fromString(RELEASE_ID);
     when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
     when(releases.findById(id)).thenReturn(Optional.empty());
-    when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(true);
-    when(store.read(BUCKET, MANIFEST_KEY)).thenReturn(manifestNode);
+    when(store.version(BUCKET, MANIFEST_KEY)).thenReturn(MANIFEST_VERSION);
+    when(store.isClean(BUCKET, MANIFEST_KEY, MANIFEST_VERSION)).thenReturn(true);
+    when(store.read(BUCKET, MANIFEST_KEY, MANIFEST_VERSION)).thenReturn(manifestNode);
     when(manifest.id()).thenReturn(id);
     try (MockedStatic<ReleaseManifest> mockedManifest = mockStatic(ReleaseManifest.class)) {
       mockedManifest.when(() -> ReleaseManifest.read(manifestNode)).thenReturn(manifest);
@@ -110,7 +114,8 @@ class ImportServiceTest {
     verify(registration)
         .register(
             eq(manifest), eq(MANIFEST_KEY), org.mockito.ArgumentMatchers.matches("[a-f0-9]{64}"));
-    verify(store).isClean(BUCKET, MANIFEST_KEY, null);
+    verify(store).isClean(BUCKET, MANIFEST_KEY, MANIFEST_VERSION);
+    verify(store).read(BUCKET, MANIFEST_KEY, MANIFEST_VERSION);
     verify(importer, never()).importClean(any(), any(), any(), any(), any(), any(), any());
     verify(promotion, never()).promote(any());
   }
@@ -135,8 +140,9 @@ class ImportServiceTest {
     var node = JSON.createObjectNode().put("dataPackageId", "20780").put("versionId", "150104");
     node.put(field, "different");
     when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
-    when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(true);
-    when(store.read(BUCKET, MANIFEST_KEY)).thenReturn(node);
+    when(store.version(BUCKET, MANIFEST_KEY)).thenReturn(MANIFEST_VERSION);
+    when(store.isClean(BUCKET, MANIFEST_KEY, MANIFEST_VERSION)).thenReturn(true);
+    when(store.read(BUCKET, MANIFEST_KEY, MANIFEST_VERSION)).thenReturn(node);
 
     var failure = assertThrows(IllegalStateException.class,
         () -> service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
@@ -168,11 +174,12 @@ class ImportServiceTest {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
     when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
-    when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(false);
+    when(store.version(BUCKET, MANIFEST_KEY)).thenReturn(MANIFEST_VERSION);
+    when(store.isClean(BUCKET, MANIFEST_KEY, MANIFEST_VERSION)).thenReturn(false);
 
     assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
 
-    verify(store).isClean(BUCKET, MANIFEST_KEY, null);
+    verify(store).isClean(BUCKET, MANIFEST_KEY, MANIFEST_VERSION);
   }
 
   @Test
@@ -180,7 +187,8 @@ class ImportServiceTest {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
     when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
-    when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(false);
+    when(store.version(BUCKET, MANIFEST_KEY)).thenReturn(MANIFEST_VERSION);
+    when(store.isClean(BUCKET, MANIFEST_KEY, MANIFEST_VERSION)).thenReturn(false);
 
     assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
 
@@ -305,6 +313,9 @@ class ImportServiceTest {
           var request = call.getArgument(0, GetObjectTaggingRequest.class);
           assertEquals(landing, request.bucket());
           assertTrue(buckets.get(landing).containsKey(request.key()));
+          assertEquals(
+              request.key().equals(manifestKey) ? MANIFEST_VERSION : "csv-version",
+              request.versionId());
           return GetObjectTaggingResponse.builder()
               .tagSet(Tag.builder()
                   .key("GuardDutyMalwareScanStatus")
@@ -316,15 +327,26 @@ class ImportServiceTest {
         .thenAnswer(call -> {
           var request = call.getArgument(0, HeadObjectRequest.class);
           assertEquals(landing, request.bucket());
-          assertEquals(csvKey, request.key());
-          return HeadObjectResponse.builder().versionId("csv-version").build();
+          return HeadObjectResponse.builder()
+              .versionId(request.key().equals(csvKey) ? "csv-version" : MANIFEST_VERSION)
+              .build();
         });
 
     assertEquals("RECONCILED", service.importCsv(context));
 
     verify(registration).register(eq(manifest), eq(manifestKey), any());
     verify(importer).importClean(
-        manifest.id(), dataset, landing, csvKey, "csv-version", SHA256, "eu-west-2");
+        eq(manifest.id()),
+        eq(dataset),
+        any(InputStream.class),
+        eq(landing),
+        eq(csvKey),
+        eq("csv-version"),
+        eq(SHA256));
+    verify(s3).getObject(argThat(request ->
+        manifestKey.equals(request.key()) && MANIFEST_VERSION.equals(request.versionId())));
+    verify(s3).getObject(argThat(request ->
+        csvKey.equals(request.key()) && "csv-version".equals(request.versionId())));
     String position =
         JSON.readTree(buckets.get(control).get(cursorKey)).path("after").asText();
     assertEquals(manifestKey, position);
@@ -352,14 +374,16 @@ class ImportServiceTest {
     var evidence = JSON.createObjectNode().put("versionId", "csv-version").put("sha256", SHA256);
     var manifest = mock(ReleaseManifest.class);
     when(cursor.next()).thenReturn(Optional.of(manifestKey), Optional.empty());
-    when(store.isClean(BUCKET, manifestKey, null)).thenReturn(true);
-    when(store.read(BUCKET, manifestKey)).thenReturn(node);
+    when(store.version(BUCKET, manifestKey)).thenReturn(MANIFEST_VERSION);
+    when(store.isClean(BUCKET, manifestKey, MANIFEST_VERSION)).thenReturn(true);
+    when(store.read(BUCKET, manifestKey, MANIFEST_VERSION)).thenReturn(node);
     when(manifest.id()).thenReturn(id);
     when(releases.findById(id)).thenReturn(Optional.empty());
     when(store.exists(BUCKET, csvKey)).thenReturn(true);
     when(store.version(BUCKET, csvKey)).thenReturn("csv-version");
     when(store.isClean(BUCKET, csvKey, "csv-version")).thenReturn(true);
     when(store.read(BUCKET, KeyLayout.checksumKey(csvKey))).thenReturn(evidence);
+    when(store.open(BUCKET, csvKey, "csv-version")).thenReturn(mock(InputStream.class));
 
     try (MockedStatic<ReleaseManifest> mockedManifest = mockStatic(ReleaseManifest.class)) {
       mockedManifest.when(() -> ReleaseManifest.read(node)).thenReturn(manifest);
@@ -372,13 +396,13 @@ class ImportServiceTest {
             eq(manifest), eq(manifestKey), org.mockito.ArgumentMatchers.matches("[a-f0-9]{64}"));
     verify(importer)
         .importClean(
-            id,
-            Dataset.ADD_GB_ROYALMAILADDRESS,
-            BUCKET,
-            csvKey,
-            "csv-version",
-            SHA256,
-            "eu-west-2");
+            eq(id),
+            eq(Dataset.ADD_GB_ROYALMAILADDRESS),
+            any(InputStream.class),
+            eq(BUCKET),
+            eq(csvKey),
+            eq("csv-version"),
+            eq(SHA256));
   }
 
   @Test

@@ -373,6 +373,34 @@ final class ExtractionServiceTest {
   }
 
   @Test
+  void repeatedCallReusesExtractionWhileCsvScanIsPending() throws Exception {
+    cleanZip(validZip());
+    stubUpload();
+    assertEquals("CSV_SCAN", service.unzip(event(), context));
+    when(s3.getObjectTagging(any(GetObjectTaggingRequest.class)))
+        .thenAnswer(call -> {
+          var request = call.getArgument(0, GetObjectTaggingRequest.class);
+          String status = ZIP_KEY.equals(request.key())
+              ? "NO_THREATS_FOUND"
+              : "PENDING";
+          return GetObjectTaggingResponse.builder()
+              .tagSet(
+                  Tag.builder()
+                      .key("GuardDutyMalwareScanStatus")
+                      .value(status)
+                      .build())
+              .build();
+        });
+
+    assertEquals("CSV_SCAN", service.unzip(event(), context));
+
+    verify(s3, times(1)).createMultipartUpload(any(Consumer.class));
+    verify(s3, never())
+        .getObjectTagging(argThat(request -> csvKey().equals(request.key())));
+    verify(commands, times(2)).send("CSV_SCAN", DATASET);
+  }
+
+  @Test
   void failedEventRetryUsesUnpackStateWithoutReuploading() throws Exception {
     cleanZip(validZip());
     stubUpload();

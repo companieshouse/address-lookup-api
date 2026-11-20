@@ -22,6 +22,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
@@ -50,6 +51,27 @@ final class ReleaseStoreTest {
     s3.objects.put("plan.json", "{\"releaseId\":\"abc\"}".getBytes(StandardCharsets.UTF_8));
 
     assertEquals("abc", store.read(BUCKET, "plan.json").path("releaseId").asText());
+  }
+
+  @Test
+  void readSpecificVersionUsesPinnedS3Version() throws Exception {
+    var client = mock(S3Client.class);
+    when(client.getObject(any(GetObjectRequest.class)))
+        .thenAnswer(call -> {
+          var request = call.getArgument(0, GetObjectRequest.class);
+          assertEquals(BUCKET, request.bucket());
+          assertEquals("manifest.json", request.key());
+          assertEquals("manifest-version", request.versionId());
+          return new ResponseInputStream<>(
+              GetObjectResponse.builder().build(),
+              AbortableInputStream.create(
+                  new ByteArrayInputStream("{\"version\":1}".getBytes(StandardCharsets.UTF_8))));
+        });
+
+    var manifest = new ReleaseStore(client).read(BUCKET, "manifest.json", "manifest-version");
+
+    assertEquals(1, manifest.path("version").asInt());
+    verify(client, org.mockito.Mockito.never()).listObjectsV2(any(ListObjectsV2Request.class));
   }
 
   @Test

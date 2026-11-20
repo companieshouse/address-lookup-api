@@ -136,7 +136,9 @@ class DiscoveryServiceTest {
         .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
     when(s3Client.getObject(any(GetObjectRequest.class)))
         .thenThrow(new IllegalStateException("Missing cursor"))
-        .thenReturn(TestUtils.createResponseInputStream(TEST_CURSOR_JSON));
+        .thenReturn(
+            TestUtils.createResponseInputStream(
+                TEST_CURSOR_JSON.replace("\"20780\"", "\"second\"")));
 
     var failure = org.junit.jupiter.api.Assertions.assertThrows(
         IllegalStateException.class, () -> discoveryService.discover(COU_REQUEST_JSON));
@@ -147,7 +149,7 @@ class DiscoveryServiceTest {
         .bucket(CONTROL_BUCKET).key("cursors/first.json").build());
     verify(s3Client).getObject(GetObjectRequest.builder()
         .bucket(CONTROL_BUCKET).key("cursors/second.json").build());
-    verify(osClient).json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150035");
+    verify(osClient).json("https://api.os.uk/downloads/v1/dataPackages/second/versions/150035");
   }
 
   @Test
@@ -159,10 +161,36 @@ class DiscoveryServiceTest {
     when(properties.osHttpURLTemplate())
         .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
     when(s3Client.getObject(any(GetObjectRequest.class)))
-        .thenAnswer(call -> TestUtils.createResponseInputStream(TEST_CURSOR_JSON));
+        .thenAnswer(call -> {
+          String packageId =
+              call.getArgument(0, GetObjectRequest.class).key().replace("cursors/", "")
+                  .replace(".json", "");
+          return TestUtils.createResponseInputStream(
+              TEST_CURSOR_JSON.replace("\"20780\"", "\"" + packageId + "\""));
+        });
 
     assertEquals("No Next Version URL,No Next Version URL",
         discoveryService.discover(COU_REQUEST_JSON));
+  }
+
+  @Test
+  void rejectsCursorForDifferentConfiguredPackage() throws Exception {
+    when(properties.packagesForFeed(
+        uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.Feed.DAILY_COU))
+        .thenReturn(List.of("first"));
+    when(properties.controlBucket()).thenReturn(CONTROL_BUCKET);
+    when(s3Client.getObject(any(GetObjectRequest.class)))
+        .thenReturn(TestUtils.createResponseInputStream(TEST_CURSOR_JSON));
+
+    var failure =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            IllegalStateException.class, () -> discoveryService.discover(COU_REQUEST_JSON));
+
+    assertEquals(1, failure.getSuppressed().length);
+    assertEquals(
+        "Cursor package ID does not match configured package",
+        failure.getSuppressed()[0].getCause().getMessage());
+    org.mockito.Mockito.verifyNoInteractions(osClient);
   }
 
   @Test

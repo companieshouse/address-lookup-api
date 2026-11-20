@@ -148,8 +148,9 @@ public final class ImportService {
       throws Exception {
     var existing = releases.findByManifestKey(key);
     if (existing.isPresent() && existing.get().getStatus() != Release.Status.PROCESSING) return;
-    if (!store.isClean(bucket, key, null)) return;
-    var node = store.read(bucket, key);
+    String manifestVersion = store.version(bucket, key);
+    if (!store.isClean(bucket, key, manifestVersion)) return;
+    var node = store.read(bucket, key, manifestVersion);
     if (node == null) return;
     check(
         packageVersion.packageId().equals(required(node, "dataPackageId"))
@@ -210,12 +211,13 @@ public final class ImportService {
     if (!store.exists(bucket, key)) return;
     String version = store.version(bucket, key);
     if (!store.isClean(bucket, key, version)) return;
-    check(version.equals(store.version(bucket, key)), "CSV changed after scan");
     var evidence = store.read(bucket, KeyLayout.checksumKey(key));
     if (evidence == null) return;
     check(version.equals(required(evidence, "versionId")), "CSV checksum version mismatch");
     String checksum = required(evidence, "sha256");
     check(checksum.matches("[a-f0-9]{64}"), "Invalid CSV checksum evidence");
-    importer.importClean(manifest.id(), dataset, bucket, key, version, checksum, region);
+    try (var csv = store.open(bucket, key, version)) {
+      importer.importClean(manifest.id(), dataset, csv, bucket, key, version, checksum);
+    }
   }
 }

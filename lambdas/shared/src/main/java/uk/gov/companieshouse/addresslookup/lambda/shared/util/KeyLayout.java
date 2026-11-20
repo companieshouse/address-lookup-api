@@ -11,13 +11,12 @@ public class KeyLayout {
   private static final String DOWNLOADS_PREFIX = "downloads/";
   private static final Pattern COMPONENT = Pattern.compile("[A-Za-z0-9_-]+");
   private static final Pattern CSV_NAME = Pattern.compile("[A-Za-z0-9_-][A-Za-z0-9_.-]*\\.csv");
-  private static final Pattern LANDING_OBJECT =
+  private static final Pattern LANDING_SUFFIX =
       Pattern.compile(
-          "^([^/]+)/([^/]+)/([^/]+)/"
-              + "(manifest/data_package_manifest\\.json|manifest/unpack_state\\.json|"
+          "manifest/data_package_manifest\\.json|manifest/unpack_state\\.json|"
               + "downloads/([a-z0-9_]+)\\.zip|"
               + "downloads/([a-z0-9_]+)_orderSummary\\.json|"
-              + "downloads/([a-z0-9_]+)/([^/]+))$");
+              + "downloads/([a-z0-9_]+)/([^/]+)");
 
   private KeyLayout() {}
 
@@ -105,11 +104,13 @@ public class KeyLayout {
 
   public static LandingObject parseLandingObject(String key) {
     if (key == null) throw new IllegalArgumentException("Missing S3 key");
-    Matcher match = LANDING_OBJECT.matcher(key);
+    String[] parts = key.split("/", 4);
+    if (parts.length != 4) throw new IllegalArgumentException("Invalid landing object key");
+    Matcher match = LANDING_SUFFIX.matcher(parts[3]);
     if (!match.matches()) throw new IllegalArgumentException("Invalid landing object key");
     var version =
-        new PackageVersion(Feed.fromPrefix(match.group(1)), match.group(2), match.group(3));
-    String suffix = match.group(4);
+        new PackageVersion(Feed.fromPrefix(parts[0]), parts[1], parts[2]);
+    String suffix = parts[3];
     if (suffix.equals("manifest/data_package_manifest.json")) {
       return new LandingObject(version, null, LandingFileType.MANIFEST, null);
     }
@@ -117,16 +118,16 @@ public class KeyLayout {
     if (suffix.equals("manifest/unpack_state.json")) {
       return new LandingObject(version, null, LandingFileType.UNPACK_STATE, null);
     }
-    if (match.group(5) != null) {
-      return new LandingObject(version, Dataset.named(match.group(5)), LandingFileType.ZIP, null);
+    if (match.group(1) != null) {
+      return new LandingObject(version, Dataset.named(match.group(1)), LandingFileType.ZIP, null);
     }
-    if (match.group(6) != null) {
+    if (match.group(2) != null) {
       return new LandingObject(
-          version, Dataset.named(match.group(6)), LandingFileType.ORDER_SUMMARY, null);
+          version, Dataset.named(match.group(2)), LandingFileType.ORDER_SUMMARY, null);
     }
-    requireCsvName(match.group(8));
+    requireCsvName(match.group(4));
     return new LandingObject(
-        version, Dataset.named(match.group(7)), LandingFileType.CSV, match.group(8));
+        version, Dataset.named(match.group(3)), LandingFileType.CSV, match.group(4));
   }
 
   public static PackageVersion parsePackageVersionManifestKey(String key) {

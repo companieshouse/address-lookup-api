@@ -127,6 +127,45 @@ class DiscoveryServiceTest {
   }
 
   @Test
+  void continuesToNextPackageWhenFirstPackageFails() throws Exception {
+    when(properties.packagesForFeed(
+        uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.Feed.DAILY_COU))
+        .thenReturn(List.of("first", "second"));
+    when(properties.controlBucket()).thenReturn(CONTROL_BUCKET);
+    when(properties.osHttpURLTemplate())
+        .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
+    when(s3Client.getObject(any(GetObjectRequest.class)))
+        .thenThrow(new IllegalStateException("Missing cursor"))
+        .thenReturn(TestUtils.createResponseInputStream(TEST_CURSOR_JSON));
+
+    var failure = org.junit.jupiter.api.Assertions.assertThrows(
+        IllegalStateException.class, () -> discoveryService.discover(COU_REQUEST_JSON));
+
+    assertEquals(1, failure.getSuppressed().length);
+    assertEquals("Discovery failed for package first", failure.getSuppressed()[0].getMessage());
+    verify(s3Client).getObject(GetObjectRequest.builder()
+        .bucket(CONTROL_BUCKET).key("cursors/first.json").build());
+    verify(s3Client).getObject(GetObjectRequest.builder()
+        .bucket(CONTROL_BUCKET).key("cursors/second.json").build());
+    verify(osClient).json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150035");
+  }
+
+  @Test
+  void returnsResultsForAllDailyPackages() throws Exception {
+    when(properties.packagesForFeed(
+        uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.Feed.DAILY_COU))
+        .thenReturn(List.of("first", "second"));
+    when(properties.controlBucket()).thenReturn(CONTROL_BUCKET);
+    when(properties.osHttpURLTemplate())
+        .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
+    when(s3Client.getObject(any(GetObjectRequest.class)))
+        .thenAnswer(call -> TestUtils.createResponseInputStream(TEST_CURSOR_JSON));
+
+    assertEquals("No Next Version URL,No Next Version URL",
+        discoveryService.discover(COU_REQUEST_JSON));
+  }
+
+  @Test
   void shouldReturnReleaseIdForCOURequestValidDatasetAndSuccessfullySent() throws Exception {
 
     GetObjectRequest request =
@@ -405,7 +444,7 @@ class DiscoveryServiceTest {
     } catch (Throwable throwable) {
       assertEquals(
           "The active.json Cursor file could not be found in the S3 bucket.",
-          throwable.getMessage());
+          throwable.getSuppressed()[0].getCause().getMessage());
       verify(s3Client)
           .getObject(GetObjectRequest.builder().bucket(CONTROL_BUCKET).key(CURSOR_KEY).build());
     }
@@ -487,7 +526,7 @@ class DiscoveryServiceTest {
     } catch (Throwable throwable) {
       assertEquals(
           "No Package Version Data for [https://api.os.uk/downloads/v1/dataPackages/20780/versions/150104]",
-          throwable.getMessage());
+          throwable.getSuppressed()[0].getCause().getMessage());
     }
     verify(s3Client).getObject(request);
     verify(osClient).json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150035");

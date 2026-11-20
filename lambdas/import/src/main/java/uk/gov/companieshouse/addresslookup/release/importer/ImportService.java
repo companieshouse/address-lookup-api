@@ -59,7 +59,8 @@ public final class ImportService {
                     controlBucket,
                     bucket,
                     KeyLayout.feedManifestPrefix(feed),
-                    "imports-" + feed.name()))
+                    "imports-" + feed.name(),
+                    KeyLayout::isDataPackageManifestKey))
             .toList();
     return reconcile(new ReleaseStore(s3), cursors, bucket, properties.region(), context);
   }
@@ -144,12 +145,17 @@ public final class ImportService {
       Context context,
       List<Exception> failures)
       throws Exception {
+    var existing = releases.findByManifestKey(key);
+    if (existing.isPresent() && existing.get().getStatus() != Release.Status.PROCESSING) return;
     if (!store.isClean(bucket, key, null)) return;
     var node = store.read(bucket, key);
     if (node == null) return;
+    check(
+        packageVersion.packageId().equals(required(node, "dataPackageId"))
+            && packageVersion.versionId().equals(required(node, "versionId")),
+        "Manifest package/version does not match its Landing key");
     var manifest = ReleaseManifest.read(node);
-    check(key.equals(KeyLayout.dataPackageManifestKey(packageVersion)), "Manifest key mismatch");
-    var existing = releases.findById(manifest.id());
+    existing = releases.findById(manifest.id());
     if (existing.isPresent() && existing.get().getStatus() != Release.Status.PROCESSING) return;
     registration.register(
         manifest, key, sha(node.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));

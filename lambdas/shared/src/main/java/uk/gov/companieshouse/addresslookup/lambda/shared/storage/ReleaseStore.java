@@ -9,6 +9,8 @@ import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.UnaryOperator;
+import java.util.function.IntConsumer;
+import java.util.concurrent.ThreadLocalRandom;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
@@ -21,9 +23,24 @@ public final class ReleaseStore {
   private static final String FIELD_VERSION = "version";
   private static final int MAX_STATE_UPDATE_ATTEMPTS = 5;
   private final S3Client s3;
+  private final IntConsumer backoff;
 
   public ReleaseStore(S3Client s3) {
+    this(s3, ReleaseStore::pauseBeforeRetry);
+  }
+
+  ReleaseStore(S3Client s3, IntConsumer backoff) {
     this.s3 = s3;
+    this.backoff = backoff;
+  }
+
+  private static void pauseBeforeRetry(int attempt) {
+    try {
+      Thread.sleep(ThreadLocalRandom.current().nextLong(25, 101) * attempt);
+    } catch (InterruptedException interrupted) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("State update retry interrupted", interrupted);
+    }
   }
 
   public JsonNode read(String bucket, String key) throws IOException {
@@ -69,6 +86,7 @@ public final class ReleaseStore {
   public ObjectNode updateState(String bucket, String key, UnaryOperator<ObjectNode> update)
       throws IOException {
     for (int attempt = 0; attempt < MAX_STATE_UPDATE_ATTEMPTS; attempt++) {
+      if (attempt > 0) backoff.accept(attempt);
       StateSnapshot snapshot = readState(bucket, key);
       if (snapshot == null) continue;
 

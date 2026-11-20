@@ -138,6 +138,32 @@ final class ReleaseStoreTest {
   }
 
   @Test
+  void updateStateBacksOffBetweenConflictsOnly() throws Exception {
+    var attempts = new java.util.ArrayList<Integer>();
+    var retryingStore = new ReleaseStore(s3.client(), attempts::add);
+    s3.putConflicts = 2;
+
+    retryingStore.updateState(BUCKET, KEY, state -> state.put("status", "EXTRACTED"));
+
+    assertEquals(List.of(1, 2), attempts);
+    assertEquals("EXTRACTED", JSON.readTree(s3.objects.get(KEY)).path("status").asText());
+  }
+
+  @Test
+  void updateStatePreservesInterruptDuringBackoff() {
+    s3.putConflicts = 1;
+    Thread.currentThread().interrupt();
+    try {
+      var failure = assertThrows(IllegalStateException.class,
+          () -> store.updateState(BUCKET, KEY, state -> state));
+      assertEquals("State update retry interrupted", failure.getMessage());
+      assertTrue(Thread.currentThread().isInterrupted());
+    } finally {
+      Thread.interrupted();
+    }
+  }
+
+  @Test
   void updateStateFailsAfterRepeatedConflicts() {
     s3.putConflicts = 5;
     UnaryOperator<ObjectNode> update = state -> state.put("status", "EXTRACTED");

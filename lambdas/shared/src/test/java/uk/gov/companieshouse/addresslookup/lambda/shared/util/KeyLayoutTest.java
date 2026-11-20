@@ -17,6 +17,8 @@ class KeyLayoutTest {
       String manifest = KeyLayout.dataPackageManifestKey(version);
       String state = KeyLayout.unpackStateKey(version);
       assertEquals(prefix + "manifest/data_package_manifest.json", manifest);
+      assertTrue(KeyLayout.isDataPackageManifestKey(manifest));
+      assertFalse(KeyLayout.isDataPackageManifestKey(state));
       assertEquals(prefix + "manifest/unpack_state.json", state);
       assertEquals(
           new KeyLayout.LandingObject(version, null, KeyLayout.LandingFileType.MANIFEST, null),
@@ -77,6 +79,7 @@ class KeyLayoutTest {
       })
   void rejectsInvalidLandingKeys(String key) {
     assertThrows(IllegalArgumentException.class, () -> KeyLayout.parseLandingObject(key));
+    assertFalse(KeyLayout.isDataPackageManifestKey(key));
   }
 
   @Test

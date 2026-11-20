@@ -93,7 +93,7 @@ class ImportServiceTest {
   void reconcilesCleanManifestAndIgnoresMissingCsvFiles() throws Exception {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
-    var manifestNode = JSON.createObjectNode().put("manifest", true);
+    var manifestNode = JSON.createObjectNode().put("dataPackageId", "20780").put("versionId", "150104");
     var manifest = mock(ReleaseManifest.class);
     UUID id = UUID.fromString(RELEASE_ID);
     when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
@@ -127,26 +127,39 @@ class ImportServiceTest {
     verify(registration, never()).register(any(), any(), any());
   }
 
+  @ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"dataPackageId", "versionId"})
+  void rejectsManifestContentThatDoesNotMatchItsKey(String field) throws Exception {
+    var store = mock(ReleaseStore.class);
+    var cursor = mock(ReconciliationCursor.class);
+    var node = JSON.createObjectNode().put("dataPackageId", "20780").put("versionId", "150104");
+    node.put(field, "different");
+    when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
+    when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(true);
+    when(store.read(BUCKET, MANIFEST_KEY)).thenReturn(node);
+
+    var failure = assertThrows(IllegalStateException.class,
+        () -> service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+
+    assertEquals("Manifest package/version does not match its Landing key",
+        failure.getSuppressed()[0].getCause().getMessage());
+    verify(registration, never()).register(any(), any(), any());
+    verify(importer, never()).importClean(any(), any(), any(), any(), any(), any(), any());
+  }
+
   @Test
-  void skipsCompletedManifestAfterReadingItsVersionedManifest() throws Exception {
+  void skipsCompletedManifestBeforeReadingOldSchema() throws Exception {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
     var completed = processingRelease();
     completed.complete();
-    var node = JSON.createObjectNode().put("manifest", true);
-    var manifest = mock(ReleaseManifest.class);
     when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
-    when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(true);
-    when(store.read(BUCKET, MANIFEST_KEY)).thenReturn(node);
-    when(manifest.id()).thenReturn(UUID.fromString(RELEASE_ID));
-    when(releases.findById(UUID.fromString(RELEASE_ID))).thenReturn(Optional.of(completed));
+    when(releases.findByManifestKey(MANIFEST_KEY)).thenReturn(Optional.of(completed));
 
-    try (MockedStatic<ReleaseManifest> mockedManifest = mockStatic(ReleaseManifest.class)) {
-      mockedManifest.when(() -> ReleaseManifest.read(node)).thenReturn(manifest);
-      assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
-    }
+    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
 
-    verify(store).isClean(BUCKET, MANIFEST_KEY, null);
+    verify(store, never()).read(any(), any());
+    verify(store, never()).isClean(any(), any(), any());
     verify(registration, never()).register(any(), any(), any());
   }
 
@@ -256,7 +269,7 @@ class ImportServiceTest {
     when(properties.controlBucket()).thenReturn(control);
     when(properties.landingBucket()).thenReturn(landing);
     when(properties.region()).thenReturn("eu-west-2");
-    when(properties.sweepLimit()).thenReturn(10);
+    when(properties.sweepLimit()).thenReturn(1);
     when(s3.listObjectsV2(any(ListObjectsV2Request.class)))
         .thenAnswer(call -> {
           var request = call.getArgument(0, ListObjectsV2Request.class);
@@ -314,7 +327,7 @@ class ImportServiceTest {
         manifest.id(), dataset, landing, csvKey, "csv-version", SHA256, "eu-west-2");
     String position =
         JSON.readTree(buckets.get(control).get(cursorKey)).path("after").asText();
-    assertTrue(buckets.get(landing).containsKey(position));
+    assertEquals(manifestKey, position);
     assertTrue(buckets.get(control).keySet().stream().allMatch(cursorKey::equals));
     assertFalse(buckets.get(landing).containsKey(cursorKey));
   }
@@ -335,7 +348,7 @@ class ImportServiceTest {
     UUID id = UUID.fromString(RELEASE_ID);
     var cursor = mock(ReconciliationCursor.class);
     var store = mock(ReleaseStore.class);
-    var node = JSON.createObjectNode().put("manifest", true);
+    var node = JSON.createObjectNode().put("dataPackageId", "20780").put("versionId", "150104");
     var evidence = JSON.createObjectNode().put("versionId", "csv-version").put("sha256", SHA256);
     var manifest = mock(ReleaseManifest.class);
     when(cursor.next()).thenReturn(Optional.of(manifestKey), Optional.empty());

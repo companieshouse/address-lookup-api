@@ -103,11 +103,22 @@ public final class DiscoveryService {
     if (mode == COU) {
       List<String> packageIds = properties.packagesForFeed(KeyLayout.Feed.DAILY_COU);
       check(!packageIds.isEmpty(), "No daily_cou packages configured in OS_PACKAGES");
-      String result = null;
+      var results = new java.util.ArrayList<String>();
+      var failures = new java.util.ArrayList<Exception>();
       for (String packageId : packageIds) {
-        result = discover(input, packageId);
+        try {
+          results.add(discover(input, packageId));
+        } catch (Exception failure) {
+          LOG.error("Discovery failed for package", failure, Map.of("package_id", packageId));
+          failures.add(new IllegalStateException("Discovery failed for package " + packageId, failure));
+        }
       }
-      return result;
+      if (!failures.isEmpty()) {
+        var failure = new IllegalStateException("Some packages failed discovery; retry invocation");
+        failures.forEach(failure::addSuppressed);
+        throw failure;
+      }
+      return String.join(",", results);
     }
     return discover(input, null);
   }

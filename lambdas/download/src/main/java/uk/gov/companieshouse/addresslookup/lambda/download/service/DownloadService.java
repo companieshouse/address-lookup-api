@@ -85,6 +85,14 @@ public final class DownloadService {
     String datasetUrl = required(datasetZipJsonObj, "url");
     String zipUploadS3Path =
         KeyLayout.downloadZipKey(packageVersion, Dataset.named(downloadCommandDataset));
+    var evidence = store.read(landingBucket, KeyLayout.checksumKey(zipUploadS3Path));
+    if (evidence != null
+        && expectedDatasetMd5.equalsIgnoreCase(evidence.path("md5").asText())
+        && store.exists(landingBucket, zipUploadS3Path)
+        && store.version(landingBucket, zipUploadS3Path).equals(evidence.path("versionId").asText())) {
+      LOG.info("Download already present", Map.of("s3_key", zipUploadS3Path));
+      return "SKIPPED";
+    }
 
     String sanitizedDatasetUrl = sanitizeUrl(datasetUrl);
     LOG.info(

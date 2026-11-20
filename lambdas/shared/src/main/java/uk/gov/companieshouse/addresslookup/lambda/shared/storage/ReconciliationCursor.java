@@ -5,6 +5,7 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 import java.io.IOException;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Predicate;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
@@ -17,14 +18,22 @@ public final class ReconciliationCursor {
   private final String landingBucket;
   private final String prefix;
   private final String cursorKey;
+  private final Predicate<String> accepts;
 
   public ReconciliationCursor(
       S3Client s3, String controlBucket, String landingBucket, String prefix, String name) {
+    this(s3, controlBucket, landingBucket, prefix, name, key -> true);
+  }
+
+  public ReconciliationCursor(
+      S3Client s3, String controlBucket, String landingBucket, String prefix, String name,
+      Predicate<String> accepts) {
     this.s3 = s3;
     this.controlBucket = controlBucket;
     this.landingBucket = landingBucket;
     this.prefix = prefix;
     this.cursorKey = KeyLayout.reconciliationCursorKey(name);
+    this.accepts = accepts;
   }
 
   /**
@@ -81,17 +90,20 @@ public final class ReconciliationCursor {
   private record Position(String after, String etag) {}
 
   private Optional<String> firstAfter(String key) {
-    return s3
-        .listObjectsV2(
+    String token = null;
+    do {
+      var page = s3.listObjectsV2(
             ListObjectsV2Request.builder()
                 .bucket(landingBucket)
                 .prefix(prefix)
                 .startAfter(key)
-                .maxKeys(1)
-                .build())
-        .contents()
-        .stream()
-        .map(S3Object::key)
-        .findFirst();
+                .continuationToken(token)
+                .maxKeys(1000)
+                .build());
+      var match = page.contents().stream().map(S3Object::key).filter(accepts).findFirst();
+      if (match.isPresent()) return match;
+      token = page.nextContinuationToken();
+    } while (token != null);
+    return Optional.empty();
   }
 }

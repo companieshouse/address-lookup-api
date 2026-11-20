@@ -101,8 +101,7 @@ public final class StreamingS3 {
         new ObjectTarget(bucket, key),
         limit,
         expectedMd5 == null ? ChecksumVerifier.none() : ChecksumVerifier.md5(expectedMd5),
-        ExistingObjectPolicy.failOnConflict(),
-        true);
+        ExistingObjectPolicy.overwrite());
   }
 
   public static String checksumKey(String key) {
@@ -119,20 +118,6 @@ public final class StreamingS3 {
           NoSuchAlgorithmException,
           ChecksumMismatchException,
           ExistingObjectVerificationException {
-    return put(in, target, limit, verifier, policy, false);
-  }
-
-  private Uploaded put(
-      InputStream in,
-      ObjectTarget target,
-      long limit,
-      ChecksumVerifier verifier,
-      ExistingObjectPolicy policy,
-      boolean overwrite)
-      throws IOException,
-          NoSuchAlgorithmException,
-          ChecksumMismatchException,
-          ExistingObjectVerificationException {
     String uploadId =
         s3.createMultipartUpload(b -> b.bucket(target.bucket()).key(target.key())).uploadId();
     LOG.info("Multipart upload started", target.logFields());
@@ -142,11 +127,11 @@ public final class StreamingS3 {
 
       // Complete the multipart upload only after proving the supplier checksum matches.
       verifier.verify(streamed.md5());
-      String version = completeUpload(target, uploadId, streamed, policy, overwrite);
+      String version = completeUpload(target, uploadId, streamed, policy);
 
       var uploaded =
           new Uploaded(target.key(), version, streamed.sha256(), streamed.md5(), streamed.bytes());
-      saveChecksumEvidence(target, uploaded, policy, overwrite);
+      saveChecksumEvidence(target, uploaded, policy);
       return uploaded;
     } catch (Exception e) {
       abortIncompleteUpload(target, uploadId, e);
@@ -201,12 +186,11 @@ public final class StreamingS3 {
       ObjectTarget target,
       String uploadId,
       StreamedParts streamed,
-      ExistingObjectPolicy policy,
-      boolean overwrite)
+      ExistingObjectPolicy policy)
       throws ExistingObjectVerificationException {
     try {
       var result =
-          overwrite
+          policy.overwritesExisting()
               ? s3.completeMultipartUpload(b ->
                   b.bucket(target.bucket())
                       .key(target.key())
@@ -229,12 +213,12 @@ public final class StreamingS3 {
 
   /** Stores checksum evidence separately from the uploaded object. */
   private void saveChecksumEvidence(
-      ObjectTarget target, Uploaded uploaded, ExistingObjectPolicy policy, boolean overwrite)
+      ObjectTarget target, Uploaded uploaded, ExistingObjectPolicy policy)
       throws IOException {
     String checksumKey = checksumKey(target.key());
     String evidence = JSON.writeValueAsString(evidenceOf(target, uploaded));
     try {
-      if (overwrite) {
+      if (policy.overwritesExisting()) {
         s3.putObject(
             b -> b.bucket(target.bucket()).key(checksumKey), RequestBody.fromString(evidence));
       } else {
@@ -254,7 +238,6 @@ public final class StreamingS3 {
               "version",
               uploaded.version()));
     } catch (S3Exception e) {
-      if (overwrite) throw e;
       if (!ReleaseStore.isPreconditionFailed(e)) {
         throw e;
       }

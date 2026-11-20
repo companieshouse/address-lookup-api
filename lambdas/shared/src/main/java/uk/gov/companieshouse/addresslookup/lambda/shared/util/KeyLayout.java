@@ -138,6 +138,14 @@ public class KeyLayout {
     return object.packageVersion();
   }
 
+  public static boolean isDataPackageManifestKey(String key) {
+    try {
+      return parseLandingObject(key).fileType() == LandingFileType.MANIFEST;
+    } catch (IllegalArgumentException invalidKey) {
+      return false;
+    }
+  }
+
   private static String requireComponent(String value, String name) {
     if (value == null || !COMPONENT.matcher(value).matches()) {
       throw new IllegalArgumentException("Invalid " + name);

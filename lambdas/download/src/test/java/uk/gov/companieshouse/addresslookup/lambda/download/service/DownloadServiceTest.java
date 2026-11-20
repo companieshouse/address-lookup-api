@@ -352,21 +352,49 @@ final class DownloadServiceTest {
   }
 
   @Test
-  void repeatedDownloadOverwritesTheSameVersionedZip() throws Exception {
+  void repeatedDownloadSkipsCurrentVersionWithMatchingEvidence() throws Exception {
     var s3 = new FakeS3();
     byte[] zip = "repeat download".getBytes(StandardCharsets.UTF_8);
     String zipKey = "initial_full/12345/159159/downloads/" + DATASET + ".zip";
     s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifestWithSelectedMd5(md5(zip))));
     s3.objects.put(zipKey, "old content".getBytes(StandardCharsets.UTF_8));
-    when(os.download(anyString()))
-        .thenReturn(new ByteArrayInputStream(zip), new ByteArrayInputStream(zip));
+    when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
     var service = new DownloadService(s3.client(), os, properties());
 
     assertEquals("ZIP_SCAN", service.download(event(), context()));
+    assertEquals("SKIPPED", service.download(event(), context()));
+    assertEquals(List.of(zipKey), s3.completedKeys);
+    verify(os).download(anyString());
+    assertArrayEquals(zip, s3.objects.get(zipKey));
+    assertTrue(s3.objects.keySet().stream().noneMatch(k -> k.endsWith(".receipt.json")));
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"missing", "replaced", "md5"})
+  void downloadsAgainWhenExistingZipEvidenceIsStale(String reason) throws Exception {
+    var s3 = new FakeS3();
+    byte[] zip = "repeat download".getBytes(StandardCharsets.UTF_8);
+    String zipKey = "initial_full/12345/159159/downloads/" + DATASET + ".zip";
+    s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifestWithSelectedMd5(md5(zip))));
+    when(os.download(anyString()))
+        .thenAnswer(call -> new ByteArrayInputStream(zip));
+    var service = new DownloadService(s3.client(), os, properties());
+    assertEquals("ZIP_SCAN", service.download(event(), context()));
+    switch (reason) {
+      case "missing" -> s3.objects.remove(zipKey);
+      case "replaced" -> s3.versions.put(zipKey, "replacement-version");
+      case "md5" -> {
+        String evidenceKey = KeyLayout.checksumKey(zipKey);
+        var evidence = (ObjectNode) JSON.readTree(s3.objects.get(evidenceKey));
+        evidence.put("md5", "0".repeat(32));
+        s3.objects.put(evidenceKey, JSON.writeValueAsBytes(evidence));
+      }
+      default -> throw new IllegalArgumentException(reason);
+    }
+
     assertEquals("ZIP_SCAN", service.download(event(), context()));
     assertEquals(List.of(zipKey, zipKey), s3.completedKeys);
     assertArrayEquals(zip, s3.objects.get(zipKey));
-    assertTrue(s3.objects.keySet().stream().noneMatch(k -> k.endsWith(".receipt.json")));
   }
 
   private static AcquisitionProperties properties() {

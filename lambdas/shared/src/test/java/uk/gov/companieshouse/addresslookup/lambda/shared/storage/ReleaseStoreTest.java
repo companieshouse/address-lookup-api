@@ -15,6 +15,8 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 import java.nio.charset.StandardCharsets;
 import java.io.ByteArrayInputStream;
 import java.util.List;
+import java.util.function.UnaryOperator;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.Test;
@@ -138,10 +140,11 @@ final class ReleaseStoreTest {
   @Test
   void updateStateFailsAfterRepeatedConflicts() {
     s3.putConflicts = 5;
+    UnaryOperator<ObjectNode> update = state -> state.put("status", "EXTRACTED");
 
     var failure = assertThrows(
         IllegalStateException.class,
-        () -> store.updateState(BUCKET, KEY, state -> state.put("status", "EXTRACTED")));
+        () -> store.updateState(BUCKET, KEY, update));
 
     assertEquals("State update contention; retry invocation", failure.getMessage());
     assertFalse(s3.objects.containsKey(KEY));
@@ -235,10 +238,11 @@ final class ReleaseStoreTest {
     var client = clientListingKey(KEY);
     when(client.getObject(any(GetObjectRequest.class)))
         .thenThrow(S3Exception.builder().statusCode(403).build());
+    var failingStore = new ReleaseStore(client);
 
     var failure = assertThrows(
         S3Exception.class,
-        () -> new ReleaseStore(client).updateState(BUCKET, KEY, state -> state));
+        () -> failingStore.updateState(BUCKET, KEY, state -> state));
 
     assertEquals(403, failure.statusCode());
   }
@@ -250,10 +254,11 @@ final class ReleaseStoreTest {
         .thenReturn(new ResponseInputStream<>(
             GetObjectResponse.builder().build(),
             new ByteArrayInputStream("{}".getBytes(StandardCharsets.UTF_8))));
+    var failingStore = new ReleaseStore(client);
 
     var failure = assertThrows(
         IllegalArgumentException.class,
-        () -> new ReleaseStore(client).updateState(BUCKET, KEY, state -> state));
+        () -> failingStore.updateState(BUCKET, KEY, state -> state));
 
     assertEquals("State object is missing an ETag", failure.getMessage());
   }

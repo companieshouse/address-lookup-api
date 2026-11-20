@@ -10,6 +10,7 @@ import java.util.Map;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.TransientFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
@@ -138,17 +139,24 @@ public final class DownloadService {
               "receipt_key",
               receiptLocationS3Path));
     } catch (StreamingS3.ChecksumMismatchException e) {
+      String checksumMismatchDetail = String.valueOf(e.getMessage());
       LOG.error(
           "Download checksum mismatch",
           e,
           Map.of(
+              "outcome",
+              "TRANSIENT_FAILURE",
+              "reason_code",
+              "CHECKSUM_MISMATCH",
               LOG_RELEASE_ID,
               manifestReleaseId,
               DOWNLOAD_COMMAND_DATASET,
               downloadCommandDataset,
-              "checksum_mismatch",
-              e.getMessage()));
-      return "CHECKSUM_MISMATCH";
+              "s3_key",
+              zipUploadS3Path,
+              "checksum_mismatch_detail",
+              checksumMismatchDetail));
+      throw new TransientFailureException("CHECKSUM_MISMATCH", e);
     }
 
     return "ZIP_SCAN";

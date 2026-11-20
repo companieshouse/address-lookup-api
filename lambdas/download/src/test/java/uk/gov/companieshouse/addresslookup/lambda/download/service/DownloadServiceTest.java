@@ -36,6 +36,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.TransientFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
@@ -250,8 +251,13 @@ final class DownloadServiceTest {
     when(os.download(anyString()))
         .thenReturn(new ByteArrayInputStream("wrong content".getBytes(StandardCharsets.UTF_8)));
     var service = new DownloadService(s3.client(), os, properties());
+    var event = event();
+    var context = context();
 
-    assertEquals("CHECKSUM_MISMATCH", service.download(event(), context()));
+    var failure =
+        assertThrows(TransientFailureException.class, () -> service.download(event, context));
+
+    assertEquals("CHECKSUM_MISMATCH", failure.getReasonCode());
   }
 
   @Test
@@ -355,18 +361,28 @@ final class DownloadServiceTest {
     when(os.download(anyString()))
         .thenReturn(new ByteArrayInputStream("wrong content".getBytes(StandardCharsets.UTF_8)));
     var service = new DownloadService(s3.client(), os, properties());
+    var event = event();
+    var context = context();
     var appender = captureStructuredLogs();
     try {
-      assertEquals("CHECKSUM_MISMATCH", service.download(event(), context()));
+      assertThrows(TransientFailureException.class, () -> service.download(event, context));
     } finally {
       stopCapturingStructuredLogs(appender);
     }
-    assertTrue(
+    var failureLog =
         appender.list.stream()
-            .filter(event -> event.getFormattedMessage().equals("Download checksum mismatch"))
-            .map(event -> structuredField(event, "checksum_mismatch"))
-            .anyMatch(mismatch ->
-                mismatch != null && mismatch.contains("expected=") && mismatch.contains("actual=")),
+            .filter(logEvent -> logEvent.getFormattedMessage().equals("Download checksum mismatch"))
+            .findFirst()
+            .orElseThrow();
+    assertEquals("TRANSIENT_FAILURE", structuredField(failureLog, "outcome"));
+    assertEquals("CHECKSUM_MISMATCH", structuredField(failureLog, "reason_code"));
+    assertEquals(RELEASE_ID, structuredField(failureLog, "release_id"));
+    assertEquals(DATASET, structuredField(failureLog, "dataset"));
+    assertEquals(
+        "Scanned/" + RELEASE_ID + "/" + DATASET + ".zip", structuredField(failureLog, "s3_key"));
+    String mismatch = structuredField(failureLog, "checksum_mismatch_detail");
+    assertTrue(
+        mismatch != null && mismatch.contains("expected=") && mismatch.contains("actual="),
         "mismatch must be logged with both MD5 values");
     assertTrue(s3.abortedUploads > 0, "multipart upload should be aborted");
     assertFalse(

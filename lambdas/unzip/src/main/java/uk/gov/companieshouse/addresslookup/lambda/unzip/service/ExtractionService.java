@@ -24,6 +24,7 @@ import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
 import uk.gov.companieshouse.logging.Logger;
@@ -138,17 +139,17 @@ public final class ExtractionService {
     try (var zip = new ZipInputStream(s3.getObject(request))) {
       return extractZip(zip, table, expectedReceipt, store, scanBucket, checked, context);
     } catch (ZipException e) {
-      logExtractionFailure("MALFORMED_ZIP", e, releaseId, dataset);
-      return "MALFORMED_ZIP";
+      logExtractionFailure("MALFORMED_ZIP", e, releaseId, dataset, s3Key);
+      throw new PermanentFailureException("MALFORMED_ZIP", e);
     } catch (CsvHeaderException e) {
-      logExtractionFailure("HEADER_MISMATCH", e, releaseId, dataset);
-      return "HEADER_MISMATCH";
+      logExtractionFailure("HEADER_MISMATCH", e, releaseId, dataset, s3Key);
+      throw new PermanentFailureException("HEADER_MISMATCH", e);
     } catch (MissingPrimaryCsvException e) {
-      logExtractionFailure(CSV_NOT_FOUND, e, releaseId, dataset);
-      return CSV_NOT_FOUND;
+      logExtractionFailure(CSV_NOT_FOUND, e, releaseId, dataset, s3Key);
+      throw new PermanentFailureException(CSV_NOT_FOUND, e);
     } catch (ArchiveValidationException e) {
-      logExtractionFailure("ARCHIVE_INVALID", e, releaseId, dataset);
-      return "ARCHIVE_INVALID";
+      logExtractionFailure("ARCHIVE_INVALID", e, releaseId, dataset, s3Key);
+      throw new PermanentFailureException("ARCHIVE_INVALID", e);
     }
   }
 
@@ -216,15 +217,25 @@ public final class ExtractionService {
       zip.closeEntry();
     }
 
-    return new MissingPrimaryCsvException(CSV_NOT_FOUND).getMessage();
+    throw new MissingPrimaryCsvException("Primary CSV " + table.name() + ".csv is missing");
   }
 
   private static void logExtractionFailure(
-      String status, Exception failure, String releaseId, String dataset) {
+      String reasonCode, Exception failure, String releaseId, String dataset, String s3Key) {
     LOG.error(
         "ZIP extraction failed",
         failure,
-        Map.of(STATUS, status, RELEASE_ID_FIELD, releaseId, DATASET_FIELD, dataset));
+        Map.of(
+            "outcome",
+            "PERMANENT_FAILURE",
+            "reason_code",
+            reasonCode,
+            RELEASE_ID_FIELD,
+            releaseId,
+            DATASET_FIELD,
+            dataset,
+            "s3_key",
+            s3Key));
   }
 
   private static String requestId(Context context) {

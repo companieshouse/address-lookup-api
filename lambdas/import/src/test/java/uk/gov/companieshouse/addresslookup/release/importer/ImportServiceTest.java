@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
@@ -17,6 +18,7 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 
 import com.amazonaws.services.lambda.runtime.Context;
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
@@ -112,7 +114,8 @@ class ImportServiceTest {
     verify(registration)
         .register(
             eq(manifest), eq(MANIFEST_KEY), org.mockito.ArgumentMatchers.matches("[a-f0-9]{64}"));
-    verify(store).isClean(BUCKET, MANIFEST_KEY, null);
+    verify(store).isClean(BUCKET, MANIFEST_KEY, MANIFEST_VERSION);
+    verify(store).read(BUCKET, MANIFEST_KEY, MANIFEST_VERSION);
     verify(importer, never()).importClean(any(), any(), any(), any(), any(), any(), any());
     verify(promotion, never()).promote(any());
   }
@@ -308,6 +311,9 @@ class ImportServiceTest {
           var request = call.getArgument(0, GetObjectTaggingRequest.class);
           assertEquals(landing, request.bucket());
           assertTrue(buckets.get(landing).containsKey(request.key()));
+          assertEquals(
+              request.key().equals(manifestKey) ? MANIFEST_VERSION : "csv-version",
+              request.versionId());
           return GetObjectTaggingResponse.builder()
               .tagSet(Tag.builder()
                   .key("GuardDutyMalwareScanStatus")
@@ -331,7 +337,7 @@ class ImportServiceTest {
         .importClean(
             eq(manifest.id()),
             eq(dataset),
-            any(),
+            any(InputStream.class),
             eq(landing),
             eq(csvKey),
             eq("csv-version"),
@@ -339,12 +345,12 @@ class ImportServiceTest {
     verify(s3)
         .getObject(
             org.mockito.ArgumentMatchers.argThat((GetObjectRequest request) ->
-                csvKey.equals(request.key()) && "csv-version".equals(request.versionId())));
+                manifestKey.equals(request.key())
+                    && MANIFEST_VERSION.equals(request.versionId())));
     verify(s3)
         .getObject(
             org.mockito.ArgumentMatchers.argThat((GetObjectRequest request) ->
-                manifestKey.equals(request.key())
-                    && MANIFEST_VERSION.equals(request.versionId())));
+                csvKey.equals(request.key()) && "csv-version".equals(request.versionId())));
     verify(s3)
         .getObjectTagging(
             org.mockito.ArgumentMatchers.argThat((GetObjectTaggingRequest request) ->
@@ -386,6 +392,8 @@ class ImportServiceTest {
     when(store.version(BUCKET, csvKey)).thenReturn("csv-version");
     when(store.isClean(BUCKET, csvKey, "csv-version")).thenReturn(true);
     when(store.read(BUCKET, KeyLayout.checksumKey(csvKey))).thenReturn(evidence);
+    when(store.open(BUCKET, csvKey, "csv-version")).thenReturn(mock(InputStream.class));
+    when(store.open(BUCKET, csvKey, "csv-version")).thenReturn(mock(InputStream.class));
 
     try (MockedStatic<ReleaseManifest> mockedManifest = mockStatic(ReleaseManifest.class)) {
       mockedManifest.when(() -> ReleaseManifest.read(node)).thenReturn(manifest);
@@ -400,7 +408,7 @@ class ImportServiceTest {
         .importClean(
             eq(id),
             eq(Dataset.ADD_GB_ROYALMAILADDRESS),
-            any(),
+            any(InputStream.class),
             eq(BUCKET),
             eq(csvKey),
             eq("csv-version"),

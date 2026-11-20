@@ -22,6 +22,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
@@ -53,28 +54,24 @@ final class ReleaseStoreTest {
   }
 
   @Test
-  void readUsesRequestedObjectVersion() throws Exception {
+  void readSpecificVersionUsesPinnedS3Version() throws Exception {
     var client = mock(S3Client.class);
     when(client.getObject(any(GetObjectRequest.class)))
-        .thenReturn(
-            new ResponseInputStream<>(
-                GetObjectResponse.builder().build(),
-                new ByteArrayInputStream(
-                    "{\"releaseId\":\"abc\"}".getBytes(StandardCharsets.UTF_8))));
+        .thenAnswer(call -> {
+          var request = call.getArgument(0, GetObjectRequest.class);
+          assertEquals(BUCKET, request.bucket());
+          assertEquals("manifest.json", request.key());
+          assertEquals("manifest-version", request.versionId());
+          return new ResponseInputStream<>(
+              GetObjectResponse.builder().build(),
+              AbortableInputStream.create(
+                  new ByteArrayInputStream("{\"version\":1}".getBytes(StandardCharsets.UTF_8))));
+        });
 
-    assertEquals(
-        "abc",
-        new ReleaseStore(client)
-            .read(BUCKET, "plan.json", "manifest-version")
-            .path("releaseId")
-            .asText());
+    var manifest = new ReleaseStore(client).read(BUCKET, "manifest.json", "manifest-version");
 
-    verify(client)
-        .getObject(
-            org.mockito.ArgumentMatchers.argThat((GetObjectRequest request) ->
-                BUCKET.equals(request.bucket())
-                    && "plan.json".equals(request.key())
-                    && "manifest-version".equals(request.versionId())));
+    assertEquals(1, manifest.path("version").asInt());
+    verify(client, org.mockito.Mockito.never()).listObjectsV2(any(ListObjectsV2Request.class));
   }
 
   @Test

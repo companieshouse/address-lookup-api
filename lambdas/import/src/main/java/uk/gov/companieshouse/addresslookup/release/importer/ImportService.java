@@ -6,7 +6,6 @@ import com.amazonaws.services.lambda.runtime.Context;
 import java.util.*;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReconciliationCursor;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
@@ -209,11 +208,8 @@ public final class ImportService {
     check(version.equals(required(evidence, "versionId")), "CSV checksum version mismatch");
     String checksum = required(evidence, "sha256");
     check(checksum.matches("[a-f0-9]{64}"), "Invalid CSV checksum evidence");
-    try (var csv =
-        s3.getObject(
-            GetObjectRequest.builder().bucket(bucket).key(key).versionId(version).build())) {
-      importer.importClean(
-          manifest.id(), dataset, csv, bucket, key, version, checksum);
+    try (var csv = store.open(bucket, key, version)) {
+      importer.importClean(manifest.id(), dataset, csv, bucket, key, version, checksum);
     }
   }
 }

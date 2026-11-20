@@ -5,6 +5,7 @@ import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeS
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,7 +52,18 @@ public final class ReleaseStore {
         s3.listObjectsV2(
             ListObjectsV2Request.builder().bucket(bucket).prefix(key).maxKeys(1).build());
     if (existing.contents().stream().noneMatch(o -> key.equals(o.key()))) return null;
-    try (var in = s3.getObject(GetObjectRequest.builder().bucket(bucket).key(key).build())) {
+    return readObject(bucket, key, null);
+  }
+
+  /** Reads a specific immutable S3 object version. */
+  public JsonNode read(String bucket, String key, String version) throws IOException {
+    check(version != null && !version.isBlank(), "S3 version is required");
+    return readObject(bucket, key, version);
+  }
+
+  private JsonNode readObject(String bucket, String key, String version) throws IOException {
+    var request = GetObjectRequest.builder().bucket(bucket).key(key).versionId(version).build();
+    try (var in = s3.getObject(request)) {
       byte[] bytes = in.readNBytes(1024 * 1024 + 1);
       check(bytes.length <= 1024 * 1024, "Manifest exceeds 1 MiB");
       return JSON.readTree(bytes);
@@ -61,18 +73,10 @@ public final class ReleaseStore {
     }
   }
 
-  public JsonNode read(String bucket, String key, String version) throws IOException {
+  public InputStream open(String bucket, String key, String version) {
     check(version != null && !version.isBlank(), "S3 version is required");
-    try (var in =
-        s3.getObject(
-            GetObjectRequest.builder().bucket(bucket).key(key).versionId(version).build())) {
-      byte[] bytes = in.readNBytes(1024 * 1024 + 1);
-      check(bytes.length <= 1024 * 1024, "Manifest exceeds 1 MiB");
-      return JSON.readTree(bytes);
-    } catch (S3Exception e) {
-      if (e.statusCode() == 404) return null;
-      throw e;
-    }
+    return s3.getObject(
+        GetObjectRequest.builder().bucket(bucket).key(key).versionId(version).build());
   }
 
   public void immutable(String bucket, String key, JsonNode value) {

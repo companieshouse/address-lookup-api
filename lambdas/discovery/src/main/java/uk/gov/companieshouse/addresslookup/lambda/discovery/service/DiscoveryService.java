@@ -153,7 +153,7 @@ public final class DiscoveryService {
       cursor = getCurrentCursor(packageId);
       check(
           packageId.equals(cursor.dataPackageId()),
-          "Cursor package does not match configured package");
+          "Cursor package ID does not match configured package");
 
       urlPackageVersionData = getNextVersionUrl(cursor);
       if (urlPackageVersionData == null) {

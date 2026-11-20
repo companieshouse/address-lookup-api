@@ -7,18 +7,26 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 
 import java.nio.charset.StandardCharsets;
+import java.io.ByteArrayInputStream;
 import java.util.List;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.Test;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
 import uk.gov.companieshouse.addresslookup.lambda.shared.testsupport.FakeS3;
@@ -118,6 +126,136 @@ final class ReleaseStoreTest {
 
     assertEquals("EXTRACTED", updated.path("datasets").path("first").path("status").asText());
     assertEquals("EXTRACTED", updated.path("datasets").path("second").path("status").asText());
+  }
+
+  @Test
+  void updateStateCreatesMissingState() throws Exception {
+    var updated = store.updateState(BUCKET, KEY, state -> state.put("status", "EXTRACTED"));
+
+    assertEquals(updated, JSON.readTree(s3.objects.get(KEY)));
+  }
+
+  @Test
+  void updateStateFailsAfterRepeatedConflicts() {
+    s3.putConflicts = 5;
+
+    var failure = assertThrows(
+        IllegalStateException.class,
+        () -> store.updateState(BUCKET, KEY, state -> state.put("status", "EXTRACTED")));
+
+    assertEquals("State update contention; retry invocation", failure.getMessage());
+    assertFalse(s3.objects.containsKey(KEY));
+  }
+
+  @Test
+  void updateStatePropagatesUnexpectedWriteFailure() {
+    s3.putErrorStatus = 503;
+
+    var failure = assertThrows(
+        S3Exception.class,
+        () -> store.updateState(BUCKET, KEY, state -> state));
+
+    assertEquals(503, failure.statusCode());
+  }
+
+  @Test
+  void updateStateRejectsNullUpdate() {
+    var failure = assertThrows(
+        IllegalArgumentException.class,
+        () -> store.updateState(BUCKET, KEY, state -> null));
+
+    assertEquals("State update returned no value", failure.getMessage());
+    assertFalse(s3.objects.containsKey(KEY));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"[]", "null", ""})
+  void updateStateRejectsNonObjectState(String value) {
+    s3.objects.put(KEY, value.getBytes(StandardCharsets.UTF_8));
+
+    var failure = assertThrows(
+        IllegalArgumentException.class,
+        () -> store.updateState(BUCKET, KEY, state -> state));
+
+    assertEquals("State must be a JSON object", failure.getMessage());
+  }
+
+  @Test
+  void updateStateRejectsOversizedState() {
+    s3.objects.put(KEY, new byte[1024 * 1024 + 1]);
+
+    var failure = assertThrows(
+        IllegalArgumentException.class,
+        () -> store.updateState(BUCKET, KEY, state -> state));
+
+    assertEquals("State exceeds 1 MiB", failure.getMessage());
+  }
+
+  @Test
+  void updateStateRetriesWhenListedStateDisappears() throws Exception {
+    var client = clientListingKey(KEY);
+    when(client.getObject(any(GetObjectRequest.class)))
+        .thenThrow(S3Exception.builder().statusCode(404).build())
+        .thenReturn(new ResponseInputStream<>(
+            GetObjectResponse.builder().eTag("etag").build(),
+            new ByteArrayInputStream("{}".getBytes(StandardCharsets.UTF_8))));
+
+    var updated = new ReleaseStore(client).updateState(
+        BUCKET, KEY, state -> state.put("status", "EXTRACTED"));
+
+    assertEquals("EXTRACTED", updated.path("status").asText());
+    verify(client, times(2)).getObject(any(GetObjectRequest.class));
+    verify(client).putObject(
+        org.mockito.ArgumentMatchers.argThat((PutObjectRequest request) ->
+            "etag".equals(request.ifMatch()) && request.ifNoneMatch() == null),
+        any(RequestBody.class));
+  }
+
+  @Test
+  void updateStateRetriesConditionalConflictDuringCreation() throws Exception {
+    var client = mock(S3Client.class);
+    when(client.listObjectsV2(any(ListObjectsV2Request.class)))
+        .thenReturn(ListObjectsV2Response.builder().build());
+    when(client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+        .thenThrow(S3Exception.builder().statusCode(409).build())
+        .thenReturn(PutObjectResponse.builder().build());
+
+    var updated = new ReleaseStore(client).updateState(
+        BUCKET, KEY, state -> state.put("status", "EXTRACTED"));
+
+    assertEquals("EXTRACTED", updated.path("status").asText());
+    verify(client, times(2)).putObject(
+        org.mockito.ArgumentMatchers.argThat((PutObjectRequest request) ->
+            "*".equals(request.ifNoneMatch()) && request.ifMatch() == null),
+        any(RequestBody.class));
+  }
+
+  @Test
+  void updateStatePropagatesUnexpectedReadFailure() {
+    var client = clientListingKey(KEY);
+    when(client.getObject(any(GetObjectRequest.class)))
+        .thenThrow(S3Exception.builder().statusCode(403).build());
+
+    var failure = assertThrows(
+        S3Exception.class,
+        () -> new ReleaseStore(client).updateState(BUCKET, KEY, state -> state));
+
+    assertEquals(403, failure.statusCode());
+  }
+
+  @Test
+  void updateStateRequiresEtagForExistingState() {
+    var client = clientListingKey(KEY);
+    when(client.getObject(any(GetObjectRequest.class)))
+        .thenReturn(new ResponseInputStream<>(
+            GetObjectResponse.builder().build(),
+            new ByteArrayInputStream("{}".getBytes(StandardCharsets.UTF_8))));
+
+    var failure = assertThrows(
+        IllegalArgumentException.class,
+        () -> new ReleaseStore(client).updateState(BUCKET, KEY, state -> state));
+
+    assertEquals("State object is missing an ETag", failure.getMessage());
   }
 
   @Test

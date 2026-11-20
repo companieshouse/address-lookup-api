@@ -15,6 +15,8 @@ import org.postgresql.PGConnection;
  */
 public final class DatabaseBootstrap {
 
+  static final String UPLOAD_ROLE = "als_upload";
+
   private DatabaseBootstrap() {}
 
   public static void bootstrap(Connection master, String masterUsername, DatabaseCredentials owner)
@@ -41,6 +43,12 @@ public final class DatabaseBootstrap {
             .alterUserPassword(owner.username(), password, "scram-sha-256");
       } finally {
         Arrays.fill(password, '\0');
+      }
+
+      // The schema owner cannot create roles, so the Upload Lambda group role is created here
+      // and migration V2026.009 grants its privileges.
+      if (!roleExists(master, UPLOAD_ROLE)) {
+        execute(master, quoted(master, "CREATE ROLE %I NOLOGIN", UPLOAD_ROLE));
       }
 
       execute(

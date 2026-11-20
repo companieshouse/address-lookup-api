@@ -33,6 +33,8 @@ import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseRepository;
 })
 @PropertySource("classpath:importer.properties")
 public class ImportApplication {
+  private ImportApplication() {}
+
   public static ImportService start() {
     // The platform injects environment variables before the process starts.
     var context =

@@ -483,7 +483,6 @@ final class DownloadServiceTest {
   @ParameterizedTest
   @MethodSource("getCauseExceptionClassAndFinalThrownException")
   void shouldHandleExistingObjectVerificationExceptionWithDifferentCauses(ExceptionAndExceptionClass testData) throws Exception {
-    final String EXCEPTION_MESSAGE = "exception message";
 
     String dataset = "add_gb_royalmailaddress";
 

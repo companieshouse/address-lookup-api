@@ -37,7 +37,6 @@ public final class DownloadService {
   private static final String DOWNLOAD_COMMAND_DATASET = "dataset";
   private static final String LOG_RELEASE_ID = "release_id";
 
-  private static final String UPLOAD_FAILED_MESSAGE = "Upload failed";
   private static final String CHECKSUM_FAILURE_MESSAGE = "Download failure, checksum mismatch";
   private static final String ZIP_FILE_UPLOAD_ERROR_MESSAGE = "Error occurred whilst attempting to verify if the ZIP file has previously been stored in the S3 bucket.";
 

@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -48,6 +49,15 @@ class DatabaseFeedIT {
 
   private static final List<String> TABLES =
       List.of("add_gb_royalmailaddress_v2", "add_isl_royalmailaddress_v2");
+  private static final List<String> LANDING_DATASETS =
+      List.of(
+          "add_gb_royalmailaddress",
+          "add_isl_royalmailaddress",
+          "add_gb_builtaddress",
+          "add_gb_prebuildaddress",
+          "add_isl_builtaddress",
+          "add_isl_prebuildaddress");
+  private static final List<String> NGD_V3_DATASETS = LANDING_DATASETS.subList(2, 6);
   private static final List<String> OFFICIAL_COLUMNS =
       List.of(
           "udprn",
@@ -271,7 +281,7 @@ class DatabaseFeedIT {
     long gbRows = Files.readAllLines(fixtures.resolve("add_gb_royalmailaddress.csv")).size() - 1;
     long islRows = Files.readAllLines(fixtures.resolve("add_isl_royalmailaddress.csv")).size() - 1;
     String directory = "/tmp/landing/full/p1/v1/";
-    for (String dataset : List.of("add_gb_royalmailaddress", "add_isl_royalmailaddress")) {
+    for (String dataset : LANDING_DATASETS) {
       POSTGRES.copyFileToContainer(
           MountableFile.forHostPath(fixtures.resolve(dataset + ".csv")),
           directory + dataset + ".csv");
@@ -295,6 +305,10 @@ class DatabaseFeedIT {
               + "WITH GRANT OPTION");
       long activeGbBefore =
           scalar(statement, "SELECT count(*) FROM os_data.add_gb_royalmailaddress_v2");
+      // the new datasets are registered disabled until Discovery and the release model support them
+      assertEquals(
+          4, scalar(statement, "SELECT count(*) FROM os_control.schema_contract WHERE NOT enabled"));
+      statement.execute("UPDATE os_control.schema_contract SET enabled = true");
       statement.execute("SET ROLE als_loader");
 
       assertImportFails(landing, directory, statement, importCall, "rel-1", gbRows + 1, islRows,
@@ -358,6 +372,12 @@ class DatabaseFeedIT {
       assertEquals(
           4258,
           scalar(statement, "SELECT Find_SRID('os_data', 'add_isl_royalmailaddress_v2', 'geometry')"));
+      for (String dataset : NGD_V3_DATASETS) {
+        assertEquals(1, scalar(statement, "SELECT count(*) FROM os_data." + dataset));
+        assertEquals(
+            dataset.startsWith("add_gb") ? 27700 : 4258,
+            scalar(statement, "SELECT Find_SRID('os_data', '" + dataset + "', 'geometry')"));
+      }
       assertEquals(1, scalar(statement, "SELECT count(*) FROM os_data.release_history"));
       assertEquals(
           1,
@@ -426,7 +446,9 @@ class DatabaseFeedIT {
       assertEquals(
           0,
           scalar(statement, "SELECT count(*) FROM pg_tables WHERE schemaname = 'os_prev' "
-              + "AND tablename NOT LIKE '%_royalmailaddress_v2'"));
+              + "AND tablename NOT LIKE '%_royalmailaddress_v2' "
+              + "AND tablename NOT IN ('add_gb_builtaddress', 'add_gb_prebuildaddress', "
+              + "'add_isl_builtaddress', 'add_isl_prebuildaddress')"));
 
       statement.execute("SET ROLE als_loader");
       assertImportFails(landing, directory, statement, importCall, "rel-0", gbRows, islRows,
@@ -519,9 +541,18 @@ class DatabaseFeedIT {
             + "\"crs\":\"http://www.opengis.net/def/crs/EPSG/0/" + gbSrid + "\"}},"
             + "\"add_isl_royalmailaddress\":{\"summary\":{\"recordCount\":" + islRows
             + ",\"schemaVersion\":\"2.0\","
-            + "\"crs\":\"http://www.opengis.net/def/crs/EPSG/0/4258\"}}}");
+            + "\"crs\":\"http://www.opengis.net/def/crs/EPSG/0/4258\"}}"
+            + ngdV3Manifest("add_gb_builtaddress", "27700")
+            + ngdV3Manifest("add_gb_prebuildaddress", "27700")
+            + ngdV3Manifest("add_isl_builtaddress", "4258")
+            + ngdV3Manifest("add_isl_prebuildaddress", "4258") + "}");
     POSTGRES.copyFileToContainer(
         MountableFile.forHostPath(landing.resolve("manifest.json")), directory + "manifest.json");
+  }
+
+  private static String ngdV3Manifest(String dataset, String srid) {
+    return ",\"" + dataset + "\":{\"summary\":{\"recordCount\":1,\"schemaVersion\":\"3.0\","
+        + "\"crs\":\"http://www.opengis.net/def/crs/EPSG/0/" + srid + "\"}}";
   }
 
   private static boolean tableExists(Statement statement, String fromClause) throws SQLException {
@@ -536,7 +567,7 @@ class DatabaseFeedIT {
   }
 
   private static void assertProductionMigrationsAreRepeatable(Flyway productionFlyway) {
-    assertEquals(13, productionFlyway.migrate().migrationsExecuted);
+    assertEquals(17, productionFlyway.migrate().migrationsExecuted);
     productionFlyway.validate();
     assertEquals(0, productionFlyway.migrate().migrationsExecuted);
   }
@@ -634,6 +665,7 @@ class DatabaseFeedIT {
       }
       Set<String> activeTables = new HashSet<>(TABLES);
       activeTables.add("release_history");
+      activeTables.addAll(NGD_V3_DATASETS);
       assertEquals(activeTables, physicalTableNames(connection));
       assertAls143Objects(connection);
 
@@ -648,7 +680,11 @@ class DatabaseFeedIT {
       assertEquals(
           Map.of(
               "add_gb_royalmailaddress", "2.0",
-              "add_isl_royalmailaddress", "2.0"),
+              "add_isl_royalmailaddress", "2.0",
+              "add_gb_builtaddress", "3.0",
+              "add_gb_prebuildaddress", "3.0",
+              "add_isl_builtaddress", "3.0",
+              "add_isl_prebuildaddress", "3.0"),
           contracts);
       assertIndexMetadata(connection);
 
@@ -678,6 +714,28 @@ class DatabaseFeedIT {
     assertRelation(connection, "os_stage.add_gb_royalmailaddress", true);
     assertRelation(connection, "os_stage.add_isl_royalmailaddress", true);
     assertRelation(connection, "os_data.release_history", true);
+    for (String dataset : NGD_V3_DATASETS) {
+      assertRelation(connection, "os_data." + dataset, true);
+      assertRelation(connection, "os_stage." + dataset, true);
+      assertRelation(connection, "os_data." + dataset + "_altadd", false);
+      assertStagingColumnsMatchCsvHeader(connection, dataset);
+    }
+    try (Statement statement = connection.createStatement()) {
+      assertEquals(
+          4,
+          scalar(
+              statement,
+              "SELECT count(*) FROM os_control.schema_contract WHERE version = '3.0' "
+                  + "AND active_table = dataset"));
+      assertEquals(
+          6, scalar(statement, "SELECT count(DISTINCT dataset) FROM os_control.index_definition"));
+      assertEquals(
+          4,
+          scalar(
+              statement,
+              "SELECT count(*) FROM os_control.index_definition WHERE index_type = 'primary_key' "
+                  + "AND definition = 'uprn'"));
+    }
     try (Statement statement = connection.createStatement()) {
       statement.execute(
           "INSERT INTO os_stage.data_package_manifest "
@@ -695,6 +753,45 @@ class DatabaseFeedIT {
       assertFalse(completeness(statement, "unknown"));
       statement.execute("DELETE FROM os_stage.import_ledger");
       statement.execute("DELETE FROM os_stage.data_package_manifest");
+    }
+  }
+
+  private static void assertStagingColumnsMatchCsvHeader(Connection connection, String dataset)
+      throws SQLException {
+    try {
+      List<String> header =
+          List.of(
+              Files.readAllLines(Path.of("src/test/resources/seed-csv/" + dataset + ".csv"))
+                  .get(0)
+                  .split(","));
+      List<String> columns = new ArrayList<>();
+      try (Statement statement = connection.createStatement();
+          ResultSet result =
+              statement.executeQuery(
+                  "SELECT column_name FROM information_schema.columns "
+                      + "WHERE table_schema = 'os_stage' AND table_name = '" + dataset
+                      + "' AND column_name <> 'release_id' ORDER BY ordinal_position")) {
+        while (result.next()) {
+          columns.add(result.getString(1));
+        }
+      }
+      assertEquals(header, columns);
+
+      String file = "/tmp/staging-check/" + dataset + ".csv";
+      POSTGRES.copyFileToContainer(
+          MountableFile.forHostPath(Path.of("src/test/resources/seed-csv/" + dataset + ".csv")),
+          file);
+      String columnList =
+          header.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(","));
+      try (Statement statement = connection.createStatement()) {
+        statement.execute(
+            "COPY os_stage." + dataset + " (" + columnList + ") FROM '" + file
+                + "' WITH (FORMAT csv, HEADER true)");
+        assertEquals(1, scalar(statement, "SELECT count(*) FROM os_stage." + dataset));
+        statement.execute("DELETE FROM os_stage." + dataset);
+      }
+    } catch (IOException e) {
+      throw new IllegalStateException(e);
     }
   }
 
@@ -827,7 +924,7 @@ class DatabaseFeedIT {
 
   private static void assertIndexMetadata(Connection connection) throws SQLException {
     Set<String> expected =
-        Set.of(
+        new HashSet<>(Set.of(
             "add_gb_royalmailaddress|add_gb_royalmailaddress_v2|"
                 + "add_gb_royalmailaddress_v2_pkey|primary_key|udprn",
             "add_gb_royalmailaddress|add_gb_royalmailaddress_v2|"
@@ -837,7 +934,13 @@ class DatabaseFeedIT {
                 + "add_isl_royalmailaddress_v2_pkey|primary_key|udprn",
             "add_isl_royalmailaddress|add_isl_royalmailaddress_v2|"
                 + "add_isl_royalmailaddress_v2_postcode_idx|index|"
-                + "upper(replace(postcode, ' ', ''))");
+                + "upper(replace(postcode, ' ', ''))"));
+    for (String dataset : NGD_V3_DATASETS) {
+      expected.add(dataset + "|" + dataset + "|" + dataset + "_pkey|primary_key|uprn");
+      expected.add(
+          dataset + "|" + dataset + "|" + dataset + "_postcode_idx|index|"
+              + "upper(replace(postcode, ' ', ''))");
+    }
     Set<String> actual = new HashSet<>();
     try (Statement statement = connection.createStatement();
         ResultSet result =

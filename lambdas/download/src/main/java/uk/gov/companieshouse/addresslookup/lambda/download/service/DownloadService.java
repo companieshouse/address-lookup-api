@@ -273,6 +273,7 @@ public final class DownloadService {
             "checksum_mismatch",
             getExceptionText(exception)));
     throw PermanentFailureException.builder()
+            .cause(exception.getCause())
             .description(CHECKSUM_FAILURE_MESSAGE)
             .dataset(Dataset.named(dataset))
             .reasonCode("CHECKSUM_MISMATCH")
@@ -302,12 +303,15 @@ public final class DownloadService {
     }
   }
 
-  private boolean isExistingObjectVerificationExceptionTransient(StreamingS3.ExistingObjectVerificationException exception) {
+  private static boolean isExistingObjectVerificationExceptionTransient(StreamingS3.ExistingObjectVerificationException exception) {
     return switch (exception.getCause()) {
       case IOException ignored -> true;
-      case S3Exception s3e when s3e.isRetryableException() -> true;
+      case S3Exception s3e -> isStatusRetryable(s3e);
       default -> false;
     };
   }
 
+  private static boolean isStatusRetryable(S3Exception s3Exception) {
+    return  (s3Exception.statusCode() >= 500) ;
+  }
 }

@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockConstruction;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -26,6 +27,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.MockedConstruction;
@@ -407,11 +409,14 @@ final class DownloadServiceTest {
   @ParameterizedTest
   @ValueSource(classes = {IOException.class, InterruptedException.class})
   void shouldHandleExceptionsFromOsClientWithTransientFailureException(Class<? extends Exception> exceptionClass) throws Exception {
-    var s3 = new FakeS3();
-    s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
 
     final String EXCEPTION_MESSAGE = "exception message";
-    Exception thrownException = exceptionClass.getConstructor(String.class).newInstance(EXCEPTION_MESSAGE);
+    Exception thrownException = mock(exceptionClass);
+    when(thrownException.getMessage()).thenReturn(EXCEPTION_MESSAGE);
+    var s3 = new FakeS3();
+
+    s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
+
     when(os.download(anyString()))
             .thenThrow(thrownException);
     var service = new DownloadService(s3.client(), os, properties());
@@ -420,7 +425,56 @@ final class DownloadServiceTest {
             service.download(event(), context));
     assertTrue(exception.getMessage().startsWith("Description [exception message]"));
     assertInstanceOf(exceptionClass, exception.getCause());
+  }
 
+  @ParameterizedTest
+  @MethodSource("getTestExceptionClassAndExpectedDescription")
+  void shouldHandleExceptionsFromStreamingS3Put(ClassAndDescription classAndDescription) throws Exception {
+    final String EXCEPTION_MESSAGE = "exception message";
+
+    String dataset = "add_gb_royalmailaddress";
+
+    byte[] zip = ("zip for add_gb_royalmailaddress").getBytes(StandardCharsets.UTF_8);
+
+    var manifest = manifestWithMd5(dataset, md5(zip));
+
+    var s3 = new FakeS3();
+    s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifest));
+
+    Map<String, Object> event = event();
+    event.put("detail", Map.of("planKey", PLAN_KEY, "dataset", dataset));
+
+    when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
+
+    class TheCauseException extends Exception {
+      TheCauseException(String message) {super(message);}
+    }
+    TheCauseException causeException = new TheCauseException(EXCEPTION_MESSAGE);
+
+    Exception exceptionToThrow = mock(classAndDescription.exceptionClass());
+    when(exceptionToThrow.getCause()).thenReturn(causeException);
+
+    try (MockedConstruction<StreamingS3> ignored = mockConstruction(StreamingS3.class,
+            (mock, ignore) -> when(mock.put(any(InputStream.class), anyString(), anyString(),
+                    anyString(), anyLong())).thenThrow(exceptionToThrow))) {
+      var service = new DownloadService(s3.client(), os, properties());
+
+      Exception exception = assertThrows(PermanentFailureException.class, () ->
+              service.download(event(), context));
+
+      assertInstanceOf(TheCauseException.class, exception.getCause());
+      assertTrue(exception.getMessage().startsWith(classAndDescription.expectedDescription()));
+    }
+  }
+
+  private record ClassAndDescription(Class<? extends Exception> exceptionClass, String expectedDescription) {}
+
+  private static List<ClassAndDescription> getTestExceptionClassAndExpectedDescription() {
+   return List.of(new ClassAndDescription(StreamingS3.ChecksumMismatchException.class,
+                   "Description [Download failure, checksum mismatch]"),
+           new ClassAndDescription(StreamingS3.ExistingObjectVerificationException.class,
+                   "Description [Error occurred whilst attempting to verify if the ZIP file has previously been stored in the S3 bucket.]")
+   );
   }
 
   @Test

@@ -43,6 +43,9 @@ public final class Handler extends AbstractRequestHandlerImpl<Map<String,Object>
         LOG.error("An unrecoverable error occurred which attempting the download",
                 permanentException,
                 Map.of("Error", getExceptionText(permanentException)));
+
+        throw new LambdaFailureRuntimeException(
+                "Download failed and a retry will not succeed", permanentException);
     }
 
     @Override

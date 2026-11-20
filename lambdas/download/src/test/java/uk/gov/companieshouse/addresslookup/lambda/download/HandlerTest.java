@@ -5,24 +5,41 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.amazonaws.services.lambda.runtime.Context;
 import java.util.Map;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import uk.gov.companieshouse.addresslookup.lambda.download.service.DownloadService;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.AbstractLambdaFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.LambdaFailureRuntimeException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
+import uk.gov.companieshouse.logging.StructuredLogger;
+import uk.gov.companieshouse.release.model.Dataset;
 
 @ExtendWith(MockitoExtension.class)
 class HandlerTest {
+
+  private static final Logger STRUCTURED_LOGGER =
+      (Logger) LoggerFactory.getLogger(StructuredLogger.class);
+  private static final String RELEASE_ID = "4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56";
+  private static final String DATASET_NAME = "add_gb_royalmailaddress";
 
   @Mock private DownloadService service;
 
@@ -101,5 +118,70 @@ class HandlerTest {
 
     assertEquals("Download failed and a retry will not succeed", failure.getMessage());
     assertSame(exception, failure.getCause());
+  }
+
+  private static Stream<Arguments> failuresAndExpectedOutcomes() {
+    return Stream.of(
+        Arguments.of(
+            TransientFailureException.builder()
+                .description("Failed to check if manifest already stored.")
+                .dataset(Dataset.named(DATASET_NAME))
+                .reasonCode("FAILED_TO_STORE_MANIFEST")
+                .releaseId(RELEASE_ID)
+                .build(),
+            "TRANSIENT_FAILURE"),
+        Arguments.of(
+            PermanentFailureException.builder()
+                .description("MD5 not available")
+                .dataset(Dataset.named(DATASET_NAME))
+                .reasonCode("UNRECOGNISED_DIGEST_SCHEME")
+                .releaseId(RELEASE_ID)
+                .build(),
+            "PERMANENT_FAILURE"));
+  }
+
+  @ParameterizedTest
+  @MethodSource("failuresAndExpectedOutcomes")
+  void failureLogHasOutcomeReasonCodeReleaseIdAndDataset(
+      AbstractLambdaFailureException failure, String expectedOutcome) throws Exception {
+    Mockito.when(service.download(TEST_EVENT, context)).thenThrow(failure);
+    var appender = captureStructuredLogs();
+
+    try {
+      assertThrows(
+          LambdaFailureRuntimeException.class, () -> handler.handleRequest(TEST_EVENT, context));
+    } finally {
+      stopCapturingStructuredLogs(appender);
+    }
+
+    ILoggingEvent failureLog = appender.list.getFirst();
+    assertEquals(expectedOutcome, structuredField(failureLog, "outcome"));
+    assertEquals(failure.reasonCode(), structuredField(failureLog, "reason_code"));
+    assertEquals(RELEASE_ID, structuredField(failureLog, "release_id"));
+    assertEquals(DATASET_NAME, structuredField(failureLog, "dataset"));
+  }
+
+  private static ListAppender<ILoggingEvent> captureStructuredLogs() {
+    var appender = new ListAppender<ILoggingEvent>();
+    appender.setContext((LoggerContext) LoggerFactory.getILoggerFactory());
+    appender.start();
+    STRUCTURED_LOGGER.addAppender(appender);
+    return appender;
+  }
+
+  private static void stopCapturingStructuredLogs(ListAppender<ILoggingEvent> appender) {
+    STRUCTURED_LOGGER.detachAppender(appender);
+    appender.stop();
+  }
+
+  private static String structuredField(ILoggingEvent event, String field) {
+    for (Object argument : event.getArgumentArray()) {
+      if (argument instanceof Map<?, ?> logData
+          && logData.get("data") instanceof Map<?, ?> data
+          && data.get(field) != null) {
+        return data.get(field).toString();
+      }
+    }
+    return null;
   }
 }

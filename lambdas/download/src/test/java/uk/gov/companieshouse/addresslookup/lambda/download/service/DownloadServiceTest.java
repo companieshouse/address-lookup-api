@@ -636,6 +636,7 @@ final class DownloadServiceTest {
 
       assertEquals("UNRECOGNISED_DIGEST_SCHEME", failure.reasonCode());
       assertEquals(RELEASE_ID, failure.releaseId());
+      assertEquals(Dataset.named(DATASET), failure.dataset());
       assertSame(digestFailure, failure.getCause());
     }
     assertFalse(s3.objects.containsKey(ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download")));

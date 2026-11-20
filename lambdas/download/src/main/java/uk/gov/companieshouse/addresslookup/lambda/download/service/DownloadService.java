@@ -206,6 +206,7 @@ public final class DownloadService {
       throw PermanentFailureException.builder()
           .description(exception.getMessage())
           .cause(exception)
+          .dataset(Dataset.named(downloadCommandDataset))
           .reasonCode("UNRECOGNISED_DIGEST_SCHEME")
           .releaseId(manifestReleaseId)
           .build();

@@ -32,7 +32,7 @@ Concourse (env AWS keys) ──────lambda:InvokeFunction──▶ addres
 
 | Requirement (ALS-87) | Implementation |
 |---|---|
-| Function, java21, handler, 1024 MB, 15 min | `module.lambda` (terraform-modules `aws/lambda` 1.0.442), artefact `address-lookup-api/address-lookup-db-migrate-<version>.zip` from the release bucket, produced by `lambdas/db-migrate` and released by the pipeline's `db-migrate-lambda-release` job |
+| Function, java25, handler, 1024 MB, 15 min | `module.lambda` (terraform-modules `aws/lambda` 1.0.442), artefact `address-lookup-api/address-lookup-db-migrate-<version>.zip` from the release bucket, produced by `lambdas/db-migrate` and released by the pipeline's `db-migrate-lambda-release` job |
 | Reserved concurrency 1 | `lambda_reserved_concurrent_executions = 1`. Async retries are 0. |
 | Env `SNAPSHOT_BUCKET`, `DB_CREDENTIALS_PARAMETER`, `LOCK_TIMEOUT=10s`, `ALLOW_REPAIR=false` | `lambda_env_vars`, plus `AWS_ENDPOINT_URL_SSM` (see Network) |
 | No triggers | No event source mappings, EventBridge rules, schedules or SNS/SQS subscriptions are declared |
@@ -297,7 +297,7 @@ aws kms get-key-policy --key-id <key id> --policy-name default
 | <a name="input_lambda_handler_name"></a> [lambda\_handler\_name](#input\_lambda\_handler\_name) | The Lambda function entrypoint | `string` | `"uk.gov.companieshouse.addresslookup.dbmigrate.Handler::handleRequest"` | no |
 | <a name="input_lambda_logs_retention_days"></a> [lambda\_logs\_retention\_days](#input\_lambda\_logs\_retention\_days) | The number of days to retain the function's logs in CloudWatch | `number` | `90` | no |
 | <a name="input_lambda_memory_size"></a> [lambda\_memory\_size](#input\_lambda\_memory\_size) | The amount of memory made available to the Lambda function at runtime in megabytes | `number` | `1024` | no |
-| <a name="input_lambda_runtime"></a> [lambda\_runtime](#input\_lambda\_runtime) | The Lambda managed runtime | `string` | `"java21"` | no |
+| <a name="input_lambda_runtime"></a> [lambda\_runtime](#input\_lambda\_runtime) | The Lambda managed runtime | `string` | `"java25"` | no |
 | <a name="input_lambda_timeout_seconds"></a> [lambda\_timeout\_seconds](#input\_lambda\_timeout\_seconds) | The amount of time the Lambda function is allowed to run before being stopped. Concourse invokes it with --cli-read-timeout 900 | `number` | `900` | no |
 | <a name="input_lock_timeout"></a> [lock\_timeout](#input\_lock\_timeout) | PostgreSQL lock\_timeout for each migration (LOCK\_TIMEOUT) | `string` | `"10s"` | no |
 | <a name="input_release_artifact_key"></a> [release\_artifact\_key](#input\_release\_artifact\_key) | Key of the Lambda code object (address-lookup-db-migrate-<version>.zip) in the release bucket | `string` | n/a | yes |

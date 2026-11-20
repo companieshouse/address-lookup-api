@@ -57,7 +57,7 @@ installation details.
 Clone this repository and run Make commands from its root. A separate
 `docker-chs-development` checkout, `chs-dev` and Tilt are not required.
 
-Install Java 21+, Maven, Make, Bash, `jq`, `curl`, `lsof` and `ps`, and ensure
+Install Java 25+, Maven, Make, Bash, `jq`, `curl`, `lsof` and `ps`, and ensure
 Maven can access the project's dependency repositories. Docker must be
 running with Docker Compose v2 available.
 

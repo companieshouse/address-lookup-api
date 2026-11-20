@@ -38,7 +38,7 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
+            <scope>${local.seed.scope}</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -55,7 +55,7 @@
             <groupId>uk.gov.companieshouse</groupId>
             <artifactId>structured-logging</artifactId>
             <version>${structured-logging.version}</version>
-            <scope>test</scope>
+            <scope>${local.seed.logging.scope}</scope>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
@@ -95,6 +95,39 @@
         </dependency>
     </dependencies>
 
+    <properties>
+        <!-- Local seed code is test-only unless built with -Plocal-seed (see README). -->
+        <local.seed.scope>runtime</local.seed.scope>
+        <local.seed.logging.scope>test</local.seed.logging.scope>
+        <local.seed.source.goal>add-test-source</local.seed.source.goal>
+    </properties>
+
+    <profiles>
+        <profile>
+            <id>local-seed</id>
+            <properties>
+                <local.seed.scope>compile</local.seed.scope>
+                <local.seed.logging.scope>compile</local.seed.logging.scope>
+                <local.seed.source.goal>add-source</local.seed.source.goal>
+            </properties>
+            <build>
+                <resources>
+                    <resource>
+                        <directory>src/main/resources</directory>
+                    </resource>
+                    <resource>
+                        <directory>${project.basedir}/../database</directory>
+                        <targetPath>db</targetPath>
+                        <includes>
+                            <include>migrations/**/*.sql</include>
+                            <include>local/**/*.sql</include>
+                        </includes>
+                    </resource>
+                </resources>
+            </build>
+        </profile>
+    </profiles>
+
     <build>
         <resources>
             <resource>
@@ -105,12 +138,42 @@
                 <targetPath>db</targetPath>
                 <includes>
                     <include>migrations/**/*.sql</include>
-                    <include>local/**/*.sql</include>
                 </includes>
             </resource>
         </resources>
+        <testResources>
+            <testResource>
+                <directory>src/test/resources</directory>
+            </testResource>
+            <testResource>
+                <directory>${project.basedir}/../database</directory>
+                <targetPath>db</targetPath>
+                <includes>
+                    <include>local/**/*.sql</include>
+                </includes>
+            </testResource>
+        </testResources>
         <finalName>address-lookup-api-${project.version}</finalName>
         <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>local-seed-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>${local.seed.source.goal}</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>src/local/java</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

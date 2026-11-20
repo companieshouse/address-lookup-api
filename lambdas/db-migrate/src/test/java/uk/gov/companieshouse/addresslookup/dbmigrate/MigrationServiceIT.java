@@ -57,7 +57,12 @@ class MigrationServiceIT {
           "V2026.001__create_postgis_and_schemas.sql",
           "V2026.002__create_dataset_contract.sql",
           "V2026.003__create_royalmailaddress_v2_tables.sql",
-          "V2026.004__create_address_lookup_view.sql");
+          "V2026.004__create_address_lookup_view.sql",
+          "V2026.005__create_staging_manifest_and_import_ledger.sql",
+          "V2026.006__create_staging_ngd_tables.sql",
+          "V2026.007__create_release_history.sql",
+          "V2026.008__create_completeness_check.sql",
+          "V2026.009__create_upload_lambda_role.sql");
 
   private String database;
 
@@ -88,7 +93,7 @@ class MigrationServiceIT {
     var first = run(snapshot, Command.MIGRATE);
     assertEquals("SUCCESS", first.get("status"));
     assertEquals(BASELINE, first.get("applied"));
-    assertEquals("2026.004", first.get("schemaVersion"));
+    assertEquals("2026.009", first.get("schemaVersion"));
     assertTrue(viewExists("address_lookup", "address_lookup"));
     assertEquals(
         0, count("SELECT count(*) FROM address_lookup.address_lookup"), "no seed data ships");
@@ -98,7 +103,7 @@ class MigrationServiceIT {
     var validate = run(snapshot, Command.VALIDATE);
     assertEquals(true, validate.get("valid"));
     assertEquals(List.of(), validate.get("pending"));
-    assertEquals("2026.004", validate.get("schemaVersion"));
+    assertEquals("2026.009", validate.get("schemaVersion"));
   }
 
   @Test

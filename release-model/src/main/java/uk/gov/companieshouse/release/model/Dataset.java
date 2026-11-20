@@ -16,7 +16,12 @@ public enum Dataset {
       "os_stage_full.add_isl_royalmailaddress",
       "CALL os_ingest.resolve_add_isl_royalmailaddress(?,?)",
       "CALL os_ingest.stage_full_add_isl_royalmailaddress(?,?)");
-  private final String name, raw, full, resolve, validateFull;
+
+  private final String name;
+  private final String raw;
+  private final String full;
+  private final String resolve;
+  private final String validateFull;
 
   Dataset(String name, String raw, String full, String resolve, String validateFull) {
     this.name = name;

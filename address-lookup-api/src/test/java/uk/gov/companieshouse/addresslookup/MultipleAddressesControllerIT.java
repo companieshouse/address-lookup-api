@@ -111,20 +111,53 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
         "   ",
         "A",
         "AB124NYEXTRA",
-        "ZZ1 1ZZ",
         "INVALID",
+        "ZZZZZZ",
         "INVALID@POSTCODE",
-        "AB12 4NY",
-        "CF101PX"
+        "12345",
+        "LU49P1",
+        "' OR '1'='1",
+        "<script>alert(1)</script>"
       })
-  void shouldReturnEmptyArrayForUnknownPostcode(String postcode) throws Exception {
+  void shouldReturnEmptyListForInvalidPostcode(String postcode) throws Exception {
     this.mockMvc
         .perform(
             get("/address-lookup-api/multiple-addresses")
                 .queryParam("postcode", postcode)
                 .header(REQUEST_ID.value(), "request_id"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$").isArray())
+        .andExpect(jsonPath("$").isEmpty());
+  }
+
+  @Test
+  void shouldReturnBadRequestForMissingPostcodeParameter() throws Exception {
+    this.mockMvc
+        .perform(
+            get("/address-lookup-api/multiple-addresses")
+                .header(REQUEST_ID.value(), "request_id"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void shouldAcceptLowerCasePostcodeWithoutSpace() throws Exception {
+    this.mockMvc
+        .perform(
+            get("/address-lookup-api/multiple-addresses")
+                .queryParam("postcode", "ab101au")
+                .header(REQUEST_ID.value(), "request_id"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].postcode").value("AB10 1AU"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {" ab101au", "ab10 1au", "AB10 1AU", "ab101au "})
+  void shouldReturnEmptyListForPostcodeContainingSpaces(String postcode) throws Exception {
+    this.mockMvc
+        .perform(
+            get("/address-lookup-api/multiple-addresses")
+                .queryParam("postcode", postcode)
+                .header(REQUEST_ID.value(), "request_id"))
+        .andExpect(status().isOk())
         .andExpect(jsonPath("$").isEmpty());
   }
 
@@ -137,6 +170,20 @@ class MultipleAddressesControllerIT extends AddressTestBaseIT {
                 .header(REQUEST_ID.value(), "request_id"))
         .andExpect(status().isNotFound());
   }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"ZZ11ZZ", "AB124NY", "CF101PX", "LU4s9PJ"})
+  void shouldReturnEmptyArrayForUnknownPostcode(String postcode) throws Exception {
+    this.mockMvc
+        .perform(
+            get("/address-lookup-api/multiple-addresses")
+                .queryParam("postcode", postcode)
+                .header(REQUEST_ID.value(), "request_id"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$").isArray())
+        .andExpect(jsonPath("$").isEmpty());
+  }
+
 
   @Test
   void shouldVerifyAllAddressesHavePremiseField() throws Exception {

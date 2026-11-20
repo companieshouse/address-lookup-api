@@ -11,6 +11,7 @@ import uk.gov.companieshouse.addresslookup.model.AddressLookupResponse;
 import uk.gov.companieshouse.addresslookup.model.LegacyAddress;
 import uk.gov.companieshouse.addresslookup.model.RoyalMailAddressDto;
 import uk.gov.companieshouse.addresslookup.service.AddressLookupService;
+import uk.gov.companieshouse.addresslookup.validation.PostcodeValidator;
 
 @RestController
 @RequestMapping("/address-lookup-api")
@@ -24,6 +25,7 @@ public class AddressLookupController {
 
   @GetMapping("/addresses")
   public AddressLookupResponse lookupAddress(@RequestParam("postcode") String postcode) {
+    validatePostcode(postcode);
     List<RoyalMailAddressDto> addresses = addressLookupService.lookupByPostcode(postcode);
     return new AddressLookupResponse(postcode, addresses.size(), addresses);
   }
@@ -33,14 +35,42 @@ public class AddressLookupController {
     if (postcode.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Address not found");
     }
-
+    if (!PostcodeValidator.isValid(postcode) || containsWhitespace(postcode)) {
+      return List.of();
+    }
     return addressLookupService.lookupLegacyAddressesByPostcode(postcode);
   }
 
   @GetMapping("/postcode")
   public LegacyAddress lookupPostcode(@RequestParam("postcode") String postcode) {
+    if (postcode.isEmpty()
+        || !PostcodeValidator.isValid(postcode)
+        || containsWhitespace(postcode)) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Address not found");
+    }
     return addressLookupService
         .lookupLegacyAddressByPostcode(postcode)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Address not found"));
+  }
+
+  // Stored postcodes are matched in compact form only, so spaced input never matches.
+  private static boolean containsWhitespace(String postcode) {
+    return postcode.chars().anyMatch(Character::isWhitespace);
+  }
+
+  private static boolean containsNonAlphanumeric(String postcode) {
+    return postcode.chars().anyMatch(c -> !Character.isLetterOrDigit(c));
+  }
+
+  // Empty input or non-alphanumeric characters (including whitespace) can never match a stored
+  // postcode, so they are reported as not found rather than as malformed requests.
+  private static void validatePostcode(String postcode) {
+    if (postcode.isEmpty() || containsNonAlphanumeric(postcode)) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Address not found");
+    }
+
+    if (!PostcodeValidator.isValid(postcode)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid postcode");
+    }
   }
 }

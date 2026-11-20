@@ -1,12 +1,17 @@
 package uk.gov.companieshouse.addresslookup.lambda.unzip.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.io.ByteArrayInputStream;
@@ -24,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.AbortableInputStream;
@@ -47,11 +53,15 @@ import software.amazon.awssdk.services.s3.model.Tag;
 import software.amazon.awssdk.services.s3.model.UploadPartResponse;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
+import uk.gov.companieshouse.logging.StructuredLogger;
 import uk.gov.companieshouse.release.model.DatasetCatalog;
 
 @ExtendWith(MockitoExtension.class)
 final class ExtractionServiceTest {
+  private static final Logger STRUCTURED_LOGGER =
+      (Logger) LoggerFactory.getLogger(StructuredLogger.class);
   private static final String DATASET = "add_gb_royalmailaddress";
   private static final String ID = "12345678-1234-1234-1234-123456789abc";
   private static final String ZIP_KEY = "Scanned/" + ID + "/" + DATASET + ".zip";
@@ -161,7 +171,7 @@ final class ExtractionServiceTest {
   void rejectsMismatchedHeaderWithoutUploading() throws Exception {
     cleanZip(zip(Map.of(DATASET + ".csv", "wrong,header\n1,2\n")));
 
-    assertEquals("HEADER_MISMATCH", service.unzip(event(), context));
+    assertPermanentFailure(service, "HEADER_MISMATCH");
     verify(s3, never()).createMultipartUpload(any(Consumer.class));
     verifyNoInteractions(commands);
   }
@@ -170,7 +180,7 @@ final class ExtractionServiceTest {
   void rejectsUnexpectedCsvFilenameWithoutUploading() throws Exception {
     cleanZip(zip(Map.of("unexpected.csv", "data\n")));
 
-    assertEquals("ARCHIVE_INVALID", service.unzip(event(), context));
+    assertPermanentFailure(service, "ARCHIVE_INVALID");
     verify(s3, never()).createMultipartUpload(any(Consumer.class));
   }
 
@@ -179,7 +189,7 @@ final class ExtractionServiceTest {
     for (String name : new String[] {"nested/" + DATASET + ".csv", "..", "dir\\file.csv"}) {
       cleanZip(zip(Map.of(name, "data\n")));
 
-      assertEquals("ARCHIVE_INVALID", service.unzip(event(), context), name);
+      assertPermanentFailure(service, "ARCHIVE_INVALID");
     }
     verify(s3, never()).createMultipartUpload(any(Consumer.class));
   }
@@ -188,7 +198,7 @@ final class ExtractionServiceTest {
   void rejectsAncillaryEntriesThatExceedTheExpandedSizeLimit() throws Exception {
     cleanZip(zip(Map.of(DATASET + "_big.csv", "x".repeat(200))));
 
-    assertEquals("MALFORMED_ZIP", serviceWithLimit(100).unzip(event(), context));
+    assertPermanentFailure(serviceWithLimit(100), "MALFORMED_ZIP");
     verify(s3, never()).createMultipartUpload(any(Consumer.class));
   }
 
@@ -197,7 +207,7 @@ final class ExtractionServiceTest {
     cleanZip(zip(Map.of(DATASET + ".csv", header() + "\n" + "row\n".repeat(100))));
     stubUpload();
 
-    assertEquals("MALFORMED_ZIP", serviceWithLimit(100).unzip(event(), context));
+    assertPermanentFailure(serviceWithLimit(100), "MALFORMED_ZIP");
     verify(s3, never()).completeMultipartUpload(any(Consumer.class));
     verify(s3).abortMultipartUpload(any(Consumer.class));
   }
@@ -243,7 +253,7 @@ final class ExtractionServiceTest {
   void reportsMissingPrimaryCsv() throws Exception {
     cleanZip(zip(Map.of(DATASET + "_multires.csv", "data\n")));
 
-    assertEquals("CSV_NOT_FOUND", service.unzip(event(), context));
+    assertPermanentFailure(service, "CSV_NOT_FOUND");
     verify(s3, never()).createMultipartUpload(any(Consumer.class));
   }
 
@@ -253,8 +263,42 @@ final class ExtractionServiceTest {
     malformed[8] = 99;
     cleanZip(malformed);
 
-    assertEquals("MALFORMED_ZIP", service.unzip(event(), context));
+    assertPermanentFailure(service, "MALFORMED_ZIP");
     verify(s3, never()).createMultipartUpload(any(Consumer.class));
+  }
+
+  @Test
+  void permanentFailureLogsReleaseIdDatasetAndReasonCode() throws Exception {
+    cleanZip(zip(Map.of(DATASET + "_multires.csv", "data\n")));
+    var appender = captureStructuredLogs();
+    try {
+      assertPermanentFailure(service, "CSV_NOT_FOUND");
+    } finally {
+      stopCapturingStructuredLogs(appender);
+    }
+
+    var failureLog =
+        appender.list.stream()
+            .filter(event -> event.getFormattedMessage().equals("ZIP extraction failed"))
+            .findFirst()
+            .orElseThrow();
+    assertEquals("PERMANENT_FAILURE", structuredField(failureLog, "outcome"));
+    assertEquals("CSV_NOT_FOUND", structuredField(failureLog, "reason_code"));
+    assertEquals(ID, structuredField(failureLog, "releaseId"));
+    assertEquals(DATASET, structuredField(failureLog, "dataset"));
+    assertEquals(ZIP_KEY, structuredField(failureLog, "s3_key"));
+  }
+
+  @Test
+  void repeatedPermanentFailureHasNoSideEffects() throws Exception {
+    cleanZip(zip(Map.of(DATASET + ".csv", "wrong,header\n1,2\n")));
+
+    assertPermanentFailure(service, "HEADER_MISMATCH");
+    assertPermanentFailure(service, "HEADER_MISMATCH");
+
+    verify(s3, never()).createMultipartUpload(any(Consumer.class));
+    assertFalse(objects.containsKey(stored(SOURCE, RECEIPT_KEY)));
+    verifyNoInteractions(commands);
   }
 
   @Test
@@ -465,6 +509,41 @@ final class ExtractionServiceTest {
   }
 
   // Helper methods
+  private void assertPermanentFailure(
+      ExtractionService extractionService, String expectedReasonCode) {
+    var request = event();
+
+    var failure =
+        assertThrows(
+            PermanentFailureException.class, () -> extractionService.unzip(request, context));
+
+    assertEquals(expectedReasonCode, failure.reasonCode());
+  }
+
+  private static ListAppender<ILoggingEvent> captureStructuredLogs() {
+    var appender = new ListAppender<ILoggingEvent>();
+    appender.setContext((LoggerContext) LoggerFactory.getILoggerFactory());
+    appender.start();
+    STRUCTURED_LOGGER.addAppender(appender);
+    return appender;
+  }
+
+  private static void stopCapturingStructuredLogs(ListAppender<ILoggingEvent> appender) {
+    STRUCTURED_LOGGER.detachAppender(appender);
+    appender.stop();
+  }
+
+  private static String structuredField(ILoggingEvent event, String field) {
+    for (Object argument : event.getArgumentArray()) {
+      if (argument instanceof Map<?, ?> logData
+          && logData.get("data") instanceof Map<?, ?> data
+          && data.get(field) != null) {
+        return data.get(field).toString();
+      }
+    }
+    return null;
+  }
+
   private ExtractionService serviceWithLimit(long maxExtractedBytes) {
     return new ExtractionService(
         s3,

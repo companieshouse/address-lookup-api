@@ -193,17 +193,7 @@ public final class DownloadService {
               .releaseId(manifestReleaseId)
               .build();
     }
-    LOG.error(UPLOAD_FAILED_MESSAGE, Map.of(
-            LOG_RELEASE_ID,
-            Objects.toString(manifestReleaseId),
-            DOWNLOAD_COMMAND_DATASET,
-            Objects.toString(downloadCommandDataset)));
-    throw PermanentFailureException.builder()
-            .description(UPLOAD_FAILED_MESSAGE)
-            .dataset(Dataset.named(downloadCommandDataset))
-            .reasonCode(REASON_CODE_ZIP_FILE_UPLOAD_FAILURE)
-            .releaseId(manifestReleaseId)
-            .build();
+    return null;
   }
 
   // Restricts S3 reads to canonical acquisition manifests.

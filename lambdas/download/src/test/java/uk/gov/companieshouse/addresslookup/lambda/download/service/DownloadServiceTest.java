@@ -33,7 +33,9 @@ import org.mockito.Mock;
 import org.mockito.MockedConstruction;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.AbstractLambdaFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
@@ -48,6 +50,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HexFormat;
@@ -474,11 +477,12 @@ final class DownloadServiceTest {
                    "Description [Download failure, checksum mismatch]"),
            new ClassAndDescription(StreamingS3.ExistingObjectVerificationException.class,
                    "Description [Error occurred whilst attempting to verify if the ZIP file has previously been stored in the S3 bucket.]")
-   );
+           );
   }
 
-  @Test
-  void shouldHandleExistingObjectVerificationException() throws Exception {
+  @ParameterizedTest
+  @MethodSource("getCauseExceptionClassAndFinalThrownException")
+  void shouldHandleExistingObjectVerificationExceptionWithDifferentCauses(ExceptionAndExceptionClass testData) throws Exception {
     final String EXCEPTION_MESSAGE = "exception message";
 
     String dataset = "add_gb_royalmailaddress";
@@ -495,23 +499,34 @@ final class DownloadServiceTest {
 
     when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
 
-    class TheCauseException extends Exception {
-      TheCauseException(String message) {super(message);}
-    }
-    TheCauseException causeException = new TheCauseException(EXCEPTION_MESSAGE);
     try (MockedConstruction<StreamingS3> ignored = mockConstruction(StreamingS3.class,
             (mock, ignore) -> when(mock.put(any(InputStream.class), anyString(), anyString(),
                     anyString(), anyLong())).thenThrow(new StreamingS3.ExistingObjectVerificationException(
-                    causeException)))) {
+                    testData.exception())))) {
       var service = new DownloadService(s3.client(), os, properties());
 
-      Exception exception = assertThrows(PermanentFailureException.class, () ->
+      Exception exception = assertThrows(testData.finalThrownExceptionClass(), () ->
               service.download(event(), context));
 
-      assertInstanceOf(TheCauseException.class, exception.getCause());
+      assertInstanceOf(testData.exception().getClass(), exception.getCause());
 
       assertTrue(exception.getMessage().startsWith("Description [Error occurred whilst attempting to verify if the ZIP file has previously been stored in the S3 bucket.]"));
     }
+  }
+
+  private record ExceptionAndExceptionClass(Exception exception, Class<? extends AbstractLambdaFailureException> finalThrownExceptionClass) {}
+
+  private static List<ExceptionAndExceptionClass> getCauseExceptionClassAndFinalThrownException() {
+    List<ExceptionAndExceptionClass> exceptions = new ArrayList<>();
+    exceptions.add(new ExceptionAndExceptionClass(new IOException(), TransientFailureException.class));
+
+    S3Exception s3Exception = (S3Exception) (S3Exception.builder().statusCode(404).build());
+    exceptions.add(new ExceptionAndExceptionClass(s3Exception, PermanentFailureException.class));
+
+    s3Exception = (S3Exception) (S3Exception.builder().statusCode(501).build());
+    exceptions.add(new ExceptionAndExceptionClass(s3Exception, TransientFailureException.class));
+
+    return exceptions;
   }
 
   private static ListAppender<ILoggingEvent> captureStructuredLogs() {

@@ -17,6 +17,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.spi.ILoggingEvent;
@@ -25,6 +26,19 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -46,20 +60,6 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.testsupport.FakeS3;
 import uk.gov.companieshouse.logging.StructuredLogger;
 import uk.gov.companieshouse.release.model.Dataset;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HexFormat;
-import java.util.List;
-import java.util.Map;
-
 @ExtendWith(MockitoExtension.class)
 final class DownloadServiceTest {
   private static final Logger STRUCTURED_LOGGER =
@@ -70,11 +70,9 @@ final class DownloadServiceTest {
   private static final String RELEASE_ID = "4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56";
   private static final String DATASET = "add_gb_royalmailaddress";
 
-  @Mock
-  private OsClient os;
+  @Mock private OsClient os;
 
-  @Mock
-  private Context context;
+  @Mock private Context context;
 
   @Test
   void downloadsOnlyTheDatasetNamedByTheEventBridgeCommand() throws Exception {
@@ -94,7 +92,8 @@ final class DownloadServiceTest {
     verify(os).download(expectedUrl);
     assertEquals(List.of(expectedZipKey), s3.completedKeys);
     assertTrue(s3.completedKeys.stream().noneMatch(k -> k.contains("add_gb_builtaddress")));
-    assertEquals("Scanned/" + RELEASE_ID + "/" + DATASET + ".receipt.json",
+    assertEquals(
+        "Scanned/" + RELEASE_ID + "/" + DATASET + ".receipt.json",
         ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download"));
     assertTrue(s3.objects.containsKey(ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download")));
     JsonNode receipt =
@@ -232,7 +231,8 @@ final class DownloadServiceTest {
     var s3 = new FakeS3();
     var service = new DownloadService(s3.client(), os, properties());
 
-    Exception exception = assertThrows(IllegalArgumentException.class, () -> service.download(event, context));
+    Exception exception =
+        assertThrows(IllegalArgumentException.class, () -> service.download(event, context));
     assertEquals("Unknown dataset: not_a_real_dataset", exception.getMessage());
     assertTrue(s3.objects.isEmpty());
     verifyNoInteractions(os);
@@ -280,10 +280,10 @@ final class DownloadServiceTest {
 
     var service = new DownloadService(s3.client(), os, properties());
 
-    Exception exception = assertThrows(TransientFailureException.class, () ->
-            service.download(event(), context));
-    assertTrue(exception.getMessage().startsWith("Description [Download failure, checksum mismatch]"));
-
+    Exception exception =
+        assertThrows(TransientFailureException.class, () -> service.download(event(), context));
+    assertTrue(
+        exception.getMessage().startsWith("Description [Download failure, checksum mismatch]"));
   }
 
   @Test
@@ -392,9 +392,11 @@ final class DownloadServiceTest {
     when(context.getRemainingTimeInMillis()).thenReturn(900000);
 
     try {
-      Exception exception = assertThrows(TransientFailureException.class, () ->
-              service.download(downloadEvent, context));
-      assertTrue(exception.getMessage().startsWith("Description [Download failure, checksum mismatch]"));
+      Exception exception =
+          assertThrows(
+              TransientFailureException.class, () -> service.download(downloadEvent, context));
+      assertTrue(
+          exception.getMessage().startsWith("Description [Download failure, checksum mismatch]"));
     } finally {
       stopCapturingStructuredLogs(appender);
     }
@@ -425,7 +427,8 @@ final class DownloadServiceTest {
 
   @ParameterizedTest
   @ValueSource(classes = {IOException.class, InterruptedException.class})
-  void shouldHandleExceptionsFromOsClientWithTransientFailureException(Class<? extends Exception> exceptionClass) throws Exception {
+  void shouldHandleExceptionsFromOsClientWithTransientFailureException(
+      Class<? extends Exception> exceptionClass) throws Exception {
 
     final String EXCEPTION_MESSAGE = "exception message";
     Exception thrownException = mock(exceptionClass);
@@ -434,19 +437,19 @@ final class DownloadServiceTest {
 
     s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
 
-    when(os.download(anyString()))
-            .thenThrow(thrownException);
+    when(os.download(anyString())).thenThrow(thrownException);
     var service = new DownloadService(s3.client(), os, properties());
 
-    Exception exception = assertThrows(TransientFailureException.class, () ->
-            service.download(event(), context));
+    Exception exception =
+        assertThrows(TransientFailureException.class, () -> service.download(event(), context));
     assertTrue(exception.getMessage().startsWith("Description [exception message]"));
     assertInstanceOf(exceptionClass, exception.getCause());
   }
 
   @ParameterizedTest
   @MethodSource("getTestExceptionClassAndExpectedDescription")
-  void shouldHandleExceptionsFromStreamingS3Put(ClassAndDescription classAndDescription) throws Exception {
+  void shouldHandleExceptionsFromStreamingS3Put(ClassAndDescription classAndDescription)
+      throws Exception {
     final String EXCEPTION_MESSAGE = "exception message";
 
     String dataset = "add_gb_royalmailaddress";
@@ -464,41 +467,55 @@ final class DownloadServiceTest {
     when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
 
     class TheCauseException extends Exception {
-      TheCauseException(String message) {super(message);}
+      TheCauseException(String message) {
+        super(message);
+      }
     }
     TheCauseException causeException = new TheCauseException(EXCEPTION_MESSAGE);
 
     Exception exceptionToThrow = mock(classAndDescription.exceptionClass());
     when(exceptionToThrow.getCause()).thenReturn(causeException);
 
-    try (MockedConstruction<StreamingS3> ignored = mockConstruction(StreamingS3.class,
-            (mock, ignore) -> when(mock.put(any(InputStream.class), anyString(), anyString(),
-                    anyString(), anyLong())).thenThrow(exceptionToThrow))) {
+    try (MockedConstruction<StreamingS3> ignored =
+        mockConstruction(
+            StreamingS3.class,
+            (mock, ignore) ->
+                when(mock.put(
+                        any(InputStream.class), anyString(), anyString(), anyString(), anyLong()))
+                    .thenThrow(exceptionToThrow))) {
       var service = new DownloadService(s3.client(), os, properties());
 
-      Exception exception = assertThrows(classAndDescription.expectedExceptionClass(), () ->
-              service.download(event(), context));
+      Exception exception =
+          assertThrows(
+              classAndDescription.expectedExceptionClass(),
+              () -> service.download(event(), context));
 
       assertInstanceOf(TheCauseException.class, exception.getCause());
       assertTrue(exception.getMessage().startsWith(classAndDescription.expectedDescription()));
     }
   }
 
-  private record ClassAndDescription(Class<? extends Exception> exceptionClass, String expectedDescription,
-                                     Class<? extends AbstractLambdaFailureException> expectedExceptionClass) {}
+  private record ClassAndDescription(
+      Class<? extends Exception> exceptionClass,
+      String expectedDescription,
+      Class<? extends AbstractLambdaFailureException> expectedExceptionClass) {}
 
   private static List<ClassAndDescription> getTestExceptionClassAndExpectedDescription() {
-   return List.of(new ClassAndDescription(StreamingS3.ChecksumMismatchException.class,
-                   "Description [Download failure, checksum mismatch]", TransientFailureException.class),
-           new ClassAndDescription(StreamingS3.ExistingObjectVerificationException.class,
-                   "Description [Error occurred whilst attempting to verify if the ZIP file has previously been stored in the S3 bucket.]",
-                   PermanentFailureException.class)
-           );
+    return List.of(
+        new ClassAndDescription(
+            StreamingS3.ChecksumMismatchException.class,
+            "Description [Download failure, checksum mismatch]",
+            TransientFailureException.class),
+        new ClassAndDescription(
+            StreamingS3.ExistingObjectVerificationException.class,
+            "Description [Error occurred whilst attempting to verify if the ZIP file has previously been stored in the S3 bucket.]",
+            PermanentFailureException.class));
   }
 
   @ParameterizedTest
   @MethodSource("getCauseExceptionClassAndFinalThrownException")
-  void shouldHandleExistingObjectVerificationExceptionWithDifferentCauses(ExceptionAndExceptionClass testData) throws Exception {
+  void shouldHandleExistingObjectVerificationExceptionWithDifferentCauses(
+      ExceptionAndExceptionClass testData) throws Exception {
 
     String dataset = "add_gb_royalmailaddress";
 
@@ -514,26 +531,39 @@ final class DownloadServiceTest {
 
     when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
 
-    try (MockedConstruction<StreamingS3> ignored = mockConstruction(StreamingS3.class,
-            (mock, ignore) -> when(mock.put(any(InputStream.class), anyString(), anyString(),
-                    anyString(), anyLong())).thenThrow(new StreamingS3.ExistingObjectVerificationException(
-                    testData.exception())))) {
+    try (MockedConstruction<StreamingS3> ignored =
+        mockConstruction(
+            StreamingS3.class,
+            (mock, ignore) ->
+                when(mock.put(
+                        any(InputStream.class), anyString(), anyString(), anyString(), anyLong()))
+                    .thenThrow(
+                        new StreamingS3.ExistingObjectVerificationException(
+                            testData.exception())))) {
       var service = new DownloadService(s3.client(), os, properties());
 
-      Exception exception = assertThrows(testData.finalThrownExceptionClass(), () ->
-              service.download(event(), context));
+      Exception exception =
+          assertThrows(
+              testData.finalThrownExceptionClass(), () -> service.download(event(), context));
 
       assertInstanceOf(testData.exception().getClass(), exception.getCause());
 
-      assertTrue(exception.getMessage().startsWith("Description [Error occurred whilst attempting to verify if the ZIP file has previously been stored in the S3 bucket.]"));
+      assertTrue(
+          exception
+              .getMessage()
+              .startsWith(
+                  "Description [Error occurred whilst attempting to verify if the ZIP file has previously been stored in the S3 bucket.]"));
     }
   }
 
-  private record ExceptionAndExceptionClass(Exception exception, Class<? extends AbstractLambdaFailureException> finalThrownExceptionClass) {}
+  private record ExceptionAndExceptionClass(
+      Exception exception,
+      Class<? extends AbstractLambdaFailureException> finalThrownExceptionClass) {}
 
   private static List<ExceptionAndExceptionClass> getCauseExceptionClassAndFinalThrownException() {
     List<ExceptionAndExceptionClass> exceptions = new ArrayList<>();
-    exceptions.add(new ExceptionAndExceptionClass(new IOException(), TransientFailureException.class));
+    exceptions.add(
+        new ExceptionAndExceptionClass(new IOException(), TransientFailureException.class));
 
     S3Exception s3Exception = (S3Exception) (S3Exception.builder().statusCode(404).build());
     exceptions.add(new ExceptionAndExceptionClass(s3Exception, PermanentFailureException.class));
@@ -552,7 +582,8 @@ final class DownloadServiceTest {
     var downloadEvent = event();
 
     var failure =
-        assertThrows(TransientFailureException.class, () -> service.download(downloadEvent, context));
+        assertThrows(
+            TransientFailureException.class, () -> service.download(downloadEvent, context));
 
     assertEquals("FAILED_TO_READ_MANIFEST", failure.reasonCode());
     assertEquals(Dataset.named(DATASET), failure.dataset());
@@ -571,7 +602,8 @@ final class DownloadServiceTest {
     var downloadEvent = event();
 
     var failure =
-        assertThrows(TransientFailureException.class, () -> service.download(downloadEvent, context));
+        assertThrows(
+            TransientFailureException.class, () -> service.download(downloadEvent, context));
 
     assertEquals("FAILED_TO_STORE_MANIFEST", failure.reasonCode());
     assertEquals(RELEASE_ID, failure.releaseId());
@@ -589,13 +621,18 @@ final class DownloadServiceTest {
     var downloadEvent = event();
     var digestFailure = new NoSuchAlgorithmException("MD5 not available");
 
-    try (MockedConstruction<StreamingS3> ignored = mockConstruction(StreamingS3.class,
-            (mock, ignore) -> when(mock.put(any(InputStream.class), anyString(), anyString(),
-                    anyString(), anyLong())).thenThrow(digestFailure))) {
+    try (MockedConstruction<StreamingS3> ignored =
+        mockConstruction(
+            StreamingS3.class,
+            (mock, ignore) ->
+                when(mock.put(
+                        any(InputStream.class), anyString(), anyString(), anyString(), anyLong()))
+                    .thenThrow(digestFailure))) {
       var service = new DownloadService(s3.client(), os, properties());
 
       var failure =
-          assertThrows(PermanentFailureException.class, () -> service.download(downloadEvent, context));
+          assertThrows(
+              PermanentFailureException.class, () -> service.download(downloadEvent, context));
 
       assertEquals("UNRECOGNISED_DIGEST_SCHEME", failure.reasonCode());
       assertEquals(RELEASE_ID, failure.releaseId());

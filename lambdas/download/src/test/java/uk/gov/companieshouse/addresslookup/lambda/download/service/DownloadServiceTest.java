@@ -272,7 +272,7 @@ final class DownloadServiceTest {
 
     var service = new DownloadService(s3.client(), os, properties());
 
-    Exception exception = assertThrows(PermanentFailureException.class, () ->
+    Exception exception = assertThrows(TransientFailureException.class, () ->
             service.download(event(), context));
     assertTrue(exception.getMessage().startsWith("Description [Download failure, checksum mismatch]"));
 
@@ -383,16 +383,27 @@ final class DownloadServiceTest {
     when(context.getRemainingTimeInMillis()).thenReturn(900000);
 
     try {
-      Exception exception = assertThrows(PermanentFailureException.class, () ->
+      Exception exception = assertThrows(TransientFailureException.class, () ->
               service.download(event(), context));
       assertTrue(exception.getMessage().startsWith("Description [Download failure, checksum mismatch]"));
     } finally {
       stopCapturingStructuredLogs(appender);
     }
+    var failureLog =
+        appender.list.stream()
+            .filter(event -> event.getFormattedMessage().equals("Download checksum mismatch"))
+            .findFirst()
+            .orElseThrow();
+    assertEquals("TRANSIENT_FAILURE", structuredField(failureLog, "outcome"));
+    assertEquals("CHECKSUM_MISMATCH", structuredField(failureLog, "reason_code"));
+    assertEquals(RELEASE_ID, structuredField(failureLog, "release_id"));
+    assertEquals(DATASET, structuredField(failureLog, "dataset"));
+    assertEquals(
+        "Scanned/" + RELEASE_ID + "/" + DATASET + ".zip", structuredField(failureLog, "s3_key"));
     assertTrue(
         appender.list.stream()
             .filter(event -> event.getFormattedMessage().equals("Download checksum mismatch"))
-            .map(event -> structuredField(event, "checksum_mismatch"))
+            .map(event -> structuredField(event, "checksum_mismatch_detail"))
             .anyMatch(mismatch ->
                 mismatch != null && mismatch.contains("expected=") && mismatch.contains("actual=")),
         "mismatch must be logged with both MD5 values");

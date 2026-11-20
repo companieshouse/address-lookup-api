@@ -24,11 +24,12 @@ import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.PermanentFailureException;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
+import uk.gov.companieshouse.release.model.Dataset;
 import uk.gov.companieshouse.release.model.DatasetCatalog;
 
 /**
@@ -48,6 +49,9 @@ public final class ExtractionService {
   private static final String SHA256_FIELD = "sha256";
   private static final String CSV_SCAN_STATUS = "CSV_SCAN";
   private static final String CSV_NOT_FOUND = "CSV_NOT_FOUND";
+  private static final String MALFORMED_ZIP = "MALFORMED_ZIP";
+  private static final String HEADER_MISMATCH = "HEADER_MISMATCH";
+  private static final String ARCHIVE_INVALID = "ARCHIVE_INVALID";
   private static final String STATUS = "status";
   private static final Logger LOG = LoggerFactory.getLogger(ExtractionService.class.getName());
 
@@ -139,17 +143,17 @@ public final class ExtractionService {
     try (var zip = new ZipInputStream(s3.getObject(request))) {
       return extractZip(zip, table, expectedReceipt, store, scanBucket, checked, context);
     } catch (ZipException e) {
-      logExtractionFailure("MALFORMED_ZIP", e, releaseId, dataset, s3Key);
-      throw new PermanentFailureException("MALFORMED_ZIP", e);
+      logExtractionFailure(MALFORMED_ZIP, e, releaseId, dataset, s3Key);
+      throw permanentFailure(MALFORMED_ZIP, e, releaseId, dataset);
     } catch (CsvHeaderException e) {
-      logExtractionFailure("HEADER_MISMATCH", e, releaseId, dataset, s3Key);
-      throw new PermanentFailureException("HEADER_MISMATCH", e);
+      logExtractionFailure(HEADER_MISMATCH, e, releaseId, dataset, s3Key);
+      throw permanentFailure(HEADER_MISMATCH, e, releaseId, dataset);
     } catch (MissingPrimaryCsvException e) {
       logExtractionFailure(CSV_NOT_FOUND, e, releaseId, dataset, s3Key);
-      throw new PermanentFailureException(CSV_NOT_FOUND, e);
+      throw permanentFailure(CSV_NOT_FOUND, e, releaseId, dataset);
     } catch (ArchiveValidationException e) {
-      logExtractionFailure("ARCHIVE_INVALID", e, releaseId, dataset, s3Key);
-      throw new PermanentFailureException("ARCHIVE_INVALID", e);
+      logExtractionFailure(ARCHIVE_INVALID, e, releaseId, dataset, s3Key);
+      throw permanentFailure(ARCHIVE_INVALID, e, releaseId, dataset);
     }
   }
 
@@ -218,6 +222,17 @@ public final class ExtractionService {
     }
 
     throw new MissingPrimaryCsvException("Primary CSV " + table.name() + ".csv is missing");
+  }
+
+  private static PermanentFailureException permanentFailure(
+      String reasonCode, Exception cause, String releaseId, String dataset) {
+    return PermanentFailureException.builder()
+        .description(cause.getMessage())
+        .cause(cause)
+        .dataset(Dataset.named(dataset))
+        .reasonCode(reasonCode)
+        .releaseId(releaseId)
+        .build();
   }
 
   private static void logExtractionFailure(

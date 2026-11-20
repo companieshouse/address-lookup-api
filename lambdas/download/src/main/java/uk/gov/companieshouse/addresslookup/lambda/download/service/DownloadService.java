@@ -167,7 +167,7 @@ public final class DownloadService {
                       expectedDatasetMd5,
                       properties.maxZipBytes());
     } catch (StreamingS3.ChecksumMismatchException e) {
-      handleChecksumException(e, manifestReleaseId, downloadCommandDataset);
+      handleChecksumException(e, manifestReleaseId, downloadCommandDataset, zipUploadS3Path);
     } catch (StreamingS3.ExistingObjectVerificationException exception) {
       handleExistingObjectVerificationException(exception, downloadCommandDataset, manifestReleaseId);
     } catch (NoSuchAlgorithmException exception) {
@@ -264,15 +264,22 @@ public final class DownloadService {
   }
 
   private void handleChecksumException(StreamingS3.ChecksumMismatchException exception,
-                                       String releaseId, String dataset) throws PermanentFailureException {
-    LOG.error("Download checksum mismatch", Map.of(
+                                       String releaseId, String dataset, String s3Key)
+          throws TransientFailureException {
+    LOG.error("Download checksum mismatch", exception, Map.of(
+            "outcome",
+            "TRANSIENT_FAILURE",
+            "reason_code",
+            "CHECKSUM_MISMATCH",
             LOG_RELEASE_ID,
             Objects.toString(releaseId),
             DOWNLOAD_COMMAND_DATASET,
             Objects.toString(dataset),
-            "checksum_mismatch",
+            "s3_key",
+            Objects.toString(s3Key),
+            "checksum_mismatch_detail",
             getExceptionText(exception)));
-    throw PermanentFailureException.builder()
+    throw TransientFailureException.builder()
             .description(CHECKSUM_FAILURE_MESSAGE)
             .dataset(Dataset.named(dataset))
             .reasonCode("CHECKSUM_MISMATCH")

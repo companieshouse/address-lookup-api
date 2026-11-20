@@ -53,7 +53,7 @@ import software.amazon.awssdk.services.s3.model.Tag;
 import software.amazon.awssdk.services.s3.model.UploadPartResponse;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.PermanentFailureException;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.logging.StructuredLogger;
 import uk.gov.companieshouse.release.model.DatasetCatalog;
@@ -517,7 +517,7 @@ final class ExtractionServiceTest {
         assertThrows(
             PermanentFailureException.class, () -> extractionService.unzip(request, context));
 
-    assertEquals(expectedReasonCode, failure.getReasonCode());
+    assertEquals(expectedReasonCode, failure.reasonCode());
   }
 
   private static ListAppender<ILoggingEvent> captureStructuredLogs() {

@@ -446,7 +446,7 @@ final class DownloadServiceTest {
     }
     TheCauseException causeException = new TheCauseException(EXCEPTION_MESSAGE);
     try (MockedConstruction<StreamingS3> ignored = mockConstruction(StreamingS3.class,
-            (mock, context) -> when(mock.put(any(InputStream.class), anyString(), anyString(),
+            (mock, ignore) -> when(mock.put(any(InputStream.class), anyString(), anyString(),
                     anyString(), anyLong())).thenThrow(new StreamingS3.ExistingObjectVerificationException(
                     causeException)))) {
       var service = new DownloadService(s3.client(), os, properties());

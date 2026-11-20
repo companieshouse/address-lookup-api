@@ -3,11 +3,11 @@ package uk.gov.companieshouse.addresslookup.lambda.shared.exception;
 import uk.gov.companieshouse.release.model.Dataset;
 
 public abstract class AbstractLambdaFailureException extends Exception {
-    private Dataset dataset;
-    private String messageId;
-    private String reasonCode;
-    private String releaseId;
-    private String description;
+    private final Dataset dataset;
+    private final String messageId;
+    private final String reasonCode;
+    private final String releaseId;
+    private final String description;
 
     protected AbstractLambdaFailureException(String description, Dataset dataset,
                                            String messageId, String releaseId, String reasonCode) {

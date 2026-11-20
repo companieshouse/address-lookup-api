@@ -13,6 +13,7 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import uk.gov.companieshouse.addresslookup.lambda.download.service.DownloadService;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.LambdaFailureRuntimeException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
@@ -66,7 +67,7 @@ class HandlerTest {
         Mockito.when(service.download(TEST_EVENT, context))
                 .thenThrow(TransientFailureException.builder().description(EXCEPTION_TEXT).build());
 
-        Exception exception = assertThrows(RuntimeException.class,
+        Exception exception = assertThrows(LambdaFailureRuntimeException.class,
                 () -> handler.handleRequest(TEST_EVENT, context));
 
         assertEquals("download failed; durable state allows retry", exception.getMessage());

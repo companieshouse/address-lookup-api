@@ -41,6 +41,8 @@ public final class DownloadService {
   private static final String CHECKSUM_FAILURE_MESSAGE = "Download failure, checksum mismatch";
   private static final String ZIP_FILE_UPLOAD_ERROR_MESSAGE = "Error occurred whilst attempting to verify if the ZIP file has previously been stored in the S3 bucket.";
 
+  private static final String REASON_CODE_ZIP_FILE_UPLOAD_FAILURE = "ZIP_FILE_UPLOAD_FAILURE";
+
   private final S3Client s3;
   private final OsClient os;
   private final AcquisitionProperties properties;
@@ -175,12 +177,19 @@ public final class DownloadService {
               .reasonCode("UNRECOGNISED_DIGEST_SCHEME")
               .releaseId(manifestReleaseId)
               .build();
-    } catch (IOException | InterruptedException exception) {
-      if (exception instanceof InterruptedException) Thread.currentThread().interrupt();
+    } catch (IOException exception) {
       throw TransientFailureException.builder().description(exception.getMessage())
               .cause(exception)
               .dataset(Dataset.named(downloadCommandDataset))
-              .reasonCode("ZIP_FILE_UPLOAD_FAILURE")
+              .reasonCode(REASON_CODE_ZIP_FILE_UPLOAD_FAILURE)
+              .releaseId(manifestReleaseId)
+              .build();
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw TransientFailureException.builder().description(exception.getMessage())
+              .cause(exception)
+              .dataset(Dataset.named(downloadCommandDataset))
+              .reasonCode(REASON_CODE_ZIP_FILE_UPLOAD_FAILURE)
               .releaseId(manifestReleaseId)
               .build();
     }
@@ -192,7 +201,7 @@ public final class DownloadService {
     throw PermanentFailureException.builder()
             .description(UPLOAD_FAILED_MESSAGE)
             .dataset(Dataset.named(downloadCommandDataset))
-            .reasonCode("ZIP_FILE_UPLOAD_FAILURE")
+            .reasonCode(REASON_CODE_ZIP_FILE_UPLOAD_FAILURE)
             .releaseId(manifestReleaseId)
             .build();
   }
@@ -279,7 +288,7 @@ public final class DownloadService {
               .description(ZIP_FILE_UPLOAD_ERROR_MESSAGE)
               .cause(exception.getCause())
               .dataset(Dataset.named(dataset))
-              .reasonCode("ZIP_FILE_UPLOAD_FAILURE")
+              .reasonCode(REASON_CODE_ZIP_FILE_UPLOAD_FAILURE)
               .releaseId(releaseId)
               .build();
     } else {
@@ -287,7 +296,7 @@ public final class DownloadService {
               .description(ZIP_FILE_UPLOAD_ERROR_MESSAGE)
               .dataset(Dataset.named(dataset))
               .cause(exception.getCause())
-              .reasonCode("ZIP_FILE_UPLOAD_FAILURE")
+              .reasonCode(REASON_CODE_ZIP_FILE_UPLOAD_FAILURE)
               .releaseId(releaseId)
               .build();
     }

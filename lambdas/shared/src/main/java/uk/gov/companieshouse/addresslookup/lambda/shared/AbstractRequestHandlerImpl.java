@@ -5,7 +5,6 @@ import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import software.amazon.awssdk.annotations.NotNull;
 import software.amazon.awssdk.core.exception.SdkClientException;
-import software.amazon.awssdk.services.s3.model.S3Exception;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
@@ -51,10 +50,7 @@ public abstract class AbstractRequestHandlerImpl<I, O> implements RequestHandler
     protected abstract O failureResponse();
 
     private boolean handleCommandDispatchException(Commands.CommandDispatchException commandDispatchException) {
-        if (commandDispatchException.getCause() instanceof JsonProcessingException) {
-            return true;
-        }
-        return false;
+        return commandDispatchException.getCause() instanceof JsonProcessingException;
     }
 
     protected abstract void handlePermanentException(Exception permanentException);

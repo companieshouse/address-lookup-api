@@ -2,10 +2,10 @@ package uk.gov.companieshouse.addresslookup.lambda.download;
 
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.getExceptionText;
 import com.amazonaws.services.lambda.runtime.Context;
-import com.google.errorprone.annotations.OverridingMethodsMustInvokeSuper;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import uk.gov.companieshouse.addresslookup.lambda.download.service.DownloadService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.AbstractRequestHandlerImpl;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.LambdaFailureRuntimeException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
@@ -51,6 +51,6 @@ public final class Handler extends AbstractRequestHandlerImpl<Map<String,Object>
                 transientException,
                 Map.of("Error", getExceptionText(transientException)));
 
-        throw new RuntimeException("download failed; durable state allows retry",transientException);
+        throw new LambdaFailureRuntimeException("download failed; durable state allows retry",transientException);
     }
 }

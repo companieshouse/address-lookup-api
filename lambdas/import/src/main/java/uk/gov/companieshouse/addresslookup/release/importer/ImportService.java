@@ -6,6 +6,7 @@ import com.amazonaws.services.lambda.runtime.Context;
 import java.util.*;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReconciliationCursor;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
@@ -63,24 +64,22 @@ public final class ImportService {
                     "imports-" + feed.name(),
                     KeyLayout::isDataPackageManifestKey))
             .toList();
-    return reconcile(new ReleaseStore(s3), cursors, bucket, properties.region(), context);
+    return reconcile(new ReleaseStore(s3), cursors, bucket, context);
   }
 
   String reconcile(
       ReleaseStore store,
       ReconciliationCursor cursor,
       String bucket,
-      String region,
       Context context)
       throws Exception {
-    return reconcile(store, List.of(cursor), bucket, region, context);
+    return reconcile(store, List.of(cursor), bucket, context);
   }
 
   private String reconcile(
       ReleaseStore store,
       List<ReconciliationCursor> cursors,
       String bucket,
-      String region,
       Context context)
       throws Exception {
     var failures = new ArrayList<Exception>();
@@ -95,7 +94,7 @@ public final class ImportService {
         if (next.isEmpty() || !visited.add(next.get())) break;
         String key = next.get();
         try {
-          importManifest(store, bucket, key, region, context, failures);
+          importManifest(store, bucket, key, context, failures);
         } catch (Exception failure) {
           failures.add(new IllegalStateException("Cannot import manifest " + key, failure));
         }
@@ -124,7 +123,6 @@ public final class ImportService {
       ReleaseStore store,
       String bucket,
       String key,
-      String region,
       Context context,
       List<Exception> failures)
       throws Exception {
@@ -134,7 +132,7 @@ public final class ImportService {
     } catch (IllegalArgumentException invalidLandingManifest) {
       return;
     }
-    importLandingManifest(store, bucket, key, packageVersion, region, context, failures);
+    importLandingManifest(store, bucket, key, packageVersion, context, failures);
   }
 
   private void importLandingManifest(
@@ -142,14 +140,14 @@ public final class ImportService {
       String bucket,
       String key,
       KeyLayout.PackageVersion packageVersion,
-      String region,
       Context context,
       List<Exception> failures)
       throws Exception {
     var existing = releases.findByManifestKey(key);
     if (existing.isPresent() && existing.get().getStatus() != Release.Status.PROCESSING) return;
-    if (!store.isClean(bucket, key, null)) return;
-    var node = store.read(bucket, key);
+    String manifestVersion = store.version(bucket, key);
+    if (!store.isClean(bucket, key, manifestVersion)) return;
+    var node = store.read(bucket, key, manifestVersion);
     if (node == null) return;
     check(
         packageVersion.packageId().equals(required(node, "dataPackageId"))
@@ -161,7 +159,7 @@ public final class ImportService {
     registration.register(
         manifest, key, sha(node.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
     failures.addAll(
-        importAvailable(store, bucket, manifest, packageVersion, importer, region, context));
+        importAvailable(store, bucket, manifest, packageVersion, context));
   }
 
   private void promoteAvailable(List<Exception> failures, Context context) {
@@ -176,19 +174,17 @@ public final class ImportService {
     }
   }
 
-  private static List<Exception> importAvailable(
+  private List<Exception> importAvailable(
       ReleaseStore store,
       String bucket,
       ReleaseManifest manifest,
       KeyLayout.PackageVersion packageVersion,
-      DatasetImportService importer,
-      String region,
       Context context) {
     var failures = new ArrayList<Exception>();
     for (var dataset : DatasetCatalog.datasets()) {
       if (context.getRemainingTimeInMillis() < 60000) break;
       try {
-        importDataset(store, bucket, manifest, packageVersion, dataset, importer, region);
+        importDataset(store, bucket, manifest, packageVersion, dataset);
       } catch (Exception failure) {
         failures.add(failure);
       }
@@ -196,26 +192,28 @@ public final class ImportService {
     return failures;
   }
 
-  private static void importDataset(
+  private void importDataset(
       ReleaseStore store,
       String bucket,
       ReleaseManifest manifest,
       KeyLayout.PackageVersion packageVersion,
-      Dataset dataset,
-      DatasetImportService importer,
-      String region)
+      Dataset dataset)
       throws Exception {
     String key =
         KeyLayout.extractedCsvKey(packageVersion, dataset, dataset.datasetName() + ".csv");
     if (!store.exists(bucket, key)) return;
     String version = store.version(bucket, key);
     if (!store.isClean(bucket, key, version)) return;
-    check(version.equals(store.version(bucket, key)), "CSV changed after scan");
     var evidence = store.read(bucket, KeyLayout.checksumKey(key));
     if (evidence == null) return;
     check(version.equals(required(evidence, "versionId")), "CSV checksum version mismatch");
     String checksum = required(evidence, "sha256");
     check(checksum.matches("[a-f0-9]{64}"), "Invalid CSV checksum evidence");
-    importer.importClean(manifest.id(), dataset, bucket, key, version, checksum, region);
+    try (var csv =
+        s3.getObject(
+            GetObjectRequest.builder().bucket(bucket).key(key).versionId(version).build())) {
+      importer.importClean(
+          manifest.id(), dataset, csv, bucket, key, version, checksum);
+    }
   }
 }

@@ -180,23 +180,23 @@ final class AuroraOperationsTest {
   }
 
   @Test
-  void importLocalCopiesCsvAndVerifiesCount() throws Exception {
+  void importStreamCopiesCsvAndVerifiesCount() throws Exception {
     rowCount = 2;
     var csv = new ByteArrayInputStream("a,b".getBytes(StandardCharsets.UTF_8));
     when(copyManager.copyIn(anyString(), eq(csv))).thenReturn(2L);
 
-    assertDoesNotThrow(() -> operations.importLocal(DATASET, SupplyType.FULL, id, csv, 2));
+    assertDoesNotThrow(() -> operations.importStream(DATASET, SupplyType.FULL, id, csv, 2));
 
     verify(copyManager).copyIn(startsWith("COPY os_stage_full.add_gb_royalmailaddress ("), eq(csv));
   }
 
   @Test
-  void importLocalReportsCopyFailure() throws Exception {
+  void importStreamReportsCopyFailure() throws Exception {
     var csv = new ByteArrayInputStream(new byte[0]);
     when(copyManager.copyIn(anyString(), eq(csv))).thenThrow(new IOException("disk"));
 
     assertThrows(
         UncategorizedSQLException.class,
-        () -> operations.importLocal(DATASET, SupplyType.FULL, id, csv, 0));
+        () -> operations.importStream(DATASET, SupplyType.FULL, id, csv, 0));
   }
 }

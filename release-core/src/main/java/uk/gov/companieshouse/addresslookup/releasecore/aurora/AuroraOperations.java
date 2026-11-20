@@ -56,7 +56,7 @@ public class AuroraOperations {
     verifyCount(dataset, type, id, rows);
   }
 
-  public void importLocal(Dataset dataset, SupplyType type, UUID id, InputStream csv, long rows) {
+  public void importStream(Dataset dataset, SupplyType type, UUID id, InputStream csv, long rows) {
     begin(dataset, type, id);
     String sql =
         "COPY "

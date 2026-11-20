@@ -53,6 +53,31 @@ final class ReleaseStoreTest {
   }
 
   @Test
+  void readUsesRequestedObjectVersion() throws Exception {
+    var client = mock(S3Client.class);
+    when(client.getObject(any(GetObjectRequest.class)))
+        .thenReturn(
+            new ResponseInputStream<>(
+                GetObjectResponse.builder().build(),
+                new ByteArrayInputStream(
+                    "{\"releaseId\":\"abc\"}".getBytes(StandardCharsets.UTF_8))));
+
+    assertEquals(
+        "abc",
+        new ReleaseStore(client)
+            .read(BUCKET, "plan.json", "manifest-version")
+            .path("releaseId")
+            .asText());
+
+    verify(client)
+        .getObject(
+            org.mockito.ArgumentMatchers.argThat((GetObjectRequest request) ->
+                BUCKET.equals(request.bucket())
+                    && "plan.json".equals(request.key())
+                    && "manifest-version".equals(request.versionId())));
+  }
+
+  @Test
   void readRejectsObjectsLargerThanOneMebibyte() {
     s3.objects.put("big.json", new byte[1024 * 1024 + 1]);
 

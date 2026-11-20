@@ -241,8 +241,7 @@ public final class ExtractionService {
       return false;
     }
     String csvVersion = required(extracted, "csvVersion");
-    if (!csvVersion.equals(store.version(properties.landingBucket(), csvKey))) return false;
-    return store.isClean(properties.landingBucket(), csvKey, csvVersion);
+    return csvVersion.equals(store.version(properties.landingBucket(), csvKey));
   }
 
   private void recordUnpackState(

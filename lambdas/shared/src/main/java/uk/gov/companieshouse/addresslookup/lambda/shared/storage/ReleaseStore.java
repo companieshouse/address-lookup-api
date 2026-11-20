@@ -61,6 +61,20 @@ public final class ReleaseStore {
     }
   }
 
+  public JsonNode read(String bucket, String key, String version) throws IOException {
+    check(version != null && !version.isBlank(), "S3 version is required");
+    try (var in =
+        s3.getObject(
+            GetObjectRequest.builder().bucket(bucket).key(key).versionId(version).build())) {
+      byte[] bytes = in.readNBytes(1024 * 1024 + 1);
+      check(bytes.length <= 1024 * 1024, "Manifest exceeds 1 MiB");
+      return JSON.readTree(bytes);
+    } catch (S3Exception e) {
+      if (e.statusCode() == 404) return null;
+      throw e;
+    }
+  }
+
   public void immutable(String bucket, String key, JsonNode value) {
     try {
       s3.putObject(

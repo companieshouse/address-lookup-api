@@ -66,6 +66,7 @@ class ImportServiceTest {
   private static final KeyLayout.PackageVersion PACKAGE_VERSION =
       new KeyLayout.PackageVersion(KeyLayout.Feed.DAILY_COU, "20780", "150104");
   private static final String MANIFEST_KEY = KeyLayout.dataPackageManifestKey(PACKAGE_VERSION);
+  private static final String MANIFEST_VERSION = "manifest-version";
   private static final String SHA256 = "a".repeat(64);
 
   @Mock private S3Client s3;
@@ -98,13 +99,14 @@ class ImportServiceTest {
     UUID id = UUID.fromString(RELEASE_ID);
     when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
     when(releases.findById(id)).thenReturn(Optional.empty());
-    when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(true);
-    when(store.read(BUCKET, MANIFEST_KEY)).thenReturn(manifestNode);
+    when(store.version(BUCKET, MANIFEST_KEY)).thenReturn(MANIFEST_VERSION);
+    when(store.isClean(BUCKET, MANIFEST_KEY, MANIFEST_VERSION)).thenReturn(true);
+    when(store.read(BUCKET, MANIFEST_KEY, MANIFEST_VERSION)).thenReturn(manifestNode);
     when(manifest.id()).thenReturn(id);
     try (MockedStatic<ReleaseManifest> mockedManifest = mockStatic(ReleaseManifest.class)) {
       mockedManifest.when(() -> ReleaseManifest.read(manifestNode)).thenReturn(manifest);
 
-      assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+      assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, context));
     }
 
     verify(registration)
@@ -121,7 +123,7 @@ class ImportServiceTest {
     var cursor = mock(ReconciliationCursor.class);
     when(cursor.next()).thenReturn(Optional.empty());
 
-    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, context));
 
     verify(store, never()).read(any(), any());
     verify(registration, never()).register(any(), any(), any());
@@ -135,11 +137,12 @@ class ImportServiceTest {
     var node = JSON.createObjectNode().put("dataPackageId", "20780").put("versionId", "150104");
     node.put(field, "different");
     when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
-    when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(true);
-    when(store.read(BUCKET, MANIFEST_KEY)).thenReturn(node);
+    when(store.version(BUCKET, MANIFEST_KEY)).thenReturn(MANIFEST_VERSION);
+    when(store.isClean(BUCKET, MANIFEST_KEY, MANIFEST_VERSION)).thenReturn(true);
+    when(store.read(BUCKET, MANIFEST_KEY, MANIFEST_VERSION)).thenReturn(node);
 
     var failure = assertThrows(IllegalStateException.class,
-        () -> service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+        () -> service.reconcile(store, cursor, BUCKET, context));
 
     assertEquals("Manifest package/version does not match its Landing key",
         failure.getSuppressed()[0].getCause().getMessage());
@@ -156,7 +159,7 @@ class ImportServiceTest {
     when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
     when(releases.findByManifestKey(MANIFEST_KEY)).thenReturn(Optional.of(completed));
 
-    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, context));
 
     verify(store, never()).read(any(), any());
     verify(store, never()).isClean(any(), any(), any());
@@ -168,11 +171,12 @@ class ImportServiceTest {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
     when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
-    when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(false);
+    when(store.version(BUCKET, MANIFEST_KEY)).thenReturn(MANIFEST_VERSION);
+    when(store.isClean(BUCKET, MANIFEST_KEY, MANIFEST_VERSION)).thenReturn(false);
 
-    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, context));
 
-    verify(store).isClean(BUCKET, MANIFEST_KEY, null);
+    verify(store).isClean(BUCKET, MANIFEST_KEY, MANIFEST_VERSION);
   }
 
   @Test
@@ -180,9 +184,10 @@ class ImportServiceTest {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
     when(cursor.next()).thenReturn(Optional.of(MANIFEST_KEY), Optional.empty());
-    when(store.isClean(BUCKET, MANIFEST_KEY, null)).thenReturn(false);
+    when(store.version(BUCKET, MANIFEST_KEY)).thenReturn(MANIFEST_VERSION);
+    when(store.isClean(BUCKET, MANIFEST_KEY, MANIFEST_VERSION)).thenReturn(false);
 
-    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, context));
 
     verify(store, never()).read(any(), any());
     verify(registration, never()).register(any(), any(), any());
@@ -196,7 +201,7 @@ class ImportServiceTest {
         .thenReturn(
             Optional.of("daily_cou/20780/150104/downloads/not-a-manifest.zip"), Optional.empty());
 
-    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, context));
 
     verify(store, never()).isClean(any(), any(), any());
     verify(registration, never()).register(any(), any(), any());
@@ -211,7 +216,7 @@ class ImportServiceTest {
             Optional.of("daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip"),
             Optional.empty());
 
-    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+    assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, context));
 
     verify(store, never()).isClean(any(), any(), any());
     verify(registration, never()).register(any(), any(), any());
@@ -221,7 +226,6 @@ class ImportServiceTest {
   void importCsvStartsReconciliationFromConfiguredProperties() throws Exception {
     when(properties.controlBucket()).thenReturn("control");
     when(properties.landingBucket()).thenReturn(BUCKET);
-    when(properties.region()).thenReturn("eu-west-2");
     when(s3.listObjectsV2(any(ListObjectsV2Request.class)))
         .thenReturn(ListObjectsV2Response.builder().build());
 
@@ -268,7 +272,6 @@ class ImportServiceTest {
             JSON.createObjectNode().put("versionId", "csv-version").put("sha256", SHA256)));
     when(properties.controlBucket()).thenReturn(control);
     when(properties.landingBucket()).thenReturn(landing);
-    when(properties.region()).thenReturn("eu-west-2");
     when(properties.sweepLimit()).thenReturn(1);
     when(s3.listObjectsV2(any(ListObjectsV2Request.class)))
         .thenAnswer(call -> {
@@ -316,15 +319,37 @@ class ImportServiceTest {
         .thenAnswer(call -> {
           var request = call.getArgument(0, HeadObjectRequest.class);
           assertEquals(landing, request.bucket());
-          assertEquals(csvKey, request.key());
-          return HeadObjectResponse.builder().versionId("csv-version").build();
+          return HeadObjectResponse.builder()
+              .versionId(request.key().equals(csvKey) ? "csv-version" : MANIFEST_VERSION)
+              .build();
         });
 
     assertEquals("RECONCILED", service.importCsv(context));
 
     verify(registration).register(eq(manifest), eq(manifestKey), any());
-    verify(importer).importClean(
-        manifest.id(), dataset, landing, csvKey, "csv-version", SHA256, "eu-west-2");
+    verify(importer)
+        .importClean(
+            eq(manifest.id()),
+            eq(dataset),
+            any(),
+            eq(landing),
+            eq(csvKey),
+            eq("csv-version"),
+            eq(SHA256));
+    verify(s3)
+        .getObject(
+            org.mockito.ArgumentMatchers.argThat((GetObjectRequest request) ->
+                csvKey.equals(request.key()) && "csv-version".equals(request.versionId())));
+    verify(s3)
+        .getObject(
+            org.mockito.ArgumentMatchers.argThat((GetObjectRequest request) ->
+                manifestKey.equals(request.key())
+                    && MANIFEST_VERSION.equals(request.versionId())));
+    verify(s3)
+        .getObjectTagging(
+            org.mockito.ArgumentMatchers.argThat((GetObjectTaggingRequest request) ->
+                manifestKey.equals(request.key())
+                    && MANIFEST_VERSION.equals(request.versionId())));
     String position =
         JSON.readTree(buckets.get(control).get(cursorKey)).path("after").asText();
     assertEquals(manifestKey, position);
@@ -352,8 +377,9 @@ class ImportServiceTest {
     var evidence = JSON.createObjectNode().put("versionId", "csv-version").put("sha256", SHA256);
     var manifest = mock(ReleaseManifest.class);
     when(cursor.next()).thenReturn(Optional.of(manifestKey), Optional.empty());
-    when(store.isClean(BUCKET, manifestKey, null)).thenReturn(true);
-    when(store.read(BUCKET, manifestKey)).thenReturn(node);
+    when(store.version(BUCKET, manifestKey)).thenReturn(MANIFEST_VERSION);
+    when(store.isClean(BUCKET, manifestKey, MANIFEST_VERSION)).thenReturn(true);
+    when(store.read(BUCKET, manifestKey, MANIFEST_VERSION)).thenReturn(node);
     when(manifest.id()).thenReturn(id);
     when(releases.findById(id)).thenReturn(Optional.empty());
     when(store.exists(BUCKET, csvKey)).thenReturn(true);
@@ -364,7 +390,7 @@ class ImportServiceTest {
     try (MockedStatic<ReleaseManifest> mockedManifest = mockStatic(ReleaseManifest.class)) {
       mockedManifest.when(() -> ReleaseManifest.read(node)).thenReturn(manifest);
 
-      assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+      assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, context));
     }
 
     verify(registration)
@@ -372,13 +398,13 @@ class ImportServiceTest {
             eq(manifest), eq(manifestKey), org.mockito.ArgumentMatchers.matches("[a-f0-9]{64}"));
     verify(importer)
         .importClean(
-            id,
-            Dataset.ADD_GB_ROYALMAILADDRESS,
-            BUCKET,
-            csvKey,
-            "csv-version",
-            SHA256,
-            "eu-west-2");
+            eq(id),
+            eq(Dataset.ADD_GB_ROYALMAILADDRESS),
+            any(),
+            eq(BUCKET),
+            eq(csvKey),
+            eq("csv-version"),
+            eq(SHA256));
   }
 
   @Test
@@ -402,7 +428,7 @@ class ImportServiceTest {
     var failure =
         assertThrows(
             IllegalStateException.class,
-            () -> service.reconcile(store, cursor, BUCKET, "eu-west-2", context));
+            () -> service.reconcile(store, cursor, BUCKET, context));
 
     assertEquals(
         "Some manifests, files or promotions failed; successful work remains committed for retry",
@@ -421,7 +447,7 @@ class ImportServiceTest {
 
     assertEquals(
         "RECONCILED",
-        service.reconcile(mock(ReleaseStore.class), cursor, BUCKET, "eu-west-2", context));
+        service.reconcile(mock(ReleaseStore.class), cursor, BUCKET, context));
 
     verify(cursor, never()).next();
     verify(promotion, never()).promote(any());

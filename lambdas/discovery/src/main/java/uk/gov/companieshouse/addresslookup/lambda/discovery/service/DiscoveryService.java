@@ -151,6 +151,9 @@ public final class DiscoveryService {
     } else if (mode == COU) {
       packageId = configuredPackageId;
       cursor = getCurrentCursor(packageId);
+      check(
+          packageId.equals(cursor.dataPackageId()),
+          "Cursor package does not match configured package");
 
       urlPackageVersionData = getNextVersionUrl(cursor);
       if (urlPackageVersionData == null) {

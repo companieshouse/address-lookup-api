@@ -71,6 +71,39 @@ final class StreamingS3Test {
   }
 
   @Test
+  void validatesRemainingInputBeforeCompletingUpload() throws Exception {
+    var s3 = mock(S3Client.class);
+    stubMultipartUpload(s3, "new-version");
+    when(s3.putObject(any(Consumer.class), any(RequestBody.class)))
+        .thenReturn(PutObjectResponse.builder().build());
+
+    new StreamingS3(s3, () -> 900_000)
+        .putIdempotent(new ByteArrayInputStream("csv".getBytes(StandardCharsets.UTF_8)),
+            BUCKET, KEY, 100, () -> {
+              verify(s3, never()).completeMultipartUpload(any(Consumer.class));
+              verify(s3).uploadPart(any(Consumer.class), any(RequestBody.class));
+            });
+
+    verify(s3).completeMultipartUpload(any(Consumer.class));
+  }
+
+  @Test
+  void abortsUploadWhenRemainingInputIsInvalid() throws Exception {
+    var s3 = mock(S3Client.class);
+    stubMultipartUpload(s3, "unused");
+    var failure = new IOException("invalid ZIP entry");
+
+    var thrown = assertThrows(IOException.class,
+        () -> new StreamingS3(s3, () -> 900_000)
+            .putIdempotent(new ByteArrayInputStream("csv".getBytes(StandardCharsets.UTF_8)),
+                BUCKET, KEY, 100, () -> { throw failure; }));
+
+    assertSame(failure, thrown);
+    verify(s3, never()).completeMultipartUpload(any(Consumer.class));
+    verify(s3).abortMultipartUpload(any(Consumer.class));
+  }
+
+  @Test
   void rejectsChecksumMismatchAndAbortsMultipartUpload() throws Exception {
     var s3 = mock(S3Client.class);
     stubMultipartUpload(s3, "new-version");

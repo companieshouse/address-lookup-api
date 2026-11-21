@@ -43,7 +43,8 @@ class ScanResultsServiceTest {
   private static final String BUCKET = "ingest-bucket";
   private static final String CLEAN_BUCKET = "clean-bucket";
   private static final String KEY = "zips/20780-131061/add_gb_royalmailaddress.zip";
-  private static final String CSV_KEY = "csv/20780-131061/add_gb_royalmailaddress.csv";
+  private static final String CSV_KEY = "extracted/" + MANIFEST_RELEASE +
+            "/add_gb_royalmailaddress/add_gb_royalmailaddress.csv";
   private static final String VERSION = "3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY";
 
   private record PublishedEvent(String type, JsonNode detail) {}
@@ -265,7 +266,7 @@ class ScanResultsServiceTest {
     JsonNode d = detail(0);
     assertTrue(d.get("schemaVersion").isInt());
     assertEquals(1, d.get("schemaVersion").intValue());
-    assertEquals("20780-131061", d.get("releaseId").asText());
+    assertEquals(MANIFEST_RELEASE, d.get("releaseId").asText());
     assertEquals("add_gb_royalmailaddress", d.get("dataset").asText());
     assertEquals(CLEAN_BUCKET, d.path("object").get("bucket").asText());
     assertEquals(CSV_KEY, d.path("object").get("key").asText());

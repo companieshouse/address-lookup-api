@@ -15,12 +15,12 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
-import uk.gov.companieshouse.addresslookup.lambda.unzip.service.ExtractionService;
+import uk.gov.companieshouse.addresslookup.lambda.unzip.service.ExtractionComponent;
 
 @ExtendWith(MockitoExtension.class)
 class HandlerTest {
 
-  @Mock private ExtractionService service;
+  @Mock private ExtractionComponent service;
 
   @Mock private Context context;
 
@@ -47,7 +47,7 @@ class HandlerTest {
   void setup() {
     try (MockedStatic<AcquisitionApplication> mockApp =
         Mockito.mockStatic(AcquisitionApplication.class)) {
-      mockApp.when(() -> AcquisitionApplication.start(ExtractionService.class)).thenReturn(service);
+      mockApp.when(() -> AcquisitionApplication.start(ExtractionComponent.class)).thenReturn(service);
       handler = new Handler();
     }
   }
@@ -60,6 +60,15 @@ class HandlerTest {
     String response = handler.handleRequest(TEST_EVENT, context);
 
     assertEquals(TEST_RESPONSE, response);
+  }
+
+  @Test
+  void acknowledgesPublishedPermanentRejection() throws Exception {
+    var failure = Mockito.mock(ExtractionComponent.PermanentExtractionException.class);
+    Mockito.when(failure.code()).thenReturn("HEADER_MISMATCH");
+    Mockito.when(service.unzip(TEST_EVENT, context)).thenThrow(failure);
+
+    assertEquals("StepRejected:HEADER_MISMATCH", handler.handleRequest(TEST_EVENT, context));
   }
 
   @Test

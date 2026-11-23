@@ -1,26 +1,10 @@
 package uk.gov.companieshouse.addresslookup.lambda.discovery.service;
 
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.detail;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sanitizeUrl;
-import static uk.gov.companieshouse.release.model.SupplyType.COU;
-import static uk.gov.companieshouse.release.model.SupplyType.FULL;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.TreeNode;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
-import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -47,6 +31,23 @@ import uk.gov.companieshouse.release.model.Download;
 import uk.gov.companieshouse.release.model.PackageVersionData;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
 import uk.gov.companieshouse.release.model.SupplyType;
+
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.detail;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sanitizeUrl;
+import static uk.gov.companieshouse.release.model.SupplyType.COU;
+import static uk.gov.companieshouse.release.model.SupplyType.FULL;
 
 /**
  * Scheduled acquisition; the supply cursor is published acquisition descriptions, not the DB

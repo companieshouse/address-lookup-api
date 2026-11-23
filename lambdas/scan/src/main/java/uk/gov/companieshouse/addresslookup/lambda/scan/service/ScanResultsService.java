@@ -1,12 +1,6 @@
 package uk.gov.companieshouse.addresslookup.lambda.scan.service;
 
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
-
 import com.fasterxml.jackson.databind.JsonNode;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 import org.springframework.stereotype.Component;
 import uk.gov.companieshouse.addresslookup.lambda.scan.InvalidReason;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
@@ -16,6 +10,13 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.FileType
 import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.ObjectKey;
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 
 /**
  * Stateless router for GuardDuty scan results. It never touches S3 or stores state; duplicate

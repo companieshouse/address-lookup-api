@@ -17,18 +17,33 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Acquisition
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils;
-import uk.gov.companieshouse.release.model.*;
+import uk.gov.companieshouse.release.model.DatasetDefault;
+import uk.gov.companieshouse.release.model.OrderSummary;
+import uk.gov.companieshouse.release.model.PackageVersionData;
+import uk.gov.companieshouse.release.model.ReleaseJson;
+import uk.gov.companieshouse.release.model.ReleaseManifest;
 
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
-import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.*;
+import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToJsonNode;
+import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToObject;
+import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.readFileFromClasspath;
 import static uk.gov.companieshouse.release.model.DetailType.DOWNLOAD;
 
 @ExtendWith(MockitoExtension.class)

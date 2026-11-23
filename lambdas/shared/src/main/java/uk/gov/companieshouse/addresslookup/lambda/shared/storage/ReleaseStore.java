@@ -1,11 +1,17 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectTaggingRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.model.Tag;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -14,9 +20,10 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.IntConsumer;
 import java.util.function.UnaryOperator;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.*;
+
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
 
 /** S3 progress records and scan evidence; no database dependency. */
 public final class ReleaseStore {

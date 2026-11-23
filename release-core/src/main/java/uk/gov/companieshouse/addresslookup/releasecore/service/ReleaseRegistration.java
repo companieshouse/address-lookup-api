@@ -2,7 +2,12 @@ package uk.gov.companieshouse.addresslookup.releasecore.service;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import uk.gov.companieshouse.addresslookup.releasecore.state.*;
+import uk.gov.companieshouse.addresslookup.releasecore.state.Release;
+import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseFile;
+import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseFileRepository;
+import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseRepository;
+import uk.gov.companieshouse.addresslookup.releasecore.state.SchemaContractRepository;
+import uk.gov.companieshouse.addresslookup.releasecore.state.WatermarkRepository;
 import uk.gov.companieshouse.release.model.DatasetCatalog;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
 

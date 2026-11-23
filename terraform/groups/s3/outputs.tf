@@ -1,16 +1,21 @@
 output "bucket_names" {
-  description = "The single acquisition bucket name, keyed by landing for state compatibility"
-  value       = { for key, bucket in aws_s3_bucket.this : key => bucket.id }
+  description = "Existing acquisition bucket name, keyed by landing for consumer compatibility"
+  value       = { landing = data.aws_s3_bucket.acquisition.id }
 }
 
 output "bucket_arns" {
-  description = "The single acquisition bucket ARN, keyed by landing for state compatibility"
-  value       = { for key, bucket in aws_s3_bucket.this : key => bucket.arn }
+  description = "Existing acquisition bucket ARN, keyed by landing for consumer compatibility"
+  value       = { landing = data.aws_s3_bucket.acquisition.arn }
 }
 
 output "source_bucket" {
   description = "SOURCE_BUCKET for acquisition Lambdas and the importer"
-  value       = aws_s3_bucket.this["landing"].id
+  value       = data.aws_s3_bucket.acquisition.id
+}
+
+output "acquisition_prefixes" {
+  description = "Environment-specific control and landing key prefixes"
+  value       = { control = local.control_prefix, landing = local.landing_prefix }
 }
 
 output "kms_key_arn" {

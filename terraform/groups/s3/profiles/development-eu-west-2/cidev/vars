@@ -1,2 +1,4 @@
 aws_profile = "development-eu-west-2"
 environment = "cidev"
+acquisition_bucket_name = "development-eu-west-2.resources.ch.gov.uk"
+kms_key_id = "alias/development-eu-west-2/environment-services-kms"

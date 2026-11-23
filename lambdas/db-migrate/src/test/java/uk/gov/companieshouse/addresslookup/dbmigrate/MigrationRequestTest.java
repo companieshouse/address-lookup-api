@@ -1,15 +1,14 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class MigrationRequestTest {
 
@@ -29,7 +28,9 @@ class MigrationRequestTest {
   }
 
   private static void assertInvalidInput(Map<String, Object> migrationRequestPayload) {
-    var e = assertThrows(MigrationException.class, () -> MigrationRequest.parse(migrationRequestPayload));
+    var e =
+        assertThrows(
+            MigrationException.class, () -> MigrationRequest.parse(migrationRequestPayload));
     assertEquals(MigrationException.Code.INVALID_INPUT, e.code());
   }
 
@@ -45,12 +46,19 @@ class MigrationRequestTest {
   @ParameterizedTest
   @ValueSource(strings = {"migrate", "info", "validate", "repair"})
   void acceptsEveryCommand(String command) {
-    assertEquals(command, MigrationRequest.parse(buildMigrationRequestPayload("command", command)).command().wireName());
+    assertEquals(
+        command,
+        MigrationRequest.parse(buildMigrationRequestPayload("command", command))
+            .command()
+            .wireName());
   }
 
   @Test
   void normalisesTheChecksumToLowerCase() {
-    assertEquals(SHA256_HEX, MigrationRequest.parse(buildMigrationRequestPayload("sha256", SHA256_HEX.toUpperCase())).sha256());
+    assertEquals(
+        SHA256_HEX,
+        MigrationRequest.parse(buildMigrationRequestPayload("sha256", SHA256_HEX.toUpperCase()))
+            .sha256());
   }
 
   @ParameterizedTest
@@ -68,7 +76,8 @@ class MigrationRequestTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"", "abc", "zz2c0000000000000000000000000000000000000000000000000000000000000"})
+  @ValueSource(
+      strings = {"", "abc", "zz2c0000000000000000000000000000000000000000000000000000000000000"})
   void rejectsMalformedChecksums(String sha) {
     assertInvalidInput(buildMigrationRequestPayload("sha256", sha));
   }
@@ -106,7 +115,9 @@ class MigrationRequestTest {
   void acceptsAVersionIdOfExactlyTheMaximumLength() {
     var versionId = "v".repeat(1024);
 
-    assertEquals(versionId, MigrationRequest.parse(buildMigrationRequestPayload("versionId", versionId)).versionId());
+    assertEquals(
+        versionId,
+        MigrationRequest.parse(buildMigrationRequestPayload("versionId", versionId)).versionId());
   }
 
   @Test
@@ -124,13 +135,16 @@ class MigrationRequestTest {
   @Test
   void rejectsAKeyNameLongerThanTheMaximum() {
     assertInvalidInput(
-        buildMigrationRequestPayload("key", "address-lookup/db-schema-snapshots/" + "a".repeat(201) + ".zip"));
+        buildMigrationRequestPayload(
+            "key", "address-lookup/db-schema-snapshots/" + "a".repeat(201) + ".zip"));
   }
 
   @Test
   void errorMessageNamesTheOffendingField() {
     var payloadWithUnexpectedField = buildMigrationRequestPayload("locations", "x");
-    var e = assertThrows(MigrationException.class, () -> MigrationRequest.parse(payloadWithUnexpectedField));
+    var e =
+        assertThrows(
+            MigrationException.class, () -> MigrationRequest.parse(payloadWithUnexpectedField));
 
     assertEquals("INVALID_INPUT: Unexpected field: locations", e.getMessage());
   }

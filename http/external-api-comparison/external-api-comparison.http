@@ -1,0 +1,494 @@
+# Parity check: the public postcode lookup service is the source of truth; the local
+# API must behave the same way for the same postcode. Run in the IntelliJ HTTP client
+# (run the whole file). Each "external" request saves its result via save-external.js;
+# the "local" request after it is checked by compare-with-external.js:
+#   1. the status codes match;
+#   2. on 200 for multiple-addresses, both bodies are arrays and are either both empty
+#      or both non-empty (counts are not compared: the local database is only a sample);
+#      on 200 for postcode, both bodies are objects with the same fields.
+# The local database must be loaded with LU49PJ and WF27QD.
+# Not covered: a postcode containing "/" (rejected by the external gateway with 401)
+# and a missing postcode parameter (no external equivalent).
+
+@external = https://postcode-lookup.company-information.service.gov.uk
+@local = http://localhost:8080/address-lookup-api
+
+### multiple-addresses 'LU49PJ' - external
+GET {{external}}/multiple-addresses/LU49PJ
+
+> ./save-external.js
+
+### multiple-addresses 'LU49PJ' - local
+GET {{local}}/multiple-addresses?postcode=LU49PJ
+
+> ./compare-with-external.js
+
+### multiple-addresses 'lu49pj' - external
+GET {{external}}/multiple-addresses/lu49pj
+
+> ./save-external.js
+
+### multiple-addresses 'lu49pj' - local
+GET {{local}}/multiple-addresses?postcode=lu49pj
+
+> ./compare-with-external.js
+
+### multiple-addresses 'WF27QD' - external
+GET {{external}}/multiple-addresses/WF27QD
+
+> ./save-external.js
+
+### multiple-addresses 'WF27QD' - local
+GET {{local}}/multiple-addresses?postcode=WF27QD
+
+> ./compare-with-external.js
+
+### multiple-addresses 'wf27qd' - external
+GET {{external}}/multiple-addresses/wf27qd
+
+> ./save-external.js
+
+### multiple-addresses 'wf27qd' - local
+GET {{local}}/multiple-addresses?postcode=wf27qd
+
+> ./compare-with-external.js
+
+### multiple-addresses 'lu4 9pj' (space inside) - external
+GET {{external}}/multiple-addresses/lu4%209pj
+
+> ./save-external.js
+
+### multiple-addresses 'lu4 9pj' (space inside) - local
+GET {{local}}/multiple-addresses?postcode=lu4%209pj
+
+> ./compare-with-external.js
+
+### multiple-addresses ' lu49pj' (leading space) - external
+GET {{external}}/multiple-addresses/%20lu49pj
+
+> ./save-external.js
+
+### multiple-addresses ' lu49pj' (leading space) - local
+GET {{local}}/multiple-addresses?postcode=%20lu49pj
+
+> ./compare-with-external.js
+
+### multiple-addresses 'lu49pj ' (trailing space) - external
+GET {{external}}/multiple-addresses/lu49pj%20
+
+> ./save-external.js
+
+### multiple-addresses 'lu49pj ' (trailing space) - local
+GET {{local}}/multiple-addresses?postcode=lu49pj%20
+
+> ./compare-with-external.js
+
+### multiple-addresses 'LU49PJX' - external
+GET {{external}}/multiple-addresses/LU49PJX
+
+> ./save-external.js
+
+### multiple-addresses 'LU49PJX' - local
+GET {{local}}/multiple-addresses?postcode=LU49PJX
+
+> ./compare-with-external.js
+
+### multiple-addresses 'LU49PJ!' - external
+GET {{external}}/multiple-addresses/LU49PJ!
+
+> ./save-external.js
+
+### multiple-addresses 'LU49PJ!' - local
+GET {{local}}/multiple-addresses?postcode=LU49PJ!
+
+> ./compare-with-external.js
+
+### multiple-addresses 'LU4-9PJ' - external
+GET {{external}}/multiple-addresses/LU4-9PJ
+
+> ./save-external.js
+
+### multiple-addresses 'LU4-9PJ' - local
+GET {{local}}/multiple-addresses?postcode=LU4-9PJ
+
+> ./compare-with-external.js
+
+### multiple-addresses 'ZZ11ZZ' - external
+GET {{external}}/multiple-addresses/ZZ11ZZ
+
+> ./save-external.js
+
+### multiple-addresses 'ZZ11ZZ' - local
+GET {{local}}/multiple-addresses?postcode=ZZ11ZZ
+
+> ./compare-with-external.js
+
+### multiple-addresses '' (empty) - external
+GET {{external}}/multiple-addresses/
+
+> ./save-external.js
+
+### multiple-addresses '' (empty) - local
+GET {{local}}/multiple-addresses?postcode=
+
+> ./compare-with-external.js
+
+### multiple-addresses '   ' (whitespace only) - external
+GET {{external}}/multiple-addresses/%20%20%20
+
+> ./save-external.js
+
+### multiple-addresses '   ' (whitespace only) - local
+GET {{local}}/multiple-addresses?postcode=%20%20%20
+
+> ./compare-with-external.js
+
+### multiple-addresses '12345' - external
+GET {{external}}/multiple-addresses/12345
+
+> ./save-external.js
+
+### multiple-addresses '12345' - local
+GET {{local}}/multiple-addresses?postcode=12345
+
+> ./compare-with-external.js
+
+### multiple-addresses 'INVALID' - external
+GET {{external}}/multiple-addresses/INVALID
+
+> ./save-external.js
+
+### multiple-addresses 'INVALID' - local
+GET {{local}}/multiple-addresses?postcode=INVALID
+
+> ./compare-with-external.js
+
+### multiple-addresses 'ZZZZZZ' - external
+GET {{external}}/multiple-addresses/ZZZZZZ
+
+> ./save-external.js
+
+### multiple-addresses 'ZZZZZZ' - local
+GET {{local}}/multiple-addresses?postcode=ZZZZZZ
+
+> ./compare-with-external.js
+
+### multiple-addresses 'A' - external
+GET {{external}}/multiple-addresses/A
+
+> ./save-external.js
+
+### multiple-addresses 'A' - local
+GET {{local}}/multiple-addresses?postcode=A
+
+> ./compare-with-external.js
+
+### multiple-addresses 'AB124NYEXTRA' - external
+GET {{external}}/multiple-addresses/AB124NYEXTRA
+
+> ./save-external.js
+
+### multiple-addresses 'AB124NYEXTRA' - local
+GET {{local}}/multiple-addresses?postcode=AB124NYEXTRA
+
+> ./compare-with-external.js
+
+### multiple-addresses 'LU4s9PJ' - external
+GET {{external}}/multiple-addresses/LU4s9PJ
+
+> ./save-external.js
+
+### multiple-addresses 'LU4s9PJ' - local
+GET {{local}}/multiple-addresses?postcode=LU4s9PJ
+
+> ./compare-with-external.js
+
+### multiple-addresses 'LU49P1' - external
+GET {{external}}/multiple-addresses/LU49P1
+
+> ./save-external.js
+
+### multiple-addresses 'LU49P1' - local
+GET {{local}}/multiple-addresses?postcode=LU49P1
+
+> ./compare-with-external.js
+
+### multiple-addresses 'WF27Q1' - external
+GET {{external}}/multiple-addresses/WF27Q1
+
+> ./save-external.js
+
+### multiple-addresses 'WF27Q1' - local
+GET {{local}}/multiple-addresses?postcode=WF27Q1
+
+> ./compare-with-external.js
+
+### multiple-addresses 'WF2@7QD' - external
+GET {{external}}/multiple-addresses/WF2@7QD
+
+> ./save-external.js
+
+### multiple-addresses 'WF2@7QD' - local
+GET {{local}}/multiple-addresses?postcode=WF2@7QD
+
+> ./compare-with-external.js
+
+### multiple-addresses 'INVALID@POSTCODE' - external
+GET {{external}}/multiple-addresses/INVALID@POSTCODE
+
+> ./save-external.js
+
+### multiple-addresses 'INVALID@POSTCODE' - local
+GET {{local}}/multiple-addresses?postcode=INVALID@POSTCODE
+
+> ./compare-with-external.js
+
+### multiple-addresses SQL injection - external
+GET {{external}}/multiple-addresses/%27%20OR%20%271%27%3D%271
+
+> ./save-external.js
+
+### multiple-addresses SQL injection - local
+GET {{local}}/multiple-addresses?postcode=%27%20OR%20%271%27%3D%271
+
+> ./compare-with-external.js
+
+### postcode 'LU49PJ' - external
+GET {{external}}/postcode/LU49PJ
+
+> ./save-external.js
+
+### postcode 'LU49PJ' - local
+GET {{local}}/postcode?postcode=LU49PJ
+
+> ./compare-with-external.js
+
+### postcode 'lu49pj' - external
+GET {{external}}/postcode/lu49pj
+
+> ./save-external.js
+
+### postcode 'lu49pj' - local
+GET {{local}}/postcode?postcode=lu49pj
+
+> ./compare-with-external.js
+
+### postcode 'WF27QD' - external
+GET {{external}}/postcode/WF27QD
+
+> ./save-external.js
+
+### postcode 'WF27QD' - local
+GET {{local}}/postcode?postcode=WF27QD
+
+> ./compare-with-external.js
+
+### postcode 'wf27qd' - external
+GET {{external}}/postcode/wf27qd
+
+> ./save-external.js
+
+### postcode 'wf27qd' - local
+GET {{local}}/postcode?postcode=wf27qd
+
+> ./compare-with-external.js
+
+### postcode 'lu4 9pj' (space inside) - external
+GET {{external}}/postcode/lu4%209pj
+
+> ./save-external.js
+
+### postcode 'lu4 9pj' (space inside) - local
+GET {{local}}/postcode?postcode=lu4%209pj
+
+> ./compare-with-external.js
+
+### postcode ' lu49pj' (leading space) - external
+GET {{external}}/postcode/%20lu49pj
+
+> ./save-external.js
+
+### postcode ' lu49pj' (leading space) - local
+GET {{local}}/postcode?postcode=%20lu49pj
+
+> ./compare-with-external.js
+
+### postcode 'lu49pj ' (trailing space) - external
+GET {{external}}/postcode/lu49pj%20
+
+> ./save-external.js
+
+### postcode 'lu49pj ' (trailing space) - local
+GET {{local}}/postcode?postcode=lu49pj%20
+
+> ./compare-with-external.js
+
+### postcode 'LU49PJX' - external
+GET {{external}}/postcode/LU49PJX
+
+> ./save-external.js
+
+### postcode 'LU49PJX' - local
+GET {{local}}/postcode?postcode=LU49PJX
+
+> ./compare-with-external.js
+
+### postcode 'LU49PJ!' - external
+GET {{external}}/postcode/LU49PJ!
+
+> ./save-external.js
+
+### postcode 'LU49PJ!' - local
+GET {{local}}/postcode?postcode=LU49PJ!
+
+> ./compare-with-external.js
+
+### postcode 'LU4-9PJ' - external
+GET {{external}}/postcode/LU4-9PJ
+
+> ./save-external.js
+
+### postcode 'LU4-9PJ' - local
+GET {{local}}/postcode?postcode=LU4-9PJ
+
+> ./compare-with-external.js
+
+### postcode 'ZZ11ZZ' - external
+GET {{external}}/postcode/ZZ11ZZ
+
+> ./save-external.js
+
+### postcode 'ZZ11ZZ' - local
+GET {{local}}/postcode?postcode=ZZ11ZZ
+
+> ./compare-with-external.js
+
+### postcode '' (empty) - external
+GET {{external}}/postcode/
+
+> ./save-external.js
+
+### postcode '' (empty) - local
+GET {{local}}/postcode?postcode=
+
+> ./compare-with-external.js
+
+### postcode '   ' (whitespace only) - external
+GET {{external}}/postcode/%20%20%20
+
+> ./save-external.js
+
+### postcode '   ' (whitespace only) - local
+GET {{local}}/postcode?postcode=%20%20%20
+
+> ./compare-with-external.js
+
+### postcode '12345' - external
+GET {{external}}/postcode/12345
+
+> ./save-external.js
+
+### postcode '12345' - local
+GET {{local}}/postcode?postcode=12345
+
+> ./compare-with-external.js
+
+### postcode 'INVALID' - external
+GET {{external}}/postcode/INVALID
+
+> ./save-external.js
+
+### postcode 'INVALID' - local
+GET {{local}}/postcode?postcode=INVALID
+
+> ./compare-with-external.js
+
+### postcode 'ZZZZZZ' - external
+GET {{external}}/postcode/ZZZZZZ
+
+> ./save-external.js
+
+### postcode 'ZZZZZZ' - local
+GET {{local}}/postcode?postcode=ZZZZZZ
+
+> ./compare-with-external.js
+
+### postcode 'A' - external
+GET {{external}}/postcode/A
+
+> ./save-external.js
+
+### postcode 'A' - local
+GET {{local}}/postcode?postcode=A
+
+> ./compare-with-external.js
+
+### postcode 'AB124NYEXTRA' - external
+GET {{external}}/postcode/AB124NYEXTRA
+
+> ./save-external.js
+
+### postcode 'AB124NYEXTRA' - local
+GET {{local}}/postcode?postcode=AB124NYEXTRA
+
+> ./compare-with-external.js
+
+### postcode 'LU4s9PJ' - external
+GET {{external}}/postcode/LU4s9PJ
+
+> ./save-external.js
+
+### postcode 'LU4s9PJ' - local
+GET {{local}}/postcode?postcode=LU4s9PJ
+
+> ./compare-with-external.js
+
+### postcode 'LU49P1' - external
+GET {{external}}/postcode/LU49P1
+
+> ./save-external.js
+
+### postcode 'LU49P1' - local
+GET {{local}}/postcode?postcode=LU49P1
+
+> ./compare-with-external.js
+
+### postcode 'WF27Q1' - external
+GET {{external}}/postcode/WF27Q1
+
+> ./save-external.js
+
+### postcode 'WF27Q1' - local
+GET {{local}}/postcode?postcode=WF27Q1
+
+> ./compare-with-external.js
+
+### postcode 'WF2@7QD' - external
+GET {{external}}/postcode/WF2@7QD
+
+> ./save-external.js
+
+### postcode 'WF2@7QD' - local
+GET {{local}}/postcode?postcode=WF2@7QD
+
+> ./compare-with-external.js
+
+### postcode 'INVALID@POSTCODE' - external
+GET {{external}}/postcode/INVALID@POSTCODE
+
+> ./save-external.js
+
+### postcode 'INVALID@POSTCODE' - local
+GET {{local}}/postcode?postcode=INVALID@POSTCODE
+
+> ./compare-with-external.js
+
+### postcode SQL injection - external
+GET {{external}}/postcode/%27%20OR%20%271%27%3D%271
+
+> ./save-external.js
+
+### postcode SQL injection - local
+GET {{local}}/postcode?postcode=%27%20OR%20%271%27%3D%271
+
+> ./compare-with-external.js

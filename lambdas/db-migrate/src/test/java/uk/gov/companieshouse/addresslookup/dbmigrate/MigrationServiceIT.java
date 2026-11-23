@@ -1,11 +1,11 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
-import org.testcontainers.utility.DockerImageName;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -29,13 +29,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
 
 /**
  * Runs the real {@code database/migrations} (zipped as the gather-snapshot job zips them) and
@@ -58,7 +57,16 @@ class MigrationServiceIT {
           "V2026.001__create_postgis_and_schemas.sql",
           "V2026.002__create_dataset_contract.sql",
           "V2026.003__create_royalmailaddress_v2_tables.sql",
-          "V2026.004__create_address_lookup_view.sql");
+          "V2026.004__create_address_lookup_view.sql",
+          "V2026.005__create_staging_manifest_and_import_ledger.sql",
+          "V2026.006__create_staging_ngd_tables.sql",
+          "V2026.007__create_release_history.sql",
+          "V2026.008__create_completeness_check.sql",
+          "V2026.009__create_upload_lambda_role.sql",
+          "V2026.010__create_full_staging_schema.sql",
+          "V2026.011__create_full_import_procedure.sql",
+          "V2026.012__create_full_build_indexes_procedure.sql",
+          "V2026.013__create_full_promote_procedure.sql");
 
   private String database;
 
@@ -89,16 +97,17 @@ class MigrationServiceIT {
     var first = run(snapshot, Command.MIGRATE);
     assertEquals("SUCCESS", first.get("status"));
     assertEquals(BASELINE, first.get("applied"));
-    assertEquals("2026.004", first.get("schemaVersion"));
+    assertEquals("2026.013", first.get("schemaVersion"));
     assertTrue(viewExists("address_lookup", "address_lookup"));
-    assertEquals(0, count("SELECT count(*) FROM address_lookup.address_lookup"), "no seed data ships");
+    assertEquals(
+        0, count("SELECT count(*) FROM address_lookup.address_lookup"), "no seed data ships");
     assertEquals(4, count("SELECT count(*) FROM os_control.index_definition"));
 
     assertEquals(List.of(), run(snapshot, Command.MIGRATE).get("applied"));
     var validate = run(snapshot, Command.VALIDATE);
     assertEquals(true, validate.get("valid"));
     assertEquals(List.of(), validate.get("pending"));
-    assertEquals("2026.004", validate.get("schemaVersion"));
+    assertEquals("2026.013", validate.get("schemaVersion"));
   }
 
   @Test
@@ -133,14 +142,20 @@ class MigrationServiceIT {
 
     assertEquals(MigrationException.Code.VALIDATION_FAILED, e.code());
     assertFalse(tableExists("public", "second_table"));
-    assertEquals(MigrationException.Code.VALIDATION_FAILED,
+    assertEquals(
+        MigrationException.Code.VALIDATION_FAILED,
         assertThrows(MigrationException.class, () -> run(tampered, Command.VALIDATE)).code());
   }
 
   @Test
   void misnamedMigrationFailsInsteadOfBeingSkipped() throws Exception {
     byte[] snapshot =
-        fixture(Map.of("V1__first.sql", "CREATE TABLE first_table (id int);", "V2_missing_separator.sql", "SELECT 1;"));
+        fixture(
+            Map.of(
+                "V1__first.sql",
+                "CREATE TABLE first_table (id int);",
+                "V2_missing_separator.sql",
+                "SELECT 1;"));
 
     var e = assertThrows(MigrationException.class, () -> run(snapshot, Command.MIGRATE));
 
@@ -151,7 +166,10 @@ class MigrationServiceIT {
   @Test
   void failingMigrationRollsBackCompletely() throws Exception {
     byte[] snapshot =
-        fixture(Map.of("V1__half.sql", "CREATE TABLE half_table (id int);\nSELECT * FROM does_not_exist;"));
+        fixture(
+            Map.of(
+                "V1__half.sql",
+                "CREATE TABLE half_table (id int);\nSELECT * FROM does_not_exist;"));
 
     var e = assertThrows(MigrationException.class, () -> run(snapshot, Command.MIGRATE));
 
@@ -165,12 +183,14 @@ class MigrationServiceIT {
         fixture(
             Map.of(
                 "V1__table.sql", "CREATE TABLE indexed_table (id int, postcode text);",
-                "V2__index.sql", "CREATE INDEX CONCURRENTLY IF NOT EXISTS indexed_table_postcode_idx ON public.indexed_table (postcode);"));
+                "V2__index.sql",
+                    "CREATE INDEX CONCURRENTLY IF NOT EXISTS indexed_table_postcode_idx ON public.indexed_table (postcode);"));
 
     var result = run(snapshot, Command.MIGRATE);
 
     assertEquals(List.of("V1__table.sql", "V2__index.sql"), result.get("applied"));
-    assertEquals(1, count("SELECT count(*) FROM pg_indexes WHERE indexname = 'indexed_table_postcode_idx'"));
+    assertEquals(
+        1, count("SELECT count(*) FROM pg_indexes WHERE indexname = 'indexed_table_postcode_idx'"));
   }
 
   @Test
@@ -194,7 +214,8 @@ class MigrationServiceIT {
       assertTrue(millis < 10_000, "gave up after " + millis + " ms");
       reader.rollback();
     }
-    assertEquals(List.of("V2__alter.sql"), run(next, Command.MIGRATE).get("applied"), "a re-run succeeds");
+    assertEquals(
+        List.of("V2__alter.sql"), run(next, Command.MIGRATE).get("applied"), "a re-run succeeds");
   }
 
   @Test
@@ -232,9 +253,11 @@ class MigrationServiceIT {
       assertEquals("SUCCESS", firstResult.get("status"));
       assertEquals("SUCCESS", secondResult.get("status"));
       assertEquals(List.of("V2__alter.sql"), firstResult.get("applied"));
-      assertEquals(List.of(), secondResult.get("applied"), "the second run waits and finds nothing pending");
+      assertEquals(
+          List.of(), secondResult.get("applied"), "the second run waits and finds nothing pending");
     }
-    assertEquals(1, count("SELECT count(*) FROM flyway_schema_history WHERE version = '2' AND success"));
+    assertEquals(
+        1, count("SELECT count(*) FROM flyway_schema_history WHERE version = '2' AND success"));
   }
 
   @Test
@@ -242,7 +265,8 @@ class MigrationServiceIT {
     byte[] snapshot = fixture(Map.of("V1__first.sql", "CREATE TABLE first_table (id int);"));
     run(snapshot, Command.MIGRATE);
 
-    assertEquals(MigrationException.Code.REPAIR_DISABLED,
+    assertEquals(
+        MigrationException.Code.REPAIR_DISABLED,
         assertThrows(MigrationException.class, () -> run(snapshot, Command.REPAIR)).code());
     var repaired = run(snapshot, Command.REPAIR, "10s", true);
     assertEquals("SUCCESS", repaired.get("status"));
@@ -253,13 +277,16 @@ class MigrationServiceIT {
   @Test
   void repairReportsTheMigrationsItAlignedByFileName() throws Exception {
     run(fixture(Map.of("V1__first.sql", "CREATE TABLE first_table (id int);")), Command.MIGRATE);
-    byte[] edited = fixture(Map.of("V1__first.sql", "CREATE TABLE first_table (id int); -- edited"));
+    byte[] edited =
+        fixture(Map.of("V1__first.sql", "CREATE TABLE first_table (id int); -- edited"));
 
     var repaired = run(edited, Command.REPAIR, "10s", true);
 
     assertEquals(List.of("V1__first.sql"), repaired.get("repaired"));
-    assertFalse(((List<?>) repaired.get("repairActions")).isEmpty(), "Flyway describes what it repaired");
-    assertEquals(true, run(edited, Command.VALIDATE).get("valid"), "the checksum is aligned after repair");
+    assertFalse(
+        ((List<?>) repaired.get("repairActions")).isEmpty(), "Flyway describes what it repaired");
+    assertEquals(
+        true, run(edited, Command.VALIDATE).get("valid"), "the checksum is aligned after repair");
   }
 
   @Test
@@ -278,8 +305,10 @@ class MigrationServiceIT {
 
     var repaired = run(edited, Command.REPAIR, "10s", true);
 
-    assertEquals(Set.of("V1__first.sql", "V2__second.sql"), Set.copyOf((List<?>) repaired.get("repaired")));
-    assertEquals(1, ((List<?>) repaired.get("repairActions")).size(), "one action summarises both files");
+    assertEquals(
+        Set.of("V1__first.sql", "V2__second.sql"), Set.copyOf((List<?>) repaired.get("repaired")));
+    assertEquals(
+        1, ((List<?>) repaired.get("repairActions")).size(), "one action summarises both files");
   }
 
   @Test
@@ -336,8 +365,8 @@ class MigrationServiceIT {
     return run(snapshot, command, "10s", false);
   }
 
-  private Map<String, Object> run(byte[] snapshot, Command command, String lockTimeout, boolean allowRepair)
-      throws Exception {
+  private Map<String, Object> run(
+      byte[] snapshot, Command command, String lockTimeout, boolean allowRepair) throws Exception {
     return service(snapshot, lockTimeout, allowRepair)
         .handle(new MigrationRequest(command, KEY, "v1", sha256(snapshot)));
   }
@@ -352,7 +381,8 @@ class MigrationServiceIT {
         },
         name -> {
           assertEquals("/address-lookup/test/db/schema-owner", name);
-          return new DatabaseCredentials(jdbcUrl(database), POSTGRES.getUsername(), POSTGRES.getPassword());
+          return new DatabaseCredentials(
+              jdbcUrl(database), POSTGRES.getUsername(), POSTGRES.getPassword());
         },
         ConnectionFactory.jdbc(),
         new FlywayRunner());
@@ -360,7 +390,12 @@ class MigrationServiceIT {
 
   private static MigrationConfig config(String lockTimeout, boolean allowRepair) {
     return new MigrationConfig(
-        "snapshot-bucket", "/address-lookup/test/db/schema-owner", allowRepair, lockTimeout, 50_000_000, 1000);
+        "snapshot-bucket",
+        "/address-lookup/test/db/schema-owner",
+        allowRepair,
+        lockTimeout,
+        50_000_000,
+        1000);
   }
 
   /**
@@ -372,7 +407,8 @@ class MigrationServiceIT {
         Path.of(System.getProperty("database.dir", "../../database")).resolve("migrations");
     var files = new TreeMap<String, String>();
     try (var paths = Files.list(migrations)) {
-      for (Path file : paths.filter(path -> path.getFileName().toString().endsWith(".sql")).toList())
+      for (Path file :
+          paths.filter(path -> path.getFileName().toString().endsWith(".sql")).toList())
         files.put(file.getFileName().toString(), Files.readString(file));
     }
     return fixture(files);
@@ -395,7 +431,8 @@ class MigrationServiceIT {
   }
 
   private static String jdbcUrl(String db) {
-    return "jdbc:postgresql://%s:%d/%s".formatted(POSTGRES.getHost(), POSTGRES.getMappedPort(5432), db);
+    return "jdbc:postgresql://%s:%d/%s"
+        .formatted(POSTGRES.getHost(), POSTGRES.getMappedPort(5432), db);
   }
 
   private static Connection connect(String db) throws SQLException {
@@ -448,6 +485,9 @@ class MigrationServiceIT {
   }
 
   private boolean viewExists(String schema, String view) throws SQLException {
-    return exists("SELECT 1 FROM information_schema.views WHERE table_schema = ? AND table_name = ?", schema, view);
+    return exists(
+        "SELECT 1 FROM information_schema.views WHERE table_schema = ? AND table_name = ?",
+        schema,
+        view);
   }
 }

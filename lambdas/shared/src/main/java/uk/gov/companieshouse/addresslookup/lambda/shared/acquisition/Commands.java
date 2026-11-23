@@ -2,13 +2,12 @@ package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Map;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsRequestEntry;
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
-
-import java.util.Map;
 
 public final class Commands {
   private static final Logger LOG = LoggerFactory.getLogger(Commands.class.getName());
@@ -43,8 +42,7 @@ public final class Commands {
     send(action, Map.of("dataset", dataset), "os.acquisition");
   }
 
-  public void sendIngestion(String action, Map<String, ?> payload)
-      throws CommandDispatchException {
+  public void sendIngestion(String action, Map<String, ?> payload) throws CommandDispatchException {
     send(action, payload, INGEST_SOURCE);
   }
 
@@ -59,21 +57,20 @@ public final class Commands {
 
     try {
       var response =
-          events.putEvents(
-              b ->
-                  b.entries(
-                      PutEventsRequestEntry.builder()
-                          .eventBusName(bus)
-                          .source(source)
-                          .detailType(action)
-                          .detail(detail)
-                          .build()));
+          events.putEvents(b ->
+              b.entries(
+                  PutEventsRequestEntry.builder()
+                      .eventBusName(bus)
+                      .source(source)
+                      .detailType(action)
+                      .detail(detail)
+                      .build()));
       if (response.failedEntryCount() != 0) {
         throw new CommandDispatchException(
             "EventBridge rejected command; invocation must be retried");
       }
-      LOG.info("Published EventBridge command",
-          Map.of("bus", bus, "action", action, "source", source));
+      LOG.info(
+          "Published EventBridge command", Map.of("bus", bus, "action", action, "source", source));
     } catch (SdkException e) {
       throw new CommandDispatchException(
           "Could not publish EventBridge command; invocation must be retried", e);

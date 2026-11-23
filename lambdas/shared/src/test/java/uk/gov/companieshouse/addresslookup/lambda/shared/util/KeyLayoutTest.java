@@ -1,12 +1,12 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.util;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import uk.gov.companieshouse.release.model.Dataset;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 class KeyLayoutTest {
   @Test
@@ -22,13 +22,14 @@ class KeyLayoutTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {
-      "acquisitions/../f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4.json",
-      "acquisitions/2026-02-30/f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4.json",
-      "acquisitions/2026-10-15/not-a-uuid.json",
-      "acquisitions/2026-10-15/extra/f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4.json",
-      "acquisitions/2026-10-15/f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4.csv"
-  })
+  @ValueSource(
+      strings = {
+        "acquisitions/../f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4.json",
+        "acquisitions/2026-02-30/f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4.json",
+        "acquisitions/2026-10-15/not-a-uuid.json",
+        "acquisitions/2026-10-15/extra/f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4.json",
+        "acquisitions/2026-10-15/f3d8c9a7-7b4e-4f62-a9d1-8c5e72f1b6a4.csv"
+      })
   void rejectsInvalidManifestKeys(String key) {
     assertThrows(IllegalArgumentException.class, () -> KeyLayout.parseObjectKey(key));
   }
@@ -48,13 +49,14 @@ class KeyLayoutTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {
-      "Scanned/../add_gb_builtaddress.receipt.json",
-      "Scanned/12345678-1234-1234-1234-123456789abc/extra/add_gb_builtaddress.receipt.json",
-      "Scanned/12345678-1234-1234-1234-123456789abc/unknown.receipt.json",
-      "Scanned/not-a-uuid/add_gb_builtaddress.receipt.json",
-      "Scanned/12345678-1234-1234-1234-123456789abc/add_gb_builtaddress.json"
-  })
+  @ValueSource(
+      strings = {
+        "Scanned/../add_gb_builtaddress.receipt.json",
+        "Scanned/12345678-1234-1234-1234-123456789abc/extra/add_gb_builtaddress.receipt.json",
+        "Scanned/12345678-1234-1234-1234-123456789abc/unknown.receipt.json",
+        "Scanned/not-a-uuid/add_gb_builtaddress.receipt.json",
+        "Scanned/12345678-1234-1234-1234-123456789abc/add_gb_builtaddress.json"
+      })
   void rejectsInvalidReceiptKeys(String key) {
     assertThrows(IllegalArgumentException.class, () -> KeyLayout.parseObjectKey(key));
   }
@@ -74,13 +76,14 @@ class KeyLayoutTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {
-      "Scanned/../add_gb_builtaddress.zip",
-      "Scanned/12345678-1234-1234-1234-123456789abc/extra/add_gb_builtaddress.zip",
-      "Scanned/12345678-1234-1234-1234-123456789abc/unknown.zip",
-      "Scanned/not-a-uuid/add_gb_builtaddress.zip",
-      "Scanned/12345678-1234-1234-1234-123456789abc/add_gb_builtaddress.csv"
-  })
+  @ValueSource(
+      strings = {
+        "Scanned/../add_gb_builtaddress.zip",
+        "Scanned/12345678-1234-1234-1234-123456789abc/extra/add_gb_builtaddress.zip",
+        "Scanned/12345678-1234-1234-1234-123456789abc/unknown.zip",
+        "Scanned/not-a-uuid/add_gb_builtaddress.zip",
+        "Scanned/12345678-1234-1234-1234-123456789abc/add_gb_builtaddress.csv"
+      })
   void rejectsInvalidScannedKeys(String key) {
     assertThrows(IllegalArgumentException.class, () -> KeyLayout.parseObjectKey(key));
   }

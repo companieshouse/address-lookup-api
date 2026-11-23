@@ -1,8 +1,12 @@
 package uk.gov.companieshouse.addresslookup.releasecore.aurora;
 
+import java.io.InputStream;
+import java.time.LocalDate;
+import java.util.UUID;
 import org.postgresql.PGConnection;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,18 +14,19 @@ import uk.gov.companieshouse.release.model.Dataset;
 import uk.gov.companieshouse.release.model.DatasetCatalog;
 import uk.gov.companieshouse.release.model.SupplyType;
 
-import java.io.InputStream;
-import java.time.LocalDate;
-import java.util.UUID;
-
-/** Native bulk SQL only. JdbcTemplate shares the JPA transaction and connection. */
+/**
+ * Native bulk SQL only. Both share the JPA transaction and connection: {@code JdbcClient} is used
+ * for queries, while {@code JdbcTemplate} remains for updates and the raw-connection {@code COPY}.
+ */
 @Repository
 @Transactional(propagation = Propagation.MANDATORY, rollbackFor = Exception.class)
 public class AuroraOperations {
   private final JdbcTemplate jdbc;
+  private final JdbcClient jdbcClient;
 
   public AuroraOperations(JdbcTemplate jdbc) {
     this.jdbc = jdbc;
+    this.jdbcClient = JdbcClient.create(jdbc);
   }
 
   private void begin(Dataset dataset, SupplyType type, UUID id) {
@@ -36,15 +41,14 @@ public class AuroraOperations {
       String bucket,
       String key,
       String region,
-      long rows)
-      throws Exception {
+      long rows) {
     begin(dataset, type, id);
     jdbc.queryForObject(
         "SELECT aws_s3.table_import_from_s3(?,?,?,aws_commons.create_s3_uri(?,?,?))",
         String.class,
         dataset.landing(type),
-            DatasetCatalog.table(dataset).columnList(),
-//        dataset.table().columnList(),
+        DatasetCatalog.table(dataset).columnList(),
+        //        dataset.table().columnList(),
         "(format csv, header true, encoding 'UTF8')",
         bucket,
         key,
@@ -52,8 +56,7 @@ public class AuroraOperations {
     verifyCount(dataset, type, id, rows);
   }
 
-  public void importLocal(Dataset dataset, SupplyType type, UUID id, InputStream csv, long rows)
-      throws Exception {
+  public void importLocal(Dataset dataset, SupplyType type, UUID id, InputStream csv, long rows) {
     begin(dataset, type, id);
     String sql =
         "COPY "
@@ -74,10 +77,13 @@ public class AuroraOperations {
   }
 
   private void verifyCount(Dataset dataset, SupplyType type, UUID id, long expected) {
-    Long actual =
-        jdbc.queryForObject(
-            "SELECT count(*) FROM " + dataset.landing(type) + " WHERE release_id=?", Long.class, id);
-    if (expected < 0 || actual == null || actual != expected)
+    long actual =
+        jdbcClient
+            .sql("SELECT count(*) FROM " + dataset.landing(type) + " WHERE release_id=?")
+            .param(id)
+            .query(Long.class)
+            .single();
+    if (expected < 0 || actual != expected)
       throw new IllegalArgumentException("OS recordCount mismatch: " + dataset.datasetName());
   }
 
@@ -87,8 +93,9 @@ public class AuroraOperations {
 
   public void requireEmptyLiveTables() throws Exception {
     for (var dataset : Dataset.values()) {
-      Long rows = jdbc.queryForObject("SELECT count(*) FROM " +
-      DatasetCatalog.table(dataset).data(), Long.class);
+      Long rows =
+          jdbc.queryForObject(
+              "SELECT count(*) FROM " + DatasetCatalog.table(dataset).data(), Long.class);
       if (rows == null || rows != 0)
         throw new IllegalArgumentException("Full local import requires empty live tables");
     }

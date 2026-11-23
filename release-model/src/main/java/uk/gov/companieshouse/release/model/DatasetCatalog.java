@@ -1,7 +1,6 @@
 package uk.gov.companieshouse.release.model;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.util.List;
 
 public final class DatasetCatalog {
@@ -37,7 +36,8 @@ public final class DatasetCatalog {
       var tables = List.of(new ObjectMapper().readValue(in, Table[].class));
       if (tables.size() != Dataset.values().length
           || tables.stream().map(Table::name).distinct().count() != tables.size())
-        throw new IllegalStateException("Expected one distinct catalogue entry per supported OS dataset");
+        throw new IllegalStateException(
+            "Expected one distinct catalogue entry per supported OS dataset");
       for (var table : tables) Dataset.named(table.name());
       return tables;
     } catch (Exception e) {
@@ -51,9 +51,8 @@ public final class DatasetCatalog {
 
   public static Table table(Dataset dataset) {
     return DatasetCatalog.tables().stream()
-            .filter(t -> t.name().equals(dataset.datasetName()))
-            .findFirst()
-            .orElseThrow();
+        .filter(t -> t.name().equals(dataset.datasetName()))
+        .findFirst()
+        .orElseThrow();
   }
-
 }

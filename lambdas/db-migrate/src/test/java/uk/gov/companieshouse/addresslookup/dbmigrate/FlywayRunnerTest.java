@@ -1,5 +1,22 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
+import java.util.List;
+import java.util.function.Supplier;
+import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.ErrorCode;
 import org.flywaydb.core.api.ErrorDetails;
@@ -28,24 +45,6 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import javax.sql.DataSource;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
-import java.util.List;
-import java.util.function.Supplier;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for FlywayRunner. Flyway itself is mocked, so these cover how the runner configures
@@ -127,7 +126,8 @@ class FlywayRunnerTest {
   @ParameterizedTest
   @EnumSource(Command.class)
   void connectionFailureKeepsItsOwnErrorCode(Command command) {
-    var connectionFailure = new MigrationException(MigrationException.Code.DATABASE_UNAVAILABLE, "no route to host");
+    var connectionFailure =
+        new MigrationException(MigrationException.Code.DATABASE_UNAVAILABLE, "no route to host");
     Supplier<Connection> failingConnectionSupplier =
         () -> {
           throw connectionFailure;
@@ -135,7 +135,9 @@ class FlywayRunnerTest {
 
     var e =
         assertThrows(
-            MigrationException.class, () -> flywayRunner.run(command, migrationsDir, failingConnectionSupplier, LOCK_TIMEOUT));
+            MigrationException.class,
+            () ->
+                flywayRunner.run(command, migrationsDir, failingConnectionSupplier, LOCK_TIMEOUT));
 
     assertEquals(MigrationException.Code.DATABASE_UNAVAILABLE, e.code());
     assertSame(connectionFailure, e);
@@ -194,7 +196,9 @@ class FlywayRunnerTest {
     var outcome = runWithMockedFlyway(Command.INFO);
 
     assertEquals("2026.003", outcome.latestAppliedSchemaVersion());
-    assertEquals(List.of("V2026.004__create_view.sql", "V2026.005__add_index.sql"), outcome.pendingScriptFileNames());
+    assertEquals(
+        List.of("V2026.004__create_view.sql", "V2026.005__add_index.sql"),
+        outcome.pendingScriptFileNames());
     assertEquals(List.of(), outcome.appliedScriptFileNames());
     assertEquals(List.of(), outcome.repairedScriptFileNames());
     assertEquals(List.of(), outcome.repairActions());
@@ -224,7 +228,8 @@ class FlywayRunnerTest {
 
   @Test
   void validateReportsThePendingScriptFileNamesAndIgnoresPendingMigrations() {
-    when(flyway.validateWithResult()).thenReturn(new ValidateResult("13.10.0", "db", null, true, 3, List.of(), List.of()));
+    when(flyway.validateWithResult())
+        .thenReturn(new ValidateResult("13.10.0", "db", null, true, 3, List.of(), List.of()));
     stubInfo(appliedMigrationInfo("2026.003"), pendingMigrationInfo("V2026.004__create_view.sql"));
 
     var outcome = runWithMockedFlyway(Command.VALIDATE);
@@ -262,7 +267,8 @@ class FlywayRunnerTest {
 
     assertEquals("2026.002", outcome.latestAppliedSchemaVersion());
     assertEquals(
-        List.of("V2026.001__create_schemas.sql", "V2026.002__create_tables.sql"), outcome.appliedScriptFileNames());
+        List.of("V2026.001__create_schemas.sql", "V2026.002__create_tables.sql"),
+        outcome.appliedScriptFileNames());
     assertEquals(List.of(), outcome.pendingScriptFileNames());
     verify(fluentConfiguration).ignoreMigrationPatterns("*:future");
   }
@@ -296,7 +302,8 @@ class FlywayRunnerTest {
 
     assertEquals("2026.003", outcome.latestAppliedSchemaVersion());
     assertEquals(List.of("V1__a.sql", "V2__b.sql"), outcome.repairedScriptFileNames());
-    assertEquals(List.of("Removed failed migration V1", "Aligned checksum of V2"), outcome.repairActions());
+    assertEquals(
+        List.of("Removed failed migration V1", "Aligned checksum of V2"), outcome.repairActions());
     assertEquals(List.of(), outcome.appliedScriptFileNames());
     assertEquals(List.of(), outcome.pendingScriptFileNames());
   }
@@ -323,7 +330,9 @@ class FlywayRunnerTest {
   @Test
   void flywayValidateExceptionFailsAsValidationFailed() {
     var validateException =
-        new FlywayValidateException(new ErrorDetails(Mockito.mock(ErrorCode.class), "checksum mismatch"), "checksum mismatch");
+        new FlywayValidateException(
+            new ErrorDetails(Mockito.mock(ErrorCode.class), "checksum mismatch"),
+            "checksum mismatch");
     when(flyway.migrate()).thenThrow(validateException);
 
     var e = assertThrows(MigrationException.class, () -> runWithMockedFlyway(Command.MIGRATE));
@@ -346,9 +355,13 @@ class FlywayRunnerTest {
 
   @Test
   void migrationExceptionWrappedDeepInsideFlywayExceptionIsRethrown() {
-    var databaseUnavailable = new MigrationException(MigrationException.Code.DATABASE_UNAVAILABLE, "connection reset");
+    var databaseUnavailable =
+        new MigrationException(MigrationException.Code.DATABASE_UNAVAILABLE, "connection reset");
     when(flyway.info())
-        .thenThrow(new FlywayException("Unable to obtain connection", new RuntimeException("wrapper", databaseUnavailable)));
+        .thenThrow(
+            new FlywayException(
+                "Unable to obtain connection",
+                new RuntimeException("wrapper", databaseUnavailable)));
 
     var e = assertThrows(MigrationException.class, () -> runWithMockedFlyway(Command.INFO));
 
@@ -357,7 +370,8 @@ class FlywayRunnerTest {
 
   @Test
   void migrationExceptionFromFlywayIsRethrownUnchanged() {
-    var migrationException = new MigrationException(MigrationException.Code.DATABASE_UNAVAILABLE, "lock timeout");
+    var migrationException =
+        new MigrationException(MigrationException.Code.DATABASE_UNAVAILABLE, "lock timeout");
     when(flyway.migrate()).thenThrow(migrationException);
 
     var e = assertThrows(MigrationException.class, () -> runWithMockedFlyway(Command.MIGRATE));
@@ -365,5 +379,3 @@ class FlywayRunnerTest {
     assertSame(migrationException, e);
   }
 }
-
-

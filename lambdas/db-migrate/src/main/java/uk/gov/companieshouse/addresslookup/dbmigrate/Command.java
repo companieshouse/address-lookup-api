@@ -1,8 +1,8 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
-import java.util.Arrays;
-
 import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.INVALID_INPUT;
+
+import java.util.Arrays;
 
 /** Flyway operations the pipeline may request. Names match the Flyway CLI. */
 public enum Command {

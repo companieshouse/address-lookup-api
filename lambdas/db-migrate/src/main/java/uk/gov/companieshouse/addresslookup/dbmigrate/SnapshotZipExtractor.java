@@ -1,5 +1,10 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
+import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.BUNDLE_INVALID;
+import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.BUNDLE_TOO_LARGE;
+import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.MIGRATIONS_NOT_FOUND;
+import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.VALIDATION_FAILED;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -14,11 +19,6 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
-import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.BUNDLE_INVALID;
-import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.BUNDLE_TOO_LARGE;
-import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.MIGRATIONS_NOT_FOUND;
-import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.VALIDATION_FAILED;
-
 /**
  * Copies a Flyway snapshot zip to local disk, calculates its SHA-256 checksum and extracts it defensively.
  * A snapshot holds {@code migrations/**} and nothing else, so seed data can never reach a deployed database.
@@ -26,9 +26,11 @@ import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.C
 public final class SnapshotZipExtractor {
   /** Name of the only top-level directory allowed inside the snapshot zip. */
   static final String MIGRATIONS_DIR_NAME = "migrations";
+
   /** Allowed migration SQL file names: versioned ({@code V2026.001__desc.sql}) or repeatable ({@code R__desc.sql}). */
   private static final Pattern SQL_FILE_NAME_PATTERN =
       Pattern.compile("(V\\d+(\\.\\d+)*+|R)__\\w+\\.sql");
+
   private static final String UNSAFE_ENTRY_MESSAGE_PREFIX = "Unsafe snapshot entry: ";
   private static final int COPY_BUFFER_BYTES = 64 * 1024;
 
@@ -62,20 +64,28 @@ public final class SnapshotZipExtractor {
     Path tempZipFilePath = tempWorkDir.resolve("snapshot.zip");
     MessageDigest sha256Digest = sha256();
     long copiedZipFileBytes =
-        copyWithSizeLimit(new DigestInputStream(inputStreamZipFile, sha256Digest), tempZipFilePath, maxZipFileBytes);
+        copyWithSizeLimit(
+            new DigestInputStream(inputStreamZipFile, sha256Digest),
+            tempZipFilePath,
+            maxZipFileBytes);
     Path extractedRootDir = Files.createDirectories(tempWorkDir.resolve("root")).toRealPath();
 
     int extractedSqlFileCount =
-        extractZipFileEntries(tempZipFilePath, extractedRootDir, maxZipFileBytes, maxZipFileEntries);
+        extractZipFileEntries(
+            tempZipFilePath, extractedRootDir, maxZipFileBytes, maxZipFileEntries);
 
     validateAtLeastOneMigrationSqlFile(extractedSqlFileCount);
     return new ExtractedSnapshot(
-        extractedRootDir, HexFormat.of().formatHex(sha256Digest.digest()), copiedZipFileBytes, extractedSqlFileCount);
+        extractedRootDir,
+        HexFormat.of().formatHex(sha256Digest.digest()),
+        copiedZipFileBytes,
+        extractedSqlFileCount);
   }
 
   /** Validates each zip entry before writing it under {@code extractedRootDir}. Returns the number of SQL files written. */
   private static int extractZipFileEntries(
-      Path tempZipFilePath, Path extractedRootDir, long maxZipFileBytes, int maxZipFileEntries) throws IOException {
+      Path tempZipFilePath, Path extractedRootDir, long maxZipFileBytes, int maxZipFileEntries)
+      throws IOException {
     Path migrationsDir = extractedRootDir.resolve(MIGRATIONS_DIR_NAME);
     int extractedSqlFileCount = 0;
     long totalExpandedByteCount = 0;
@@ -93,9 +103,11 @@ public final class SnapshotZipExtractor {
         validateMigrationSqlFileName(targetPath, migrationsDir, zipEntry);
         // Names such as migrations/V1__a.sql and migrations//V1__a.sql resolve to the same file.
         if (Files.exists(targetPath))
-          throw new MigrationException(BUNDLE_INVALID, "Duplicate snapshot entry: " + zipEntry.getName());
+          throw new MigrationException(
+              BUNDLE_INVALID, "Duplicate snapshot entry: " + zipEntry.getName());
 
-        totalExpandedByteCount += writeEntry(zipArchive, zipEntry, targetPath, maxZipFileBytes - totalExpandedByteCount);
+        totalExpandedByteCount +=
+            writeEntry(zipArchive, zipEntry, targetPath, maxZipFileBytes - totalExpandedByteCount);
         extractedSqlFileCount++;
       }
     } catch (ZipException e) {
@@ -105,7 +117,8 @@ public final class SnapshotZipExtractor {
   }
 
   /** Writes one zip entry to disk, limited to {@code remainingByteAllowance}, and returns the number of bytes written. */
-  private static long writeEntry(ZipFile zipArchive, ZipEntry zipEntry, Path targetPath, long remainingByteAllowance)
+  private static long writeEntry(
+      ZipFile zipArchive, ZipEntry zipEntry, Path targetPath, long remainingByteAllowance)
       throws IOException {
     Files.createDirectories(targetPath.getParent());
     try (InputStream zipEntryStream = zipArchive.getInputStream(zipEntry)) {
@@ -116,14 +129,17 @@ public final class SnapshotZipExtractor {
   /** Rejects a zip with more entries than {@code maxZipFileEntries}, before anything is extracted. */
   private static void validateEntryCount(ZipFile zipArchive, int maxZipFileEntries) {
     if (zipArchive.size() > maxZipFileEntries)
-      throw new MigrationException(BUNDLE_TOO_LARGE, "Snapshot has more than " + maxZipFileEntries + " entries");
+      throw new MigrationException(
+          BUNDLE_TOO_LARGE, "Snapshot has more than " + maxZipFileEntries + " entries");
   }
 
   /** Rejects any entry that resolves outside {@code migrations/}, so seed data cannot be bundled. */
-  private static void validateInsideMigrationsDir(Path targetPath, Path migrationsDir, ZipEntry zipEntry) {
+  private static void validateInsideMigrationsDir(
+      Path targetPath, Path migrationsDir, ZipEntry zipEntry) {
     if (!targetPath.startsWith(migrationsDir))
       throw new MigrationException(
-          BUNDLE_INVALID, "Snapshot entry outside " + MIGRATIONS_DIR_NAME + "/: " + zipEntry.getName());
+          BUNDLE_INVALID,
+          "Snapshot entry outside " + MIGRATIONS_DIR_NAME + "/: " + zipEntry.getName());
   }
 
   /**
@@ -131,19 +147,24 @@ public final class SnapshotZipExtractor {
    * and to sit directly in {@code migrations/}. Flyway would otherwise skip a misnamed file or fail
    * with a generic error mid-run.
    */
-  private static void validateMigrationSqlFileName(Path targetSqlFilePath, Path migrationsDir, ZipEntry zipEntry) {
+  private static void validateMigrationSqlFileName(
+      Path targetSqlFilePath, Path migrationsDir, ZipEntry zipEntry) {
     String sqlFileName = targetSqlFilePath.getFileName().toString();
-    if (!targetSqlFilePath.getParent().equals(migrationsDir) || !SQL_FILE_NAME_PATTERN.matcher(sqlFileName).matches())
+    if (!targetSqlFilePath.getParent().equals(migrationsDir)
+        || !SQL_FILE_NAME_PATTERN.matcher(sqlFileName).matches())
       throw new MigrationException(
           VALIDATION_FAILED,
-          "Misnamed migration " + zipEntry.getName()
+          "Misnamed migration "
+              + zipEntry.getName()
               + ": expected migrations/V<version>__<description>.sql or migrations/R__<description>.sql");
   }
 
   /** Rejects a snapshot that contains no migration SQL files. */
   private static void validateAtLeastOneMigrationSqlFile(int extractedSqlFileCount) {
     if (extractedSqlFileCount == 0)
-      throw new MigrationException(MIGRATIONS_NOT_FOUND, "Snapshot contains no migration SQL files under " + MIGRATIONS_DIR_NAME + "/");
+      throw new MigrationException(
+          MIGRATIONS_NOT_FOUND,
+          "Snapshot contains no migration SQL files under " + MIGRATIONS_DIR_NAME + "/");
   }
 
   /**
@@ -169,7 +190,8 @@ public final class SnapshotZipExtractor {
   }
 
   /** Copies {@code zipInputStream} to {@code targetPath} and returns the bytes copied. Fails once {@code maxBytes} is exceeded. */
-  private static long copyWithSizeLimit(InputStream zipInputStream, Path targetPath, long maxBytes) throws IOException {
+  private static long copyWithSizeLimit(InputStream zipInputStream, Path targetPath, long maxBytes)
+      throws IOException {
     long copiedBytes = 0;
     byte[] copyByteBuffer = new byte[COPY_BUFFER_BYTES];
     try (OutputStream extractedFileOutputStream = Files.newOutputStream(targetPath)) {

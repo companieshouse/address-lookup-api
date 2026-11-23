@@ -1,9 +1,8 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -17,10 +16,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class SnapshotZipExtractorTest {
 
@@ -43,7 +42,9 @@ class SnapshotZipExtractorTest {
     var zipInputStream = new ByteArrayInputStream(zipBytes);
     return assertThrows(
             MigrationException.class,
-            () -> SnapshotZipExtractor.copyAndExtract(zipInputStream, tempWorkDir, maxZipFileBytes, maxZipFileEntries))
+            () ->
+                SnapshotZipExtractor.copyAndExtract(
+                    zipInputStream, tempWorkDir, maxZipFileBytes, maxZipFileEntries))
         .code();
   }
 
@@ -55,12 +56,15 @@ class SnapshotZipExtractorTest {
     entries.put("migrations/V2026.002__create_tables.sql", "SELECT 1;\n");
     byte[] zipBytes = buildZipBytes(entries);
 
-    var extracted = SnapshotZipExtractor.copyAndExtract(new ByteArrayInputStream(zipBytes), tempWorkDir, 1_000_000, 100);
+    var extracted =
+        SnapshotZipExtractor.copyAndExtract(
+            new ByteArrayInputStream(zipBytes), tempWorkDir, 1_000_000, 100);
 
     assertEquals(2, extracted.sqlFileCount());
     assertEquals(zipBytes.length, extracted.copiedZipFileBytes());
     assertEquals(
-        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(zipBytes)), extracted.zipFileSha256());
+        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(zipBytes)),
+        extracted.zipFileSha256());
     assertEquals(
         "CREATE SCHEMA os_data;\n",
         Files.readString(extracted.migrations().resolve("V2026.001__create_schemas.sql")));
@@ -71,7 +75,8 @@ class SnapshotZipExtractorTest {
   void rejectsAnythingOutsideMigrations(String name) throws Exception {
     assertEquals(
         MigrationException.Code.BUNDLE_INVALID,
-        extractAndGetFailureCode(buildZipBytes(Map.of("migrations/V1__ok.sql", "x", name, "x")), 1_000_000, 100));
+        extractAndGetFailureCode(
+            buildZipBytes(Map.of("migrations/V1__ok.sql", "x", name, "x")), 1_000_000, 100));
   }
 
   @ParameterizedTest
@@ -87,29 +92,42 @@ class SnapshotZipExtractorTest {
   void rejectsMisnamedMigrations(String name) throws Exception {
     assertEquals(
         MigrationException.Code.VALIDATION_FAILED,
-        extractAndGetFailureCode(buildZipBytes(Map.of("migrations/V1__ok.sql", "x", name, "x")), 1_000_000, 100));
+        extractAndGetFailureCode(
+            buildZipBytes(Map.of("migrations/V1__ok.sql", "x", name, "x")), 1_000_000, 100));
   }
 
   @Test
   void acceptsVersionedAndRepeatableMigrations() throws Exception {
-    var validEntries = Map.of("migrations/V2026.001__a.sql", "x", "migrations/R__refresh_view.sql", "x");
-    assertEquals(2, SnapshotZipExtractor.copyAndExtract(new ByteArrayInputStream(buildZipBytes(validEntries)), tempWorkDir, 1_000_000, 100).sqlFileCount());
+    var validEntries =
+        Map.of("migrations/V2026.001__a.sql", "x", "migrations/R__refresh_view.sql", "x");
+    assertEquals(
+        2,
+        SnapshotZipExtractor.copyAndExtract(
+                new ByteArrayInputStream(buildZipBytes(validEntries)), tempWorkDir, 1_000_000, 100)
+            .sqlFileCount());
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"../evil.sql", "migrations/../../evil.sql", "/etc/cron.d/x", "C:\\x", "a\\..\\b"})
+  @ValueSource(
+      strings = {"../evil.sql", "migrations/../../evil.sql", "/etc/cron.d/x", "C:\\x", "a\\..\\b"})
   void rejectsPathTraversalAndAbsolutePaths(String name) throws Exception {
-    assertEquals(MigrationException.Code.BUNDLE_INVALID, extractAndGetFailureCode(buildZipBytes(Map.of(name, "x")), 1_000_000, 100));
+    assertEquals(
+        MigrationException.Code.BUNDLE_INVALID,
+        extractAndGetFailureCode(buildZipBytes(Map.of(name, "x")), 1_000_000, 100));
   }
 
   @Test
   void enforcesSizeAndEntryLimits() throws Exception {
     byte[] largeZipBytes = buildZipBytes(Map.of("migrations/V1__big.sql", "x".repeat(10_000)));
-    assertEquals(MigrationException.Code.BUNDLE_TOO_LARGE, extractAndGetFailureCode(largeZipBytes, 5_000, 100));
+    assertEquals(
+        MigrationException.Code.BUNDLE_TOO_LARGE,
+        extractAndGetFailureCode(largeZipBytes, 5_000, 100));
 
     var tooManyEntries = new LinkedHashMap<String, String>();
     for (int i = 0; i < 5; i++) tooManyEntries.put("migrations/V" + (i + 1) + "__f.sql", "x");
-    assertEquals(MigrationException.Code.BUNDLE_TOO_LARGE, extractAndGetFailureCode(buildZipBytes(tooManyEntries), 1_000_000, 4));
+    assertEquals(
+        MigrationException.Code.BUNDLE_TOO_LARGE,
+        extractAndGetFailureCode(buildZipBytes(tooManyEntries), 1_000_000, 4));
   }
 
   @Test
@@ -128,7 +146,9 @@ class SnapshotZipExtractorTest {
     entries.put("migrations/V1__first.sql", "x".repeat(3_000));
     entries.put("migrations/V2__second.sql", "x".repeat(3_000));
 
-    assertEquals(MigrationException.Code.BUNDLE_TOO_LARGE, extractAndGetFailureCode(buildZipBytes(entries), 4_000, 100));
+    assertEquals(
+        MigrationException.Code.BUNDLE_TOO_LARGE,
+        extractAndGetFailureCode(buildZipBytes(entries), 4_000, 100));
   }
 
   @Test
@@ -136,7 +156,9 @@ class SnapshotZipExtractorTest {
     var entries = new LinkedHashMap<String, String>();
     for (int i = 0; i < 4; i++) entries.put("migrations/V" + (i + 1) + "__f.sql", "x");
 
-    var extracted = SnapshotZipExtractor.copyAndExtract(new ByteArrayInputStream(buildZipBytes(entries)), tempWorkDir, 1_000_000, 4);
+    var extracted =
+        SnapshotZipExtractor.copyAndExtract(
+            new ByteArrayInputStream(buildZipBytes(entries)), tempWorkDir, 1_000_000, 4);
 
     assertEquals(4, extracted.sqlFileCount());
   }
@@ -147,14 +169,17 @@ class SnapshotZipExtractorTest {
     entries.put("migrations/V1__ok.sql", "x");
     entries.put("migrations/.gitkeep", "");
 
-    assertEquals(MigrationException.Code.VALIDATION_FAILED, extractAndGetFailureCode(buildZipBytes(entries), 1_000_000, 100));
+    assertEquals(
+        MigrationException.Code.VALIDATION_FAILED,
+        extractAndGetFailureCode(buildZipBytes(entries), 1_000_000, 100));
   }
 
   @Test
   void rejectsADescriptionContainingAHyphen() throws Exception {
     assertEquals(
         MigrationException.Code.VALIDATION_FAILED,
-        extractAndGetFailureCode(buildZipBytes(Map.of("migrations/R__refresh-view.sql", "x")), 1_000_000, 100));
+        extractAndGetFailureCode(
+            buildZipBytes(Map.of("migrations/R__refresh-view.sql", "x")), 1_000_000, 100));
   }
 
   @Test
@@ -163,7 +188,9 @@ class SnapshotZipExtractorTest {
     entries.put("migrations/V1__first.sql", "SELECT 1;");
     entries.put("migrations//V1__first.sql", "SELECT 2;");
 
-    assertEquals(MigrationException.Code.BUNDLE_INVALID, extractAndGetFailureCode(buildZipBytes(entries), 1_000_000, 100));
+    assertEquals(
+        MigrationException.Code.BUNDLE_INVALID,
+        extractAndGetFailureCode(buildZipBytes(entries), 1_000_000, 100));
   }
 
   @Test
@@ -174,8 +201,11 @@ class SnapshotZipExtractorTest {
     var e =
         assertThrows(
             MigrationException.class,
-            () -> SnapshotZipExtractor.copyAndExtract(misnamedZipInputStream, tempWorkDir, 1_000_000, 100));
+            () ->
+                SnapshotZipExtractor.copyAndExtract(
+                    misnamedZipInputStream, tempWorkDir, 1_000_000, 100));
 
-    assertTrue(e.getMessage().startsWith("VALIDATION_FAILED: Misnamed migration migrations/V1_bad.sql"));
+    assertTrue(
+        e.getMessage().startsWith("VALIDATION_FAILED: Misnamed migration migrations/V1_bad.sql"));
   }
 }

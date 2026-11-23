@@ -38,7 +38,9 @@ public record MigrationConfig(
         // A migration waiting this long for a lock fails rather than queueing API reads behind it.
         env.getOrDefault("LOCK_TIMEOUT", DEFAULT_LOCK_TIMEOUT),
         parseWholeNumber(
-            "MAX_BUNDLE_BYTES", env.getOrDefault("MAX_BUNDLE_BYTES", String.valueOf(DEFAULT_MAX_BUNDLE_BYTES)), Long::parseLong),
+            "MAX_BUNDLE_BYTES",
+            env.getOrDefault("MAX_BUNDLE_BYTES", String.valueOf(DEFAULT_MAX_BUNDLE_BYTES)),
+            Long::parseLong),
         parseWholeNumber(
             "MAX_BUNDLE_ENTRIES",
             env.getOrDefault("MAX_BUNDLE_ENTRIES", String.valueOf(DEFAULT_MAX_BUNDLE_ENTRIES)),
@@ -46,7 +48,8 @@ public record MigrationConfig(
   }
 
   /** Parses an environment value such as {@code 1000}, and reports the variable name when it is not a whole number. */
-  private static <T extends Number> T parseWholeNumber(String envName, String envValue, Function<String, T> parser) {
+  private static <T extends Number> T parseWholeNumber(
+      String envName, String envValue, Function<String, T> parser) {
     try {
       return parser.apply(envValue);
     } catch (NumberFormatException e) {

@@ -1,5 +1,12 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,18 +20,11 @@ import software.amazon.awssdk.services.ssm.model.GetParameterResponse;
 import software.amazon.awssdk.services.ssm.model.Parameter;
 import software.amazon.awssdk.services.ssm.model.ParameterNotFoundException;
 
-import java.util.function.Consumer;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 @ExtendWith(MockitoExtension.class)
 class ParameterStoreDbCredentialsSourceTest {
 
-  private static final String DB_CREDENTIALS_PARAMETER_PATH = "/address-lookup/test/db/schema-owner";
+  private static final String DB_CREDENTIALS_PARAMETER_PATH =
+      "/address-lookup/test/db/schema-owner";
 
   @Mock private SsmClient ssmClient;
 
@@ -54,12 +54,14 @@ class ParameterStoreDbCredentialsSourceTest {
   @Test
   void returnsTheCredentialsStoredInTheParameter() {
     when(ssmClient.getParameter(ArgumentMatchers.<Consumer<GetParameterRequest.Builder>>any()))
-        .thenReturn(parameterResponseWithValue(
-            "{\"host\":\"db.local\",\"port\":5432,\"dbname\":\"address_lookup\",\"username\":\"owner\",\"password\":\"pw\"}"));
+        .thenReturn(
+            parameterResponseWithValue(
+                "{\"host\":\"db.local\",\"port\":5432,\"dbname\":\"address_lookup\",\"username\":\"owner\",\"password\":\"pw\"}"));
 
     var credentials = parameterStoreDbCredentialsSource.get(DB_CREDENTIALS_PARAMETER_PATH);
 
-    assertEquals("jdbc:postgresql://db.local:5432/address_lookup?sslmode=require", credentials.jdbcUrl());
+    assertEquals(
+        "jdbc:postgresql://db.local:5432/address_lookup?sslmode=require", credentials.jdbcUrl());
     assertEquals("owner", credentials.username());
     assertEquals("pw", credentials.password());
   }
@@ -67,12 +69,15 @@ class ParameterStoreDbCredentialsSourceTest {
   @Test
   void requestsTheParameterByPathWithDecryption() {
     when(ssmClient.getParameter(ArgumentMatchers.<Consumer<GetParameterRequest.Builder>>any()))
-        .thenReturn(parameterResponseWithValue("{\"jdbcUrl\":\"jdbc:postgresql://h/d?sslmode=require\",\"username\":\"u\",\"password\":\"p\"}"));
+        .thenReturn(
+            parameterResponseWithValue(
+                "{\"jdbcUrl\":\"jdbc:postgresql://h/d?sslmode=require\",\"username\":\"u\",\"password\":\"p\"}"));
 
     parameterStoreDbCredentialsSource.get(DB_CREDENTIALS_PARAMETER_PATH);
 
     @SuppressWarnings("unchecked")
-    ArgumentCaptor<Consumer<GetParameterRequest.Builder>> requestCustomiserCaptor = ArgumentCaptor.forClass(Consumer.class);
+    ArgumentCaptor<Consumer<GetParameterRequest.Builder>> requestCustomiserCaptor =
+        ArgumentCaptor.forClass(Consumer.class);
     verify(ssmClient).getParameter(requestCustomiserCaptor.capture());
     var requestBuilder = GetParameterRequest.builder();
     requestCustomiserCaptor.getValue().accept(requestBuilder);
@@ -95,7 +100,8 @@ class ParameterStoreDbCredentialsSourceTest {
   }
 
   private static GetParameterResponse parameterResponseWithValue(String value) {
-    return GetParameterResponse.builder().parameter(Parameter.builder().value(value).build()).build();
+    return GetParameterResponse.builder()
+        .parameter(Parameter.builder().value(value).build())
+        .build();
   }
 }
-

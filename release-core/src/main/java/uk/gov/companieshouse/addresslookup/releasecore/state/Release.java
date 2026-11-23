@@ -1,17 +1,15 @@
 package uk.gov.companieshouse.addresslookup.releasecore.state;
 
 import jakarta.persistence.*;
-import uk.gov.companieshouse.release.model.SupplyType;
-
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
+import uk.gov.companieshouse.release.model.SupplyType;
 
 @Entity
 @Table(name = "release", schema = "os_control")
 public class Release {
-  @Id
-  private UUID id;
+  @Id private UUID id;
 
   @Enumerated(EnumType.STRING)
   @Column(name = "supply_type")

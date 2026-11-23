@@ -1,22 +1,21 @@
-# Depends on the s3 group from ALS-103 (aws_s3_bucket.this, local.account_id, local.bucket_prefix, var.aws_region).
-
 variable "guardduty_scan_prefixes" {
   type        = list(string)
-  description = "Prefixes within landing/ scanned by GuardDuty; control/ must never be scanned"
-  default     = ["landing/"]
+  description = "Optional literal scan prefixes within the configured landing prefix"
+  default     = null
 
   validation {
-    condition     = length(var.guardduty_scan_prefixes) > 0 && alltrue([for prefix in var.guardduty_scan_prefixes : startswith(prefix, "landing/")])
-    error_message = "GuardDuty scan prefixes must be restricted to landing/."
+    condition     = var.guardduty_scan_prefixes == null ? true : length(var.guardduty_scan_prefixes) > 0 && length(var.guardduty_scan_prefixes) <= 5 && alltrue([for prefix in var.guardduty_scan_prefixes : !strcontains(prefix, "*") && !strcontains(prefix, "?")])
+    error_message = "Supply one to five literal GuardDuty scan prefixes without IAM wildcards."
   }
 }
 
 locals {
   guardduty_service_principal = "malware-protection-plan.guardduty.amazonaws.com"
   guardduty_role_name         = "${local.bucket_prefix}-guardduty-malware-scan"
-  landing_bucket_arn          = aws_s3_bucket.this["landing"].arn
+  landing_bucket_arn          = data.aws_s3_bucket.acquisition.arn
   guardduty_rule_arn          = "arn:aws:events:${var.aws_region}:${local.account_id}:rule/DO-NOT-DELETE-AmazonGuardDutyMalwareProtectionS3*"
-  guardduty_object_arns       = [for prefix in var.guardduty_scan_prefixes : "${local.landing_bucket_arn}/${prefix}*"]
+  guardduty_scan_prefixes     = var.guardduty_scan_prefixes != null ? var.guardduty_scan_prefixes : [local.landing_prefix]
+  guardduty_object_arns       = [for prefix in local.guardduty_scan_prefixes : "${local.landing_bucket_arn}/${prefix}*"]
 }
 
 data "aws_iam_policy_document" "guardduty_assume_role" {
@@ -120,26 +119,37 @@ data "aws_iam_policy_document" "guardduty" {
 }
 
 resource "aws_iam_role" "guardduty" {
+  count              = var.manage_guardduty_plan ? 1 : 0
   name               = local.guardduty_role_name
   assume_role_policy = data.aws_iam_policy_document.guardduty_assume_role.json
 
   tags = merge(module.iac_tags.tags, module.owner_tags.tags)
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_iam_role_policy" "guardduty" {
+  count  = var.manage_guardduty_plan ? 1 : 0
   name   = "malware-protection-landing"
-  role   = aws_iam_role.guardduty.id
+  role   = aws_iam_role.guardduty[0].id
   policy = data.aws_iam_policy_document.guardduty.json
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Only landing/ is scanned; control/ in the same bucket is deliberately excluded.
 resource "aws_guardduty_malware_protection_plan" "landing" {
-  role = aws_iam_role.guardduty.arn
+  count = var.manage_guardduty_plan ? 1 : 0
+  role  = aws_iam_role.guardduty[0].arn
 
   protected_resource {
     s3_bucket {
-      bucket_name     = aws_s3_bucket.this["landing"].id
-      object_prefixes = var.guardduty_scan_prefixes
+      bucket_name     = data.aws_s3_bucket.acquisition.id
+      object_prefixes = local.guardduty_scan_prefixes
     }
   }
 
@@ -152,15 +162,24 @@ resource "aws_guardduty_malware_protection_plan" "landing" {
 
   tags = merge(module.iac_tags.tags, module.owner_tags.tags)
 
+  lifecycle {
+    prevent_destroy = true
+
+    precondition {
+      condition     = alltrue([for prefix in local.guardduty_scan_prefixes : startswith(prefix, local.landing_prefix)])
+      error_message = "GuardDuty scan prefixes must be restricted to the configured landing prefix."
+    }
+  }
+
   depends_on = [aws_iam_role_policy.guardduty]
 }
 
 output "guardduty_malware_protection_plan_id" {
   description = "The ID of the Landing bucket's GuardDuty Malware Protection plan"
-  value       = aws_guardduty_malware_protection_plan.landing.id
+  value       = try(aws_guardduty_malware_protection_plan.landing[0].id, null)
 }
 
 output "guardduty_role_arn" {
   description = "The ARN of the IAM role assumed by GuardDuty Malware Protection"
-  value       = aws_iam_role.guardduty.arn
+  value       = try(aws_iam_role.guardduty[0].arn, null)
 }

@@ -1,11 +1,11 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
+import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.INVALID_INPUT;
+
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
-
-import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.INVALID_INPUT;
 
 /**
  * Invocation payload, for example:
@@ -18,13 +18,16 @@ import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.C
 public record MigrationRequest(Command command, String key, String versionId, String sha256) {
 
   private static final Set<String> COMMAND_FIELDS = Set.of("command", "key", "versionId", "sha256");
-  private static final Pattern ZIP_FILE_LOCATION_PATTERN = Pattern.compile("address-lookup/db-schema-snapshots/[A-Za-z0-9._-]{1,200}\\.zip");
+  private static final Pattern ZIP_FILE_LOCATION_PATTERN =
+      Pattern.compile("address-lookup/db-schema-snapshots/[A-Za-z0-9._-]{1,200}\\.zip");
   private static final Pattern SHA256_PATTERN = Pattern.compile("[0-9a-f]{64}");
   private static final int MAX_VERSION_ID_LENGTH = 1024;
 
   public MigrationRequest {
     require(command != null, "command is required");
-    require(key != null && ZIP_FILE_LOCATION_PATTERN.matcher(key).matches(), "key must match address-lookup/db-schema-snapshots/<name>.zip");
+    require(
+        key != null && ZIP_FILE_LOCATION_PATTERN.matcher(key).matches(),
+        "key must match address-lookup/db-schema-snapshots/<name>.zip");
     require(
         versionId != null && !versionId.isBlank() && versionId.length() <= MAX_VERSION_ID_LENGTH,
         "versionId is required");

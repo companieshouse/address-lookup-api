@@ -1,12 +1,11 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.acquisition;
 
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
+
 import com.fasterxml.jackson.databind.JsonNode;
+import java.util.UUID;
 import uk.gov.companieshouse.release.model.Dataset;
 import uk.gov.companieshouse.release.model.DatasetCatalog;
-
-import java.util.UUID;
-
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
 
 public final class AcquisitionSupport {
 

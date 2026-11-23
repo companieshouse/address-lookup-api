@@ -1,16 +1,8 @@
 package uk.gov.companieshouse.addresslookup.dbmigrate;
 
-import org.flywaydb.core.Flyway;
-import org.flywaydb.core.api.FlywayException;
-import org.flywaydb.core.api.MigrationInfo;
-import org.flywaydb.core.api.configuration.FluentConfiguration;
-import org.flywaydb.core.api.exception.FlywayValidateException;
-import org.flywaydb.core.api.output.RepairResult;
-import org.flywaydb.database.postgresql.PostgreSQLConfigurationExtension;
-import uk.gov.companieshouse.logging.Logger;
-import uk.gov.companieshouse.logging.LoggerFactory;
+import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.MIGRATION_FAILED;
+import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.VALIDATION_FAILED;
 
-import javax.sql.DataSource;
 import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -21,9 +13,16 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
-
-import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.MIGRATION_FAILED;
-import static uk.gov.companieshouse.addresslookup.dbmigrate.MigrationException.Code.VALIDATION_FAILED;
+import javax.sql.DataSource;
+import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.FlywayException;
+import org.flywaydb.core.api.MigrationInfo;
+import org.flywaydb.core.api.configuration.FluentConfiguration;
+import org.flywaydb.core.api.exception.FlywayValidateException;
+import org.flywaydb.core.api.output.RepairResult;
+import org.flywaydb.database.postgresql.PostgreSQLConfigurationExtension;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
 
 /**
  * Thin wrapper over the Flyway Community API. Flyway's lock on its schema history table
@@ -45,7 +44,10 @@ public final class FlywayRunner {
       List<String> repairActions) {}
 
   public Outcome run(
-      Command command, Path migrationsDir, Supplier<Connection> dbConnectionSupplier, String lockTimeout) {
+      Command command,
+      Path migrationsDir,
+      Supplier<Connection> dbConnectionSupplier,
+      String lockTimeout) {
     FluentConfiguration configuration =
         Flyway.configure(FlywayRunner.class.getClassLoader())
             .dataSource(new FactoryDataSource(dbConnectionSupplier))
@@ -58,14 +60,18 @@ public final class FlywayRunner {
             .outOfOrder(false)
             .connectRetries(0)
             .initSql("SET lock_timeout = '" + lockTimeout + "'")
-            // The validate command checks only what has been applied, so pending migrations are not an error.
+            // The validate command checks only what has been applied, so pending migrations are not
+            // an error.
             .ignoreMigrationPatterns(command == Command.VALIDATE ? "*:pending" : "*:future");
-    // By default, Flyway holds its lock inside a transaction that stays open for the whole migration.
+    // By default, Flyway holds its lock inside a transaction that stays open for the whole
+    // migration.
     // CREATE INDEX CONCURRENTLY must wait for every older open transaction to finish,
     // so it would wait for Flyway's own lock transaction, which in turn waits for the migration.
     // Use a session-level lock instead, so there is no long-running transaction to wait for.
     // Concurrent runs are still serialised by the lock.
-    configuration.getConfigurationExtension(PostgreSQLConfigurationExtension.class).setTransactionalLock(false);
+    configuration
+        .getConfigurationExtension(PostgreSQLConfigurationExtension.class)
+        .setTransactionalLock(false);
     Flyway flyway = configuration.load();
     LOG.info(
         "Flyway using migrations",
@@ -85,7 +91,8 @@ public final class FlywayRunner {
       throw new MigrationException(VALIDATION_FAILED, e.getMessage(), e);
     } catch (FlywayException e) {
       // The connection supplier throws a MigrationException when it cannot connect to the database.
-      // Flyway wraps that exception inside a FlywayException, so the original error would be hidden.
+      // Flyway wraps that exception inside a FlywayException, so the original error would be
+      // hidden.
       // Walk the cause chain to find it and rethrow it, so the caller sees its own error code
       // instead of a generic MIGRATION_FAILED.
       for (Throwable cause = e.getCause(); cause != null; cause = cause.getCause())
@@ -121,7 +128,8 @@ public final class FlywayRunner {
         var migrateResult = flyway.migrate();
         var appliedScriptFileNames =
             migrateResult.migrations.stream()
-                .map(appliedMigration -> Path.of(appliedMigration.filepath).getFileName().toString())
+                .map(
+                    appliedMigration -> Path.of(appliedMigration.filepath).getFileName().toString())
                 .toList();
         yield new Outcome(
             getLatestAppliedSchemaVersionOrNull(flyway.info().current()),
@@ -143,7 +151,8 @@ public final class FlywayRunner {
   }
 
   /** Returns null when no migration has been applied yet, for example on an empty database. */
-  private static String getLatestAppliedSchemaVersionOrNull(MigrationInfo latestAppliedMigrationInfo) {
+  private static String getLatestAppliedSchemaVersionOrNull(
+      MigrationInfo latestAppliedMigrationInfo) {
     return latestAppliedMigrationInfo == null || latestAppliedMigrationInfo.getVersion() == null
         ? null
         : latestAppliedMigrationInfo.getVersion().getVersion();
@@ -154,8 +163,12 @@ public final class FlywayRunner {
    * An entry without a file path, such as a failed migration that only exists in the schema history, is left out.
    * Use {@link #getRepairActionsFromRepairResult} to see that something happened to such an entry.
    */
-  private static List<String> getRepairedScriptFileNamesFromRepairResult(RepairResult repairResult) {
-    return Stream.of(repairResult.migrationsRemoved, repairResult.migrationsDeleted, repairResult.migrationsAligned)
+  private static List<String> getRepairedScriptFileNamesFromRepairResult(
+      RepairResult repairResult) {
+    return Stream.of(
+            repairResult.migrationsRemoved,
+            repairResult.migrationsDeleted,
+            repairResult.migrationsAligned)
         .filter(Objects::nonNull)
         .flatMap(List::stream)
         .map(repairedMigration -> repairedMigration.filepath)
@@ -171,12 +184,14 @@ public final class FlywayRunner {
   }
 
   /** Returns the script file names (for example {@code V2026.004__create_address_lookup_view.sql}) of migrations not yet applied. */
-  private static List<String> getPendingScriptFileNamesFromMigrationInfos(MigrationInfo[] pendingMigrationInfos) {
+  private static List<String> getPendingScriptFileNamesFromMigrationInfos(
+      MigrationInfo[] pendingMigrationInfos) {
     return Arrays.stream(pendingMigrationInfos).map(MigrationInfo::getScript).toList();
   }
 
   /** Each getConnection call opens a fresh connection, and Flyway closes every connection it opens. */
-  private record FactoryDataSource(Supplier<Connection> dbConnectionSupplier) implements DataSource {
+  private record FactoryDataSource(Supplier<Connection> dbConnectionSupplier)
+      implements DataSource {
     @Override
     public Connection getConnection() {
       return dbConnectionSupplier.get();

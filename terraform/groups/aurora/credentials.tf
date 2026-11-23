@@ -3,6 +3,7 @@
 # Lambda invocation payload or a pipeline log:
 #   /address-lookup/<environment>/db/master        read only by the bootstrap Lambda
 #   /address-lookup/<environment>/db/schema-owner  read by the bootstrap and db-migrate Lambdas
+#   /address-lookup/<environment>/db/upload        read only by the acquisition Upload Lambda
 # Rotation: change the value in Vault, then apply this group. The parameters are overwritten and
 # the bootstrap re-runs (its triggers include the schema owner's password hash), which sets the new
 # password on the role. The Lambdas read the parameters on every invocation, so nothing is redeployed.

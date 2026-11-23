@@ -49,3 +49,9 @@ variable "db_migrate_function_name" {
   description = "function_name of the db-migrate Lambda (terraform/groups/db-migrate); its role may read the schema-owner parameter through the SSM endpoint"
   default     = "address-lookup-db-migrate"
 }
+
+variable "upload_function_name" {
+  type        = string
+  description = "function_name of the acquisition Upload Lambda (terraform/groups/acquisition); its role may read the upload parameter through the SSM endpoint"
+  default     = "address-lookup-ngd-upload"
+}

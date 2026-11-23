@@ -11,6 +11,10 @@ locals {
   schema_owner_username = data.vault_generic_secret.aurora.data["schema_owner_username"]
   schema_owner_password = data.vault_generic_secret.aurora.data["schema_owner_password"]
 
+  # The role the acquisition Upload Lambda (terraform/groups/acquisition) connects as.
+  upload_username = data.vault_generic_secret.aurora.data["upload_username"]
+  upload_password = data.vault_generic_secret.aurora.data["upload_password"]
+
   vpc_name = data.vault_generic_secret.stack_secrets.data["vpc_name"]
 
   # TLS: every connection encrypted, TLS 1.3 only (the agreed post-quantum readiness step).
@@ -37,17 +41,20 @@ locals {
   db_bootstrap_function_name = "address-lookup-db-bootstrap"
   db_bootstrap_lambda_name   = "${local.db_bootstrap_function_name}-${var.environment}"
   db_migrate_role_arn        = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.db_migrate_function_name}-${var.environment}-lambda-role"
+  upload_role_arn            = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.upload_function_name}-${var.environment}-lambda-role"
 
   database_port = 5432
 
   # aws/parameter-store names each parameter /<name_prefix>/<key>:
-  # /address-lookup/<environment>/db/master and /address-lookup/<environment>/db/schema-owner.
+  # /address-lookup/<environment>/db/master, .../db/schema-owner and .../db/upload.
   parameter_prefix            = "address-lookup/${var.environment}/db"
   master_parameter_name       = "/${local.parameter_prefix}/master"
   schema_owner_parameter_name = "/${local.parameter_prefix}/schema-owner"
   parameter_arn_prefix        = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter"
   master_parameter_arn        = "${local.parameter_arn_prefix}${local.master_parameter_name}"
   schema_owner_parameter_arn  = "${local.parameter_arn_prefix}${local.schema_owner_parameter_name}"
+  upload_parameter_name       = "/${local.parameter_prefix}/upload"
+  upload_parameter_arn        = "${local.parameter_arn_prefix}${local.upload_parameter_name}"
   parameters_kms_alias        = "alias/${var.aws_profile}/environment-services-kms"
 
   # The writer (cluster) endpoint, never the reader. sslmode=require encrypts every connection without a
@@ -66,6 +73,11 @@ locals {
     "schema-owner" = jsonencode({
       username = local.schema_owner_username
       password = local.schema_owner_password
+      jdbcUrl  = local.jdbc_url
+    })
+    "upload" = jsonencode({
+      username = local.upload_username
+      password = local.upload_password
       jdbcUrl  = local.jdbc_url
     })
   }

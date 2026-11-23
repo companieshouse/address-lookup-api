@@ -15,6 +15,18 @@ db_migrate_lambda_module   := lambdas/db-migrate
 db_migrate_lambda_jar      := address-lookup-lambda-db-migrate
 db_migrate_lambda_artifact := address-lookup-db-migrate
 
+# The acquisition Lambdas (terraform/groups/acquisition), released together on the
+# acquisition-lambdas-X.Y.Z tag stream. Each shaded jar is published as
+# address-lookup-ngd-<name>-<version>.zip, the key the Terraform deploys.
+acquisition_lambda_names    := download extraction upload
+acquisition_module_download   := lambdas/download
+acquisition_module_extraction := lambdas/unzip
+acquisition_module_upload     := lambdas/upload
+acquisition_jar_download      := address-lookup-lambda-download-latest.jar
+acquisition_jar_extraction    := address-lookup-lambda-unzip-latest.jar
+acquisition_jar_upload        := address-lookup-lambda-upload-latest.jar
+acquisition_lambda_artifact   := address-lookup-ngd
+
 # Flyway migrations in database/migrations, released on the db-schema-X.Y.Z tag
 # stream. Local repeatable seeds in database/local are never packaged.
 db_schema_artifact  := address-lookup-db-schema
@@ -59,6 +71,7 @@ clean:
 	rm -f $(db_bootstrap_lambda_artifact)-*.zip
 	rm -f $(db_migrate_lambda_artifact)-*.zip
 	rm -f $(db_schema_artifact)-*.zip
+	rm -f $(acquisition_lambda_artifact)-*.zip
 	rm -f $(artifact_name).jar
 	rm -rf ./build-*
 	rm -f ./build.log
@@ -213,6 +226,17 @@ endif
 	$(MVN) versions:set -DnewVersion=$(version) -DgenerateBackupPoms=false
 	$(MVN) -pl $(db_migrate_lambda_module) -am package -DskipTests=true
 	cp ./$(db_migrate_lambda_module)/target/$(db_migrate_lambda_jar)-$(version)-lambda.jar ./$(db_migrate_lambda_artifact)-$(version).zip
+
+.PHONY: package-acquisition-lambdas
+package-acquisition-lambdas:
+	@# Help: Build the Download, Extraction and Upload Lambdas as $(acquisition_lambda_artifact)-<name>-<version>.zip
+ifndef version
+	$(error No version given. Aborting)
+endif
+	$(info Packaging acquisition Lambdas version: $(version))
+	$(MVN) versions:set -DnewVersion=$(version) -DgenerateBackupPoms=false
+	$(MVN) -pl $(subst $(space),$(comma),$(foreach name,$(acquisition_lambda_names),$(acquisition_module_$(name)))) -am package -Dskip.unit.tests=true -Dskip.integration.tests=true
+	$(foreach name,$(acquisition_lambda_names),cp ./$(acquisition_module_$(name))/target/$(acquisition_jar_$(name)) ./$(acquisition_lambda_artifact)-$(name)-$(version).zip;)
 
 .PHONY: package-db-schema
 package-db-schema:

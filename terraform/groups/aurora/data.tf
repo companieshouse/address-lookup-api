@@ -49,8 +49,9 @@ data "aws_iam_policy_document" "db_bootstrap" {
   }
 }
 
-# What may pass through the SSM endpoint: the bootstrap Lambda may read both parameters, the
-# db-migrate Lambda (terraform/groups/db-migrate) only the schema owner's.
+# What may pass through the SSM endpoint: the bootstrap Lambda may read the master and schema-owner
+# parameters, the db-migrate Lambda (terraform/groups/db-migrate) only the schema owner's, and the
+# acquisition Upload Lambda (terraform/groups/acquisition) only its own.
 data "aws_iam_policy_document" "ssm_endpoint" {
   statement {
     sid       = "BootstrapReadsDatabaseCredentials"
@@ -85,6 +86,24 @@ data "aws_iam_policy_document" "ssm_endpoint" {
       test     = "ArnEquals"
       variable = "aws:PrincipalArn"
       values   = [local.db_migrate_role_arn]
+    }
+  }
+
+  statement {
+    sid       = "UploadReadsUploadCredentials"
+    effect    = "Allow"
+    actions   = ["ssm:GetParameter"]
+    resources = [local.upload_parameter_arn]
+
+    principals {
+      type        = "AWS"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:PrincipalArn"
+      values   = [local.upload_role_arn]
     }
   }
 }

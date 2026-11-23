@@ -10,8 +10,8 @@ migration Lambdas read from Parameter Store.
 |------|---------|
 | Aurora cluster | `<env>-address-rds`, database `addressdb`, terraform-modules `aws/aurora`. |
 | TLS | Cluster parameter group: `rds.force_ssl=1`, `ssl_min_protocol_version=TLSv1.3` (the agreed post-quantum readiness step). Both the master and schema-owner jdbcUrls use `sslmode=require`: always encrypted, with no CA file in the repo or the Lambda zips. The cluster refuses non-TLS and pre-1.3 connections. |
-| Credentials | SecureStrings `/address-lookup/<env>/db/master` and `/address-lookup/<env>/db/schema-owner` = `{"username","password","jdbcUrl"}` (writer endpoint), written from Vault by `module.credentials` and encrypted with `alias/<aws_profile>/environment-services-kms`. |
-| SSM endpoint | Interface endpoint `address-lookup-<env>-ssm` (private DNS off) and its security group `address-lookup-<env>-ssm-endpoint`. Its policy lets the bootstrap Lambda read both parameters and the db-migrate Lambda's role read only the schema owner's. `terraform/groups/db-migrate` looks both up by Name tag. |
+| Credentials | SecureStrings `/address-lookup/<env>/db/master`, `/address-lookup/<env>/db/schema-owner` and `/address-lookup/<env>/db/upload` = `{"username","password","jdbcUrl"}` (writer endpoint), written from Vault by `module.credentials` and encrypted with `alias/<aws_profile>/environment-services-kms`. |
+| SSM endpoint | Interface endpoint `address-lookup-<env>-ssm` (private DNS off) and its security group `address-lookup-<env>-ssm-endpoint`. Its policy lets the bootstrap Lambda read the master and schema-owner parameters, the db-migrate Lambda's role read only the schema owner's, and the acquisition Upload Lambda's role read only the upload parameter. `terraform/groups/db-migrate` and `terraform/groups/acquisition` look both up by Name tag. |
 | db-bootstrap Lambda | `address-lookup-db-bootstrap-<env>` (code: `lambdas/db-bootstrap`). No CIDR egress to the internet: only Aurora (5432), the SSM endpoint (443) and DNS (53 udp/tcp) to the VPC's DHCP resolvers (/32 each). No event sources or invoke permissions. |
 | Bootstrap run | `aws_lambda_invocation.db_bootstrap` runs `{"command":"bootstrap"}` on the first apply and whenever the release, the cluster, the schema owner's credentials or the TLS settings change. A failure fails the apply. |
 
@@ -59,6 +59,15 @@ integration test, which requires Docker.
     schema_owner_password="$(openssl rand -base64 33 | tr -d '/+=' | cut -c1-40)"
   ```
 
+  And the acquisition Upload Lambda's login (ALS-140), written to `/address-lookup/<env>/db/upload`.
+  The bootstrap does not create this role; it must exist in the database with the grants Upload needs:
+
+  ```sh
+  vault kv patch applications/<aws_profile>/<env>/common-services-stack/address-rds \
+    upload_username=address_lookup_upload \
+    upload_password="$(openssl rand -base64 33 | tr -d '/+=' | cut -c1-40)"
+  ```
+
 * **The db-bootstrap release** `address-lookup-db-bootstrap-<version>.zip` in the release bucket
   (Concourse `db-bootstrap-lambda-release` job, from a `db-bootstrap-lambda-X.Y.Z` tag).
 * **No CA bundle.** The master jdbcUrl uses `sslmode=require` (the bootstrap Lambda also accepts
@@ -70,8 +79,9 @@ integration test, which requires Docker.
 ## Deployment
 
 The pipeline's aurora plan/apply jobs pass `release_bucket_name` and `db_bootstrap_release_artifact_key`.
-Apply this group **before** `terraform/groups/db-migrate`, which looks up the SSM endpoint and the
-schema-owner parameter created here.
+Apply this group **before** `terraform/groups/db-migrate` and `terraform/groups/acquisition`, which look up
+the SSM endpoint and the schema-owner and upload parameters created here. Vault must have
+`upload_username` and `upload_password` before this group is planned.
 
 Note: this branch is based on ALS-81, so the first apply also upgrades the engine to 18.6.
 
@@ -174,6 +184,7 @@ After the first `<env>-db-schema-migrate`, Flyway's `info` shows V2026.001 to V2
 | <a name="input_db_bootstrap_release_artifact_key"></a> [db\_bootstrap\_release\_artifact\_key](#input\_db\_bootstrap\_release\_artifact\_key) | Key of the db-bootstrap Lambda code (address-lookup-db-bootstrap-<version>.zip) in the release bucket | `string` | n/a | yes |
 | <a name="input_db_bootstrap_timeout_seconds"></a> [db\_bootstrap\_timeout\_seconds](#input\_db\_bootstrap\_timeout\_seconds) | Timeout, in seconds, for the db-bootstrap Lambda | `number` | `120` | no |
 | <a name="input_db_migrate_function_name"></a> [db\_migrate\_function\_name](#input\_db\_migrate\_function\_name) | function\_name of the db-migrate Lambda (terraform/groups/db-migrate); its role may read the schema-owner parameter through the SSM endpoint | `string` | `"address-lookup-db-migrate"` | no |
+| <a name="input_upload_function_name"></a> [upload\_function\_name](#input\_upload\_function\_name) | function\_name of the acquisition Upload Lambda (terraform/groups/acquisition); its role may read the upload parameter through the SSM endpoint | `string` | `"address-lookup-ngd-upload"` | no |
 | <a name="input_environment"></a> [environment](#input\_environment) | The environment name, defined in environments vars. | `string` | n/a | yes |
 | <a name="input_hashicorp_vault_password"></a> [hashicorp\_vault\_password](#input\_hashicorp\_vault\_password) | The password used when retrieving configuration from Hashicorp Vault | `string` | n/a | yes |
 | <a name="input_hashicorp_vault_username"></a> [hashicorp\_vault\_username](#input\_hashicorp\_vault\_username) | The username used when retrieving configuration from Hashicorp Vault | `string` | n/a | yes |

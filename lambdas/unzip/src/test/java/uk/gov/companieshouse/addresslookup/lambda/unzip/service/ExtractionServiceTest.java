@@ -284,7 +284,7 @@ final class ExtractionServiceTest {
             .orElseThrow();
     assertEquals("PERMANENT_FAILURE", structuredField(failureLog, "outcome"));
     assertEquals("CSV_NOT_FOUND", structuredField(failureLog, "reason_code"));
-    assertEquals(ID, structuredField(failureLog, "releaseId"));
+    assertEquals(ID, structuredField(failureLog, "release_id"));
     assertEquals(DATASET, structuredField(failureLog, "dataset"));
     assertEquals(ZIP_KEY, structuredField(failureLog, "s3_key"));
   }

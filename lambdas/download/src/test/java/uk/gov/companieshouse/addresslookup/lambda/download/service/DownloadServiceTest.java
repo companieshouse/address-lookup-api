@@ -283,7 +283,7 @@ final class DownloadServiceTest {
     Exception exception =
         assertThrows(TransientFailureException.class, () -> service.download(event(), context));
     assertTrue(
-        exception.getMessage().startsWith("Description [Download failure, checksum mismatch]"));
+        exception.getMessage().startsWith("Description [Download failure, checksum mismatch: "));
   }
 
   @Test
@@ -388,35 +388,23 @@ final class DownloadServiceTest {
         .thenReturn(new ByteArrayInputStream("wrong content".getBytes(StandardCharsets.UTF_8)));
     var service = new DownloadService(s3.client(), os, properties());
     var downloadEvent = event();
-    var appender = captureStructuredLogs();
     when(context.getRemainingTimeInMillis()).thenReturn(900000);
 
-    try {
-      Exception exception =
-          assertThrows(
-              TransientFailureException.class, () -> service.download(downloadEvent, context));
-      assertTrue(
-          exception.getMessage().startsWith("Description [Download failure, checksum mismatch]"));
-    } finally {
-      stopCapturingStructuredLogs(appender);
-    }
-    ILoggingEvent checksumLog =
-        appender.list.stream()
-            .filter(event -> event.getFormattedMessage().equals("Download checksum mismatch"))
-            .findFirst()
-            .orElseThrow();
-    assertEquals("TRANSIENT_FAILURE", structuredField(checksumLog, "outcome"));
-    assertEquals("CHECKSUM_MISMATCH", structuredField(checksumLog, "reason_code"));
-    assertEquals(RELEASE_ID, structuredField(checksumLog, "release_id"));
-    assertEquals(DATASET, structuredField(checksumLog, "dataset"));
-    assertEquals(
-        ReleaseStore.downloadZipKey(RELEASE_ID, DATASET), structuredField(checksumLog, "s3_key"));
-    String checksumMismatchDetail = structuredField(checksumLog, "checksum_mismatch_detail");
+    TransientFailureException failure =
+        assertThrows(
+            TransientFailureException.class, () -> service.download(downloadEvent, context));
+
+    String failureMessage = failure.getMessage();
+    assertTrue(failureMessage.startsWith("Description [Download failure, checksum mismatch: "));
     assertTrue(
-        checksumMismatchDetail != null
-            && checksumMismatchDetail.contains("expected=")
-            && checksumMismatchDetail.contains("actual="),
-        "mismatch must be logged with both MD5 values");
+        failureMessage.contains("expected=") && failureMessage.contains("actual="),
+        "mismatch must include both MD5 values");
+    assertTrue(
+        failureMessage.contains("s3Key=" + ReleaseStore.downloadZipKey(RELEASE_ID, DATASET)),
+        "mismatch must include the S3 key");
+    assertEquals("CHECKSUM_MISMATCH", failure.reasonCode());
+    assertEquals(RELEASE_ID, failure.releaseId());
+    assertEquals(Dataset.named(DATASET), failure.dataset());
     assertTrue(s3.abortedUploads > 0, "multipart upload should be aborted");
     assertFalse(
         s3.objects.containsKey(ReleaseStore.receiptKey(RELEASE_ID, DATASET, "download")),
@@ -504,7 +492,7 @@ final class DownloadServiceTest {
     return List.of(
         new ClassAndDescription(
             StreamingS3.ChecksumMismatchException.class,
-            "Description [Download failure, checksum mismatch]",
+            "Description [Download failure, checksum mismatch: ",
             TransientFailureException.class),
         new ClassAndDescription(
             StreamingS3.ExistingObjectVerificationException.class,

@@ -300,25 +300,11 @@ public final class DownloadService {
       String s3Key)
       throws TransientFailureException {
     String checksumMismatchDetail = getExceptionText(exception);
-    LOG.error(
-        "Download checksum mismatch",
-        exception,
-        Map.of(
-            "outcome",
-            "TRANSIENT_FAILURE",
-            "reason_code",
-            "CHECKSUM_MISMATCH",
-            LOG_RELEASE_ID,
-            Objects.toString(releaseId),
-            DOWNLOAD_COMMAND_DATASET,
-            Objects.toString(dataset),
-            "s3_key",
-            Objects.toString(s3Key),
-            "checksum_mismatch_detail",
-            checksumMismatchDetail));
+    String checksumFailureDescription =
+        CHECKSUM_FAILURE_MESSAGE + ": " + checksumMismatchDetail + " s3Key=" + s3Key;
     throw TransientFailureException.builder()
         .cause(exception.getCause())
-        .description(CHECKSUM_FAILURE_MESSAGE)
+        .description(checksumFailureDescription)
         .dataset(Dataset.named(dataset))
         .reasonCode("CHECKSUM_MISMATCH")
         .releaseId(releaseId)

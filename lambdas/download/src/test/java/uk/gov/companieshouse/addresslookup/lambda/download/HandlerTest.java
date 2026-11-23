@@ -1,6 +1,7 @@
 package uk.gov.companieshouse.addresslookup.lambda.download;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -159,6 +160,29 @@ class HandlerTest {
     assertEquals(failure.reasonCode(), structuredField(failureLog, "reason_code"));
     assertEquals(RELEASE_ID, structuredField(failureLog, "release_id"));
     assertEquals(DATASET_NAME, structuredField(failureLog, "dataset"));
+  }
+
+  @Test
+  void failureLogLeavesOutAbsentReleaseIdAndDataset() throws Exception {
+    TransientFailureException failure =
+        TransientFailureException.builder()
+            .description("Failed to read manifest")
+            .reasonCode("FAILED_TO_READ_MANIFEST")
+            .build();
+    Mockito.when(service.download(TEST_EVENT, context)).thenThrow(failure);
+    var appender = captureStructuredLogs();
+
+    try {
+      assertThrows(
+          LambdaFailureRuntimeException.class, () -> handler.handleRequest(TEST_EVENT, context));
+    } finally {
+      stopCapturingStructuredLogs(appender);
+    }
+
+    ILoggingEvent failureLog = appender.list.getFirst();
+    assertEquals("FAILED_TO_READ_MANIFEST", structuredField(failureLog, "reason_code"));
+    assertNull(structuredField(failureLog, "release_id"));
+    assertNull(structuredField(failureLog, "dataset"));
   }
 
   private static ListAppender<ILoggingEvent> captureStructuredLogs() {

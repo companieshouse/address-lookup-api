@@ -64,16 +64,25 @@ public final class Handler extends AbstractRequestHandlerImpl<Map<String, Object
   }
 
   // Failure exceptions add the reason code, release ID and dataset as separate log fields.
-  // Other exceptions only have the outcome and the error text.
+  // A field is left out when its value is absent. Other exceptions only have the outcome and the
+  // error text.
   private static Map<String, Object> failureLogFields(Exception exception, String outcome) {
     Map<String, Object> logFields = new HashMap<>();
     logFields.put("outcome", outcome);
     logFields.put("Error", getExceptionText(exception));
     if (exception instanceof AbstractLambdaFailureException failure) {
+      String failureReasonCode = failure.reasonCode();
+      String failureReleaseId = failure.releaseId();
       Dataset failureDataset = failure.dataset();
-      logFields.put("reason_code", String.valueOf(failure.reasonCode()));
-      logFields.put("release_id", String.valueOf(failure.releaseId()));
-      logFields.put("dataset", failureDataset == null ? "null" : failureDataset.datasetName());
+      if (failureReasonCode != null) {
+        logFields.put("reason_code", failureReasonCode);
+      }
+      if (failureReleaseId != null) {
+        logFields.put("release_id", failureReleaseId);
+      }
+      if (failureDataset != null) {
+        logFields.put("dataset", failureDataset.datasetName());
+      }
     }
     return logFields;
   }

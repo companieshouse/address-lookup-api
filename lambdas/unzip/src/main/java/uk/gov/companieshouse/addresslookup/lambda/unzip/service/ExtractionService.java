@@ -43,6 +43,7 @@ public final class ExtractionService {
   private static final int MAX_CSV_HEADER_BYTES = 64 * 1024;
   private static final String DATASET_FIELD = "dataset";
   private static final String RELEASE_ID_FIELD = "releaseId";
+  private static final String LOG_RELEASE_ID = "release_id";
   private static final String SCHEMA_VERSION_FIELD = "schemaVersion";
   private static final String EXTRACT_FIELD = "extract";
   private static final String VERSION_FIELD = "version";
@@ -245,7 +246,7 @@ public final class ExtractionService {
             "PERMANENT_FAILURE",
             "reason_code",
             reasonCode,
-            RELEASE_ID_FIELD,
+            LOG_RELEASE_ID,
             releaseId,
             DATASET_FIELD,
             dataset,

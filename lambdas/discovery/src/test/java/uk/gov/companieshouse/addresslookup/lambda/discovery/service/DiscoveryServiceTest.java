@@ -26,6 +26,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.lenient;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.*;
 import static uk.gov.companieshouse.release.model.DetailType.DOWNLOAD;
@@ -110,11 +111,11 @@ class DiscoveryServiceTest {
             List.of(
                 new DatasetDefault("add_gb_royalmailaddress", "2.0"),
                 new DatasetDefault("add_isl_royalmailaddress", "2.0")));
-    org.mockito.Mockito.lenient()
+    lenient()
         .when(properties.feedForPackage("20780"))
         .thenReturn(
             uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.Feed.INITIAL_FULL);
-    org.mockito.Mockito.lenient()
+    lenient()
         .when(
             properties.packagesForFeed(
                 uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.Feed.DAILY_COU))

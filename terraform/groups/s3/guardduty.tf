@@ -12,7 +12,7 @@ variable "guardduty_scan_prefixes" {
 locals {
   guardduty_service_principal = "malware-protection-plan.guardduty.amazonaws.com"
   guardduty_role_name         = "${local.bucket_prefix}-guardduty-malware-scan"
-  landing_bucket_arn          = data.aws_s3_bucket.acquisition.arn
+  landing_bucket_arn          = aws_s3_bucket.acquisition.arn
   guardduty_rule_arn          = "arn:aws:events:${var.aws_region}:${local.account_id}:rule/DO-NOT-DELETE-AmazonGuardDutyMalwareProtectionS3*"
   guardduty_scan_prefixes     = var.guardduty_scan_prefixes != null ? var.guardduty_scan_prefixes : [local.landing_prefix]
   guardduty_object_arns       = [for prefix in local.guardduty_scan_prefixes : "${local.landing_bucket_arn}/${prefix}*"]
@@ -148,7 +148,7 @@ resource "aws_guardduty_malware_protection_plan" "landing" {
 
   protected_resource {
     s3_bucket {
-      bucket_name     = data.aws_s3_bucket.acquisition.id
+      bucket_name     = aws_s3_bucket.acquisition.id
       object_prefixes = local.guardduty_scan_prefixes
     }
   }

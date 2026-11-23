@@ -1,14 +1,10 @@
 # s3
 
-Acquisition uses an existing S3 bucket with `control/` and `landing/`
-sub-prefixes. This group does not create buckets or manage their policy, lifecycle,
-versioning, encryption, ownership, public-access settings, tags or access logging.
-Those bucket-wide settings remain with the bucket's current infrastructure owner.
-S3 folders are key prefixes; no empty folder objects are needed.
-
-## Configuration
-
-All environments target `shared-services.eu-west-2.resources.ch.gov.uk`:
+Each environment creates an acquisition bucket in its own AWS account and region,
+named `address-lookup-<environment>-<account-id>-landing`. The account ID
+distinguishes these new buckets from the earlier `address-lookup-<environment>-landing`
+names. S3 names are globally unique, so availability must still be confirmed.
+No shared-services bucket is created or modified.
 
 | Environment | Control prefix | Landing prefix |
 | --- | --- | --- |
@@ -16,116 +12,66 @@ All environments target `shared-services.eu-west-2.resources.ch.gov.uk`:
 | Staging | `address-lookup/staging/control/` | `address-lookup/staging/landing/` |
 | Live | `address-lookup/live/control/` | `address-lookup/live/landing/` |
 
-Each environment must be configured with the shared bucket's
-customer-managed KMS **key ARN** as `kms_key_id` before planning or deployment.
-The bucket ARN is not a KMS key ARN. `shared_bucket = true` requires this
-explicit ARN and an environment-specific namespace.
-For a local development plan, supply the configured profile and KMS key ARN:
+Prefixes are S3 object keys, not directories; no empty folder objects are created.
+The `source_bucket`, `bucket_names` and `bucket_arns` outputs identify the new
+bucket. `acquisition_prefixes` provides the environment's control and landing
+paths. The latter two bucket outputs retain the `landing` map key for consumers.
 
-```bash
-terraform plan -input=false \
-  -var-file=profiles/development-eu-west-2/cidev/vars \
-  -var='kms_key_id=<customer-managed-key-arn>'
-```
+## Bucket settings
 
-The bucket must be in the same region as the relevant group. For same-account
-buckets, set `kms_key_id` to the customer-managed encryption key ARN, ID or alias
-if it differs from `alias/<aws_profile>/environment-services-kms`.
-This group reads the key and grants access through IAM; it does not change
-encryption settings, re-encrypt objects or update the shared key policy.
+The bucket has versioning, Block Public Access, `BucketOwnerEnforced` ownership,
+default SSE-KMS and a bucket policy denying non-TLS requests. It uses the existing
+customer-managed `alias/<aws_profile>/environment-services-kms` key by default;
+set `kms_key_id` to another key ARN, ID or alias if needed. The key must exist
+in the account and region, and its policy must permit the relevant roles through
+IAM or directly. `kms_key_arn` exposes the selected key.
 
-The shared-services bucket currently defaults to SSE-S3 (`AES256`).
-Its versioning and ownership settings could not be verified with the available
-development role. Before deployment, the bucket owner must confirm the owning
-account, enable versioning, arrange the required KMS encryption and cross-account
-S3 and KMS permissions, and ensure all three namespaces are available and isolated.
-The owner must explicitly permit the development, staging and live roles in the bucket and
-key policies; IAM permissions in the environment accounts alone are insufficient.
-Review existing broad grants and explicit denies in the bucket and role policies:
-prefix-scoped permissions from this group alone do not prevent access granted
-elsewhere.
-Ensure that the chosen key and its policy permit each role's `kms:DescribeKey`,
-`kms:Decrypt` and `kms:GenerateDataKey` as needed, and that the Terraform
-deployment roles can read the bucket and key metadata.
-Changing shared default encryption affects other bucket users and requires owner
-approval; existing object versions are not re-encrypted automatically.
+Server access logs go to the existing
+`<account>-<region>-s3-access-logs.ch.gov.uk` bucket under
+`<account-id>/<region>/<source-bucket>/`. The destination must already exist in
+the same account and region and permit S3 log delivery. This group does not
+create the log destination.
 
-The `source_bucket`, `bucket_names` and `bucket_arns` outputs reference the existing
-bucket. The latter two retain the `landing` map key for consumer compatibility.
-`kms_key_arn` exposes the resolved key; `acquisition_prefixes` exposes the actual
-control and landing paths.
-
-## Requirements for the bucket owner
-
-Before deployment, confirm:
-
-- Versioning is enabled; acquisition relies on immutable object version IDs.
-- Block Public Access, `BucketOwnerEnforced` ownership, default SSE-KMS using the
-  configured customer-managed key, and a bucket policy denying non-TLS requests
-  are in place.
-- Server access logging is enabled to the existing account logging bucket.
-- The key policy permits Download and GuardDuty roles directly or delegates
-  permissions to the appropriate account IAM policies. Existing versions encrypted with other keys
-  require additional permissions or a separate migration.
-- Lifecycle rules are merged into the bucket owner's **single** lifecycle
-  configuration, scoped only to these prefixes:
-
-| Prefix | Recommended lifecycle |
+| Prefix | Lifecycle |
 | --- | --- |
-| `<environment root>control/` | Retain current plans, cursors and receipts for recovery; expire noncurrent versions after 365 days. Never scanned. |
-| `<environment root>landing/` | Expire current and noncurrent objects after 30 days. Scanned by GuardDuty. |
+| `<environment root>control/` | Retain current plans, cursors and receipts; expire noncurrent versions after `audit_retention_days` (365). |
+| `<environment root>landing/` | Expire current objects after `landing_retention_days` (30); expire noncurrent versions after `noncurrent_retention_days` (30). |
 
-Abort incomplete multipart uploads after seven days under both prefixes.
-Check existing whole-bucket rules: they also apply to these objects and could
-delete control state prematurely. Reserve these prefixes for acquisition;
-permissions cover all objects beneath them.
+Incomplete multipart uploads under both prefixes are aborted after seven days.
 
 ## Download and GuardDuty
 
 `download_storage_policy_json` grants prefix-scoped listing, reading (including
-versions), writing and multipart-upload aborts under the environment's control and landing prefixes.
-It grants no deletion or access to other prefixes. KMS decrypt/data-key permissions
-are restricted to the configured key through S3 in this region.
-Pass the output to the shared Lambda module's `additional_policies`, following
-`terraform/groups/db-migrate/main.tf`. This group does not deploy Download or
-attach its policy.
+versions), writing and multipart-upload aborts under the environment's control
+and landing prefixes, plus KMS decrypt and data-key permissions through S3.
+It does not grant deletion or access to other prefixes. Pass it to the shared
+Lambda module's `additional_policies`, following
+`terraform/groups/db-migrate/main.tf`; this group does not deploy Download.
 
-For all environments, `manage_guardduty_plan = false`: the shared bucket owner
-must manage **one** plan covering all three environment landing prefixes with tagging
-enabled, without scanning any control prefix. Confirm whether a plan already
-exists and merge the requirements into it rather than creating a second plan.
-Its role must have access to all landing prefixes and the relevant KMS keys.
-The GuardDuty implementation on `feature/als-104-guardduty` needs to account for
-this shared-bucket layout.
-The environment outputs for the locally managed GuardDuty plan and role are null.
-GuardDuty also needs the bucket-root
-`malware-protection-resource-validation-object` for ownership validation.
+GuardDuty is being implemented separately on `feature/als-104-guardduty`.
+The environment profiles leave `manage_guardduty_plan = false`; that work must
+be updated for one plan per new bucket, scanning the corresponding landing prefix
+and excluding control. No scan protection is created by these profiles until
+that integration is configured and deployed.
 
-Coordinate with the bucket owner before enabling the plan: GuardDuty enables
-S3 EventBridge notifications using its role's notification permissions. The owner
-must preserve that setting alongside existing notifications. Only one Malware
-Protection plan can protect a bucket; if one already exists, coordinate reuse or
-import that plan and its role rather than deploying a duplicate.
+## Deployment and state
 
-## State transition and deployment
+Terraform 1.7 or later is required. Review each environment's real remote-state
+plan before applying; do not assume previously deployed resources or state are
+absent. The new bucket is protected by `prevent_destroy`; changing or retiring
+it requires an explicit migration decision.
 
-Terraform **1.7 or later** is required. `removed.tf` forgets bucket resources
-previously managed by this group with `destroy = false`, preserving deployed
-buckets, settings and contents. This also covers old Control/Quarantine instances
-of `aws_s3_bucket.this` and the former access-logging module. Review the plan's
-state-removal actions and arrange ownership/import in the appropriate bucket
-stack. No objects are moved, and unused buckets must be retired separately.
+`removed.tf` relinquishes ownership of the former bucket resources without
+deleting them or their settings. The new resources use distinct Terraform
+addresses and bucket names; old buckets and shared-services contents are not
+moved or deleted. If data exists there, arrange and verify a separate migration.
+Existing locally managed GuardDuty resources are also protected from destruction;
+coordinate any state transfer and scanning transition before applying.
 
-Existing locally managed GuardDuty resources are protected from destruction.
-Review the actual remote-state plan before applying: moving ownership of any
-previously managed plan requires a deliberate state transfer to the bucket-owner
-stack, not two stacks managing it. Changing a protected bucket may require
-replacement and a scan-gap plan.
-Apply through the `<env>-s3-plan` / `<env>-s3-apply` Concourse jobs only after the
-bucket name, key, owner prerequisites and Terraform version are confirmed.
+Apply with the `<env>-s3-plan` / `<env>-s3-apply` Concourse jobs after confirming
+the bucket name, key, logging destination and state transition.
 
-This is infrastructure preparation only. Java handlers retain their current S3
-paths (`manifests/`, `ready/`, `quarantine/`, etc.) and bucket settings. They are
-**not yet compatible** with the `control/` / `landing/` layout and must be adapted
-before acquisition runs against it. Do not point current handlers at this layout
-and assume the infrastructure change migrates their state.
+This is infrastructure preparation only. Java handlers retain their existing S3
+paths (`manifests/`, `ready/`, `quarantine/`, etc.) and are not yet compatible
+with the configured prefixes. Adapt the handlers and their bucket settings before
+running acquisition; changing the infrastructure does not migrate state.

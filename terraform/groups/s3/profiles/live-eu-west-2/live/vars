@@ -1,7 +1,4 @@
 aws_profile = "live-eu-west-2"
 environment = "live"
-acquisition_bucket_name = "shared-services.eu-west-2.resources.ch.gov.uk"
 acquisition_root_prefix = "address-lookup/live"
-shared_bucket = true
 manage_guardduty_plan = false
-# Set kms_key_id to the customer-managed KMS key ARN before deployment.

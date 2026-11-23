@@ -1,16 +1,16 @@
 output "bucket_names" {
-  description = "Existing acquisition bucket name, keyed by landing for consumer compatibility"
-  value       = { landing = data.aws_s3_bucket.acquisition.id }
+  description = "Acquisition bucket name, keyed by landing for consumer compatibility"
+  value       = { landing = aws_s3_bucket.acquisition.id }
 }
 
 output "bucket_arns" {
-  description = "Existing acquisition bucket ARN, keyed by landing for consumer compatibility"
-  value       = { landing = data.aws_s3_bucket.acquisition.arn }
+  description = "Acquisition bucket ARN, keyed by landing for consumer compatibility"
+  value       = { landing = aws_s3_bucket.acquisition.arn }
 }
 
 output "source_bucket" {
   description = "SOURCE_BUCKET for acquisition Lambdas and the importer"
-  value       = data.aws_s3_bucket.acquisition.id
+  value       = aws_s3_bucket.acquisition.id
 }
 
 output "acquisition_prefixes" {

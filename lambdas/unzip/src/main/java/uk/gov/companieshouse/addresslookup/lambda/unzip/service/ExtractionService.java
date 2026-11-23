@@ -24,10 +24,12 @@ import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
 import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
+import uk.gov.companieshouse.release.model.Dataset;
 import uk.gov.companieshouse.release.model.DatasetCatalog;
 
 /**
@@ -41,12 +43,16 @@ public final class ExtractionService {
   private static final int MAX_CSV_HEADER_BYTES = 64 * 1024;
   private static final String DATASET_FIELD = "dataset";
   private static final String RELEASE_ID_FIELD = "releaseId";
+  private static final String LOG_RELEASE_ID = "release_id";
   private static final String SCHEMA_VERSION_FIELD = "schemaVersion";
   private static final String EXTRACT_FIELD = "extract";
   private static final String VERSION_FIELD = "version";
   private static final String SHA256_FIELD = "sha256";
   private static final String CSV_SCAN_STATUS = "CSV_SCAN";
   private static final String CSV_NOT_FOUND = "CSV_NOT_FOUND";
+  private static final String MALFORMED_ZIP = "MALFORMED_ZIP";
+  private static final String HEADER_MISMATCH = "HEADER_MISMATCH";
+  private static final String ARCHIVE_INVALID = "ARCHIVE_INVALID";
   private static final String STATUS = "status";
   private static final Logger LOG = LoggerFactory.getLogger(ExtractionService.class.getName());
 
@@ -138,17 +144,17 @@ public final class ExtractionService {
     try (var zip = new ZipInputStream(s3.getObject(request))) {
       return extractZip(zip, table, expectedReceipt, store, scanBucket, checked, context);
     } catch (ZipException e) {
-      logExtractionFailure("MALFORMED_ZIP", e, releaseId, dataset);
-      return "MALFORMED_ZIP";
+      logExtractionFailure(MALFORMED_ZIP, e, releaseId, dataset, s3Key);
+      throw permanentFailure(MALFORMED_ZIP, e, releaseId, dataset);
     } catch (CsvHeaderException e) {
-      logExtractionFailure("HEADER_MISMATCH", e, releaseId, dataset);
-      return "HEADER_MISMATCH";
+      logExtractionFailure(HEADER_MISMATCH, e, releaseId, dataset, s3Key);
+      throw permanentFailure(HEADER_MISMATCH, e, releaseId, dataset);
     } catch (MissingPrimaryCsvException e) {
-      logExtractionFailure(CSV_NOT_FOUND, e, releaseId, dataset);
-      return CSV_NOT_FOUND;
+      logExtractionFailure(CSV_NOT_FOUND, e, releaseId, dataset, s3Key);
+      throw permanentFailure(CSV_NOT_FOUND, e, releaseId, dataset);
     } catch (ArchiveValidationException e) {
-      logExtractionFailure("ARCHIVE_INVALID", e, releaseId, dataset);
-      return "ARCHIVE_INVALID";
+      logExtractionFailure(ARCHIVE_INVALID, e, releaseId, dataset, s3Key);
+      throw permanentFailure(ARCHIVE_INVALID, e, releaseId, dataset);
     }
   }
 
@@ -216,15 +222,36 @@ public final class ExtractionService {
       zip.closeEntry();
     }
 
-    return new MissingPrimaryCsvException(CSV_NOT_FOUND).getMessage();
+    throw new MissingPrimaryCsvException("Primary CSV " + table.name() + ".csv is missing");
+  }
+
+  private static PermanentFailureException permanentFailure(
+      String reasonCode, Exception cause, String releaseId, String dataset) {
+    return PermanentFailureException.builder()
+        .description(cause.getMessage())
+        .cause(cause)
+        .dataset(Dataset.named(dataset))
+        .reasonCode(reasonCode)
+        .releaseId(releaseId)
+        .build();
   }
 
   private static void logExtractionFailure(
-      String status, Exception failure, String releaseId, String dataset) {
+      String reasonCode, Exception failure, String releaseId, String dataset, String s3Key) {
     LOG.error(
         "ZIP extraction failed",
         failure,
-        Map.of(STATUS, status, RELEASE_ID_FIELD, releaseId, DATASET_FIELD, dataset));
+        Map.of(
+            "outcome",
+            "PERMANENT_FAILURE",
+            "reason_code",
+            reasonCode,
+            LOG_RELEASE_ID,
+            releaseId,
+            DATASET_FIELD,
+            dataset,
+            "s3_key",
+            s3Key));
   }
 
   private static String requestId(Context context) {

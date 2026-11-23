@@ -1,5 +1,6 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.exception;
 
+import uk.gov.companieshouse.release.model.Dataset;
 
 public class LambdaFailureRuntimeException extends RuntimeException {
 

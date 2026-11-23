@@ -53,8 +53,7 @@ final class ExistingObjectPolicyTest {
 
     var thrown =
         assertThrows(
-            S3Exception.class,
-            () -> policy.resolveObjectConflict(TARGET, "upload", "sha", CONFLICT));
+            S3Exception.class, () -> policy.resolveObjectConflict(TARGET, "upload", "sha", CONFLICT));
 
     assertSame(CONFLICT, thrown);
   }
@@ -125,7 +124,9 @@ final class ExistingObjectPolicyTest {
     var failure =
         assertThrows(
             IllegalArgumentException.class,
-            () -> reuse.resolveEvidenceConflict(TARGET, "evidence-key", "{\"bytes\":3}", CONFLICT));
+            () ->
+                reuse.resolveEvidenceConflict(
+                    TARGET, "evidence-key", "{\"bytes\":3}", CONFLICT));
 
     assertEquals("Existing checksum evidence differs from the extracted CSV", failure.getMessage());
   }

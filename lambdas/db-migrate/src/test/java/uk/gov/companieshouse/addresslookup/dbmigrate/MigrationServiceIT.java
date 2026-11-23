@@ -66,7 +66,11 @@ class MigrationServiceIT {
           "V2026.010__create_full_staging_schema.sql",
           "V2026.011__create_full_import_procedure.sql",
           "V2026.012__create_full_build_indexes_procedure.sql",
-          "V2026.013__create_full_promote_procedure.sql");
+          "V2026.013__create_full_promote_procedure.sql",
+          "V2026.014__create_ngd_builtaddress_tables.sql",
+          "V2026.015__create_ngd_builtaddress_staging_tables.sql",
+          "V2026.016__register_ngd_builtaddress_datasets.sql",
+          "V2026.017__use_contract_table_names_in_full_procedures.sql");
 
   private String database;
 
@@ -97,17 +101,17 @@ class MigrationServiceIT {
     var first = run(snapshot, Command.MIGRATE);
     assertEquals("SUCCESS", first.get("status"));
     assertEquals(BASELINE, first.get("applied"));
-    assertEquals("2026.013", first.get("schemaVersion"));
+    assertEquals("2026.017", first.get("schemaVersion"));
     assertTrue(viewExists("address_lookup", "address_lookup"));
     assertEquals(
         0, count("SELECT count(*) FROM address_lookup.address_lookup"), "no seed data ships");
-    assertEquals(4, count("SELECT count(*) FROM os_control.index_definition"));
+    assertEquals(12, count("SELECT count(*) FROM os_control.index_definition"));
 
     assertEquals(List.of(), run(snapshot, Command.MIGRATE).get("applied"));
     var validate = run(snapshot, Command.VALIDATE);
     assertEquals(true, validate.get("valid"));
     assertEquals(List.of(), validate.get("pending"));
-    assertEquals("2026.013", validate.get("schemaVersion"));
+    assertEquals("2026.017", validate.get("schemaVersion"));
   }
 
   @Test

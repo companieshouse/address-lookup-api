@@ -9,6 +9,7 @@ dependency-reduced-pom.xml
 
 # IntelliJ files
 .idea/
+.openidea/
 *.iml
 
 # IntelliJ HTTP client private variables (secrets)

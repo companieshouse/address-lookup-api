@@ -1,5 +1,23 @@
 package uk.gov.companieshouse.addresslookup.lambda.download.service;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockConstruction;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.spi.ILoggingEvent;
@@ -8,6 +26,19 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -29,36 +60,6 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
 import uk.gov.companieshouse.logging.StructuredLogger;
 import uk.gov.companieshouse.release.model.Dataset;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HexFormat;
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockConstruction;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
-
 @ExtendWith(MockitoExtension.class)
 final class DownloadServiceTest {
   private static final Logger STRUCTURED_LOGGER =
@@ -69,11 +70,9 @@ final class DownloadServiceTest {
   private static final String RELEASE_ID = "4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56";
   private static final String DATASET = "add_gb_royalmailaddress";
 
-  @Mock
-  private OsClient os;
+  @Mock private OsClient os;
 
-  @Mock
-  private Context context;
+  @Mock private Context context;
 
   @Test
   void downloadsOnlyTheDatasetNamedByTheEventBridgeCommand() throws Exception {
@@ -274,9 +273,9 @@ final class DownloadServiceTest {
     var service = new DownloadService(s3.client(), os, properties());
 
     Exception exception =
-        assertThrows(PermanentFailureException.class, () -> service.download(event(), context));
+        assertThrows(TransientFailureException.class, () -> service.download(event(), context));
     assertTrue(
-        exception.getMessage().startsWith("Description [Download failure, checksum mismatch]"));
+        exception.getMessage().startsWith("Description [Download failure, checksum mismatch:"));
   }
 
   @Test
@@ -341,24 +340,22 @@ final class DownloadServiceTest {
     when(os.download(anyString()))
         .thenReturn(new ByteArrayInputStream("wrong content".getBytes(StandardCharsets.UTF_8)));
     var service = new DownloadService(s3.client(), os, properties());
-    var appender = captureStructuredLogs();
+    var downloadEvent = event();
     when(context.getRemainingTimeInMillis()).thenReturn(900000);
 
-    try {
-      Exception exception =
-          assertThrows(PermanentFailureException.class, () -> service.download(event(), context));
-      assertTrue(
-          exception.getMessage().startsWith("Description [Download failure, checksum mismatch]"));
-    } finally {
-      stopCapturingStructuredLogs(appender);
-    }
+    var failure =
+        assertThrows(
+            TransientFailureException.class, () -> service.download(downloadEvent, context));
+    String failureMessage = failure.getMessage();
     assertTrue(
-        appender.list.stream()
-            .filter(event -> event.getFormattedMessage().equals("Download checksum mismatch"))
-            .map(event -> structuredField(event, "checksum_mismatch"))
-            .anyMatch(mismatch ->
-                mismatch != null && mismatch.contains("expected=") && mismatch.contains("actual=")),
-        "mismatch must be logged with both MD5 values");
+        failureMessage.contains("expected=") && failureMessage.contains("actual="),
+        "mismatch must include both MD5 values");
+    assertTrue(
+        failureMessage.contains("s3Key=initial_full/12345/159159/downloads/" + DATASET + ".zip"),
+        "mismatch must include the S3 key");
+    assertEquals("CHECKSUM_MISMATCH", failure.reasonCode());
+    assertEquals(RELEASE_ID, failure.releaseId());
+    assertEquals(Dataset.named(DATASET), failure.dataset());
     assertTrue(s3.abortedUploads > 0, "multipart upload should be aborted");
     assertTrue(s3.objects.keySet().stream().noneMatch(k -> k.endsWith(".receipt.json")));
     assertTrue(s3.completedKeys.isEmpty(), "checksum mismatch must not complete a ZIP object");
@@ -433,8 +430,11 @@ final class DownloadServiceTest {
                     .thenThrow(exceptionToThrow))) {
       var service = new DownloadService(s3.client(), os, properties());
 
-      Exception exception =
-          assertThrows(PermanentFailureException.class, () -> service.download(event(), context));
+      Class<? extends AbstractLambdaFailureException> expected =
+          exceptionToThrow instanceof StreamingS3.ChecksumMismatchException
+              ? TransientFailureException.class
+              : PermanentFailureException.class;
+      Exception exception = assertThrows(expected, () -> service.download(event(), context));
 
       if (exceptionToThrow instanceof StreamingS3.ChecksumMismatchException) {
         assertEquals(exceptionToThrow, exception.getCause());
@@ -452,7 +452,7 @@ final class DownloadServiceTest {
     return List.of(
         new ClassAndDescription(
             StreamingS3.ChecksumMismatchException.class,
-            "Description [Download failure, checksum mismatch]"),
+            "Description [Download failure, checksum mismatch:"),
         new ClassAndDescription(
             StreamingS3.ExistingObjectVerificationException.class,
             "Description [Error occurred whilst attempting to verify if the ZIP file has previously been stored in the S3 bucket.]"));
@@ -518,6 +518,73 @@ final class DownloadServiceTest {
     exceptions.add(new ExceptionAndExceptionClass(s3Exception, TransientFailureException.class));
 
     return exceptions;
+  }
+
+  @Test
+  void unreadableManifestFailsAsTransientFailedToReadManifest() throws Exception {
+    var s3 = new FakeS3();
+    s3.objects.put(PLAN_KEY, "{not json".getBytes(StandardCharsets.UTF_8));
+    var service = new DownloadService(s3.client(), os, properties());
+    var downloadEvent = event();
+
+    var failure =
+        assertThrows(
+            TransientFailureException.class, () -> service.download(downloadEvent, context));
+
+    assertEquals("FAILED_TO_READ_MANIFEST", failure.reasonCode());
+    assertEquals(Dataset.named(DATASET), failure.dataset());
+    assertInstanceOf(IOException.class, failure.getCause());
+    verifyNoInteractions(os);
+  }
+
+  @Test
+  void unreadableChecksumEvidenceFailsAsTransient() throws Exception {
+    var s3 = new FakeS3();
+    s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
+    s3.objects.put(
+        KeyLayout.checksumKey("initial_full/12345/159159/downloads/" + DATASET + ".zip"),
+        "{not json".getBytes(StandardCharsets.UTF_8));
+    var service = new DownloadService(s3.client(), os, properties());
+    var downloadEvent = event();
+
+    var failure =
+        assertThrows(
+            TransientFailureException.class, () -> service.download(downloadEvent, context));
+
+    assertEquals("FAILED_TO_READ_CHECKSUM_EVIDENCE", failure.reasonCode());
+    assertEquals(Dataset.named(DATASET), failure.dataset());
+    assertInstanceOf(IOException.class, failure.getCause());
+    verifyNoInteractions(os);
+  }
+
+  @Test
+  void missingDigestAlgorithmFailsAsPermanentUnrecognisedDigestScheme() throws Exception {
+    var s3 = new FakeS3();
+    s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
+    when(os.download(anyString()))
+        .thenReturn(new ByteArrayInputStream("zip bytes".getBytes(StandardCharsets.UTF_8)));
+    var downloadEvent = event();
+    var digestFailure = new NoSuchAlgorithmException("MD5 not available");
+
+    try (MockedConstruction<StreamingS3> ignored =
+        mockConstruction(
+            StreamingS3.class,
+            (mock, ignore) ->
+                when(mock.putOverwrite(
+                        any(InputStream.class), anyString(), anyString(), anyString(), anyLong()))
+                    .thenThrow(digestFailure))) {
+      var service = new DownloadService(s3.client(), os, properties());
+
+      var failure =
+          assertThrows(
+              PermanentFailureException.class, () -> service.download(downloadEvent, context));
+
+      assertEquals("UNRECOGNISED_DIGEST_SCHEME", failure.reasonCode());
+      assertEquals(RELEASE_ID, failure.releaseId());
+      assertEquals(Dataset.named(DATASET), failure.dataset());
+      assertSame(digestFailure, failure.getCause());
+    }
+    assertTrue(s3.objects.keySet().stream().noneMatch(key -> key.endsWith(".receipt.json")));
   }
 
   private static ListAppender<ILoggingEvent> captureStructuredLogs() {

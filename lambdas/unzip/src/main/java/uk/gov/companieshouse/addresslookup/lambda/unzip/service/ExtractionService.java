@@ -1,23 +1,13 @@
 package uk.gov.companieshouse.addresslookup.lambda.unzip.service;
 
+import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.table;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.detail;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
+
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
-import org.jspecify.annotations.NonNull;
-import org.springframework.stereotype.Component;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
-import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
-import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
-import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
-import uk.gov.companieshouse.logging.Logger;
-import uk.gov.companieshouse.logging.LoggerFactory;
-import uk.gov.companieshouse.release.model.Dataset;
-import uk.gov.companieshouse.release.model.DatasetCatalog;
-
 import java.io.ByteArrayOutputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
@@ -31,12 +21,22 @@ import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipInputStream;
-
-import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.table;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.detail;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.jspecify.annotations.NonNull;
+import org.springframework.stereotype.Component;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
+import uk.gov.companieshouse.addresslookup.lambda.shared.storage.ReleaseStore;
+import uk.gov.companieshouse.addresslookup.lambda.shared.storage.StreamingS3;
+import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
+import uk.gov.companieshouse.release.model.Dataset;
+import uk.gov.companieshouse.release.model.DatasetCatalog;
 
 /**
  * Red-zone extraction reads only the exact clean ZIP version.
@@ -49,10 +49,14 @@ public final class ExtractionService {
   private static final int MAX_CSV_HEADER_BYTES = 64 * 1024;
   private static final String DATASET_FIELD = "dataset";
   private static final String RELEASE_ID_FIELD = "releaseId";
+  private static final String LOG_RELEASE_ID = "release_id";
   private static final String SCHEMA_VERSION_FIELD = "schemaVersion";
   private static final String EXTRACT_FIELD = "extract";
   private static final String CSV_SCAN_STATUS = "CSV_SCAN";
   private static final String CSV_NOT_FOUND = "CSV_NOT_FOUND";
+  private static final String MALFORMED_ZIP = "MALFORMED_ZIP";
+  private static final String HEADER_MISMATCH = "HEADER_MISMATCH";
+  private static final String ARCHIVE_INVALID = "ARCHIVE_INVALID";
   private static final String STATUS = "status";
   private static final String VERSION_ID_FIELD = "versionId";
   private static final String DATASETS_FIELD = "datasets";
@@ -144,17 +148,17 @@ public final class ExtractionService {
       return extractZip(
           zip, table, zipObject.packageVersion(), checked, context, s3Key, zipVersion);
     } catch (ZipException e) {
-      logExtractionFailure("MALFORMED_ZIP", e, releaseId, dataset);
-      return "MALFORMED_ZIP";
+      logExtractionFailure(MALFORMED_ZIP, e, releaseId, dataset, s3Key);
+      throw permanentFailure(MALFORMED_ZIP, e, releaseId, dataset);
     } catch (CsvHeaderException e) {
-      logExtractionFailure("HEADER_MISMATCH", e, releaseId, dataset);
-      return "HEADER_MISMATCH";
+      logExtractionFailure(HEADER_MISMATCH, e, releaseId, dataset, s3Key);
+      throw permanentFailure(HEADER_MISMATCH, e, releaseId, dataset);
     } catch (MissingPrimaryCsvException e) {
-      logExtractionFailure(CSV_NOT_FOUND, e, releaseId, dataset);
-      return CSV_NOT_FOUND;
+      logExtractionFailure(CSV_NOT_FOUND, e, releaseId, dataset, s3Key);
+      throw permanentFailure(CSV_NOT_FOUND, e, releaseId, dataset);
     } catch (ArchiveValidationException e) {
-      logExtractionFailure("ARCHIVE_INVALID", e, releaseId, dataset);
-      return "ARCHIVE_INVALID";
+      logExtractionFailure(ARCHIVE_INVALID, e, releaseId, dataset, s3Key);
+      throw permanentFailure(ARCHIVE_INVALID, e, releaseId, dataset);
     }
   }
 
@@ -226,7 +230,18 @@ public final class ExtractionService {
       zip.closeEntry();
     }
 
-    return new MissingPrimaryCsvException(CSV_NOT_FOUND).getMessage();
+    throw new MissingPrimaryCsvException("Primary CSV " + table.name() + ".csv is missing");
+  }
+
+  private static PermanentFailureException permanentFailure(
+      String reasonCode, Exception cause, String releaseId, String dataset) {
+    return PermanentFailureException.builder()
+        .description(cause.getMessage())
+        .cause(cause)
+        .dataset(Dataset.named(dataset))
+        .reasonCode(reasonCode)
+        .releaseId(releaseId)
+        .build();
   }
 
   private boolean alreadyExtracted(
@@ -312,11 +327,21 @@ public final class ExtractionService {
   }
 
   private static void logExtractionFailure(
-      String status, Exception failure, String releaseId, String dataset) {
+      String reasonCode, Exception failure, String releaseId, String dataset, String s3Key) {
     LOG.error(
         "ZIP extraction failed",
         failure,
-        Map.of(STATUS, status, RELEASE_ID_FIELD, releaseId, DATASET_FIELD, dataset));
+        Map.of(
+            "outcome",
+            "PERMANENT_FAILURE",
+            "reason_code",
+            reasonCode,
+            LOG_RELEASE_ID,
+            releaseId,
+            DATASET_FIELD,
+            dataset,
+            "s3_key",
+            s3Key));
   }
 
   private static String requestId(Context context) {

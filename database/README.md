@@ -16,6 +16,27 @@ order.
 The rule is documented here and in `V2026.007`; it is not enforced by a database constraint. The
 release workflows must check it using `os_data.release_history`.
 
+## Datasets
+
+`os_control.schema_contract` registers six datasets, each with its `schemaVersion` and the name of its
+active table in `os_data` (`active_table`). The FULL procedures resolve tables from it and process only
+datasets with `enabled = true`. The four schema 3.0 datasets are registered with `enabled = false`
+because Discovery and the release manifest model support only the Royal Mail datasets; enable them
+once that support is deployed.
+
+| Dataset | Schema | Active table | SRID |
+|---------|--------|--------------|------|
+| `add_gb_royalmailaddress`, `add_isl_royalmailaddress` | 2.0 | `<dataset>_v2` | 27700 / 4258 |
+| `add_gb_builtaddress`, `add_gb_prebuildaddress` | 3.0 | `<dataset>` | 27700 (easting/northing NOT NULL) |
+| `add_isl_builtaddress`, `add_isl_prebuildaddress` | 3.0 | `<dataset>` | 4258 (easting/northing nullable) |
+
+The schema 3.0 tables follow the OS DDL (`OrdnanceSurvey/osngd-resources`) column for column plus
+`release_id`, with primary key `uprn`. Their `_altadd`, `_rltenty` and `_otrclass` sub-tables are
+extract-only and are not created. Each has a `os_stage` and `os_stage_full` staging table, a primary key
+and a postcode index in `os_control.index_definition` (the index list is to be agreed in review), and
+`als_upload` INSERT/SELECT on its `os_stage` table. They are not in the `address_lookup` view and have no
+local seed data.
+
 ## FULL load procedures
 
 A FULL is imported by PostgreSQL directly from Landing (not by a Lambda), using procedures that

@@ -1,7 +1,18 @@
 package uk.gov.companieshouse.addresslookup.lambda.download.service;
 
+import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.releaseId;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.detail;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.getExceptionText;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sanitizeUrl;
+
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
+import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
+import java.util.Map;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.S3Exception;
@@ -16,18 +27,6 @@ import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
 import uk.gov.companieshouse.release.model.Dataset;
 import uk.gov.companieshouse.release.model.DatasetCatalog;
-
-import java.io.IOException;
-import java.security.NoSuchAlgorithmException;
-import java.util.Map;
-import java.util.Objects;
-
-import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.releaseId;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.detail;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.getExceptionText;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sanitizeUrl;
 
 @Component
 public final class DownloadService {
@@ -198,7 +197,7 @@ public final class DownloadService {
               expectedDatasetMd5,
               properties.maxZipBytes());
     } catch (StreamingS3.ChecksumMismatchException e) {
-      throw handleChecksumException(e, manifestReleaseId, downloadCommandDataset);
+      throw handleChecksumException(e, manifestReleaseId, downloadCommandDataset, zipUploadS3Path);
     } catch (StreamingS3.ExistingObjectVerificationException exception) {
       throw handleExistingObjectVerificationException(
           exception, downloadCommandDataset, manifestReleaseId);
@@ -206,6 +205,7 @@ public final class DownloadService {
       throw PermanentFailureException.builder()
           .description(exception.getMessage())
           .cause(exception)
+          .dataset(Dataset.named(downloadCommandDataset))
           .reasonCode("UNRECOGNISED_DIGEST_SCHEME")
           .releaseId(manifestReleaseId)
           .build();
@@ -269,20 +269,15 @@ public final class DownloadService {
     }
   }
 
-  private PermanentFailureException handleChecksumException(
-      StreamingS3.ChecksumMismatchException exception, String releaseId, String dataset) {
-    LOG.error(
-        "Download checksum mismatch",
-        Map.of(
-            LOG_RELEASE_ID,
-            Objects.toString(releaseId),
-            DOWNLOAD_COMMAND_DATASET,
-            Objects.toString(dataset),
-            "checksum_mismatch",
-            getExceptionText(exception)));
-    return PermanentFailureException.builder()
+  private TransientFailureException handleChecksumException(
+      StreamingS3.ChecksumMismatchException exception,
+      String releaseId,
+      String dataset,
+      String key) {
+    return TransientFailureException.builder()
         .cause(exception)
-        .description(CHECKSUM_FAILURE_MESSAGE)
+        .description(
+            CHECKSUM_FAILURE_MESSAGE + ": " + getExceptionText(exception) + " s3Key=" + key)
         .dataset(Dataset.named(dataset))
         .reasonCode("CHECKSUM_MISMATCH")
         .releaseId(releaseId)

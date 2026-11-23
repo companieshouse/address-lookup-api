@@ -546,8 +546,8 @@ final class DownloadServiceTest {
     assertTrue(s3.objects.keySet().stream().noneMatch(k -> k.endsWith(".receipt.json")));
   }
 
-  @org.junit.jupiter.params.ParameterizedTest
-  @org.junit.jupiter.params.provider.ValueSource(strings = {"missing", "replaced", "md5"})
+  @ParameterizedTest
+  @ValueSource(strings = {"missing", "replaced", "md5"})
   void downloadsAgainWhenExistingZipEvidenceIsStale(String reason) throws Exception {
     var s3 = new FakeS3();
     byte[] zip = "repeat download".getBytes(StandardCharsets.UTF_8);

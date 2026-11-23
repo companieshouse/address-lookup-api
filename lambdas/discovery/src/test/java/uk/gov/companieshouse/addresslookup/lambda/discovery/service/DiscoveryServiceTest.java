@@ -136,7 +136,7 @@ class DiscoveryServiceTest {
         .thenThrow(new IllegalStateException("Missing cursor"))
         .thenReturn(TestUtils.createResponseInputStream(SECOND_PACKAGE_CURSOR_JSON));
 
-    var failure = org.junit.jupiter.api.Assertions.assertThrows(
+    var failure = assertThrows(
         IllegalStateException.class, () -> discoveryService.discover(COU_REQUEST_JSON));
 
     assertEquals(1, failure.getSuppressed().length);
@@ -179,14 +179,14 @@ class DiscoveryServiceTest {
         .thenReturn(TestUtils.createResponseInputStream(TEST_CURSOR_JSON));
 
     var failure =
-        org.junit.jupiter.api.Assertions.assertThrows(
+        assertThrows(
             IllegalStateException.class, () -> discoveryService.discover(COU_REQUEST_JSON));
 
     assertEquals(1, failure.getSuppressed().length);
     assertEquals(
         "Cursor package ID does not match configured package",
         failure.getSuppressed()[0].getCause().getMessage());
-    org.mockito.Mockito.verifyNoInteractions(osClient);
+    verifyNoInteractions(osClient);
   }
 
   @Test

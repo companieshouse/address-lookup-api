@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentMatchers;
+import org.mockito.Mockito;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.AbortableInputStream;
@@ -58,7 +60,7 @@ final class ReleaseStoreTest {
     var manifest = new ReleaseStore(client).read(BUCKET, "manifest.json", "manifest-version");
 
     assertEquals(1, manifest.path("version").asInt());
-    verify(client, org.mockito.Mockito.never()).listObjectsV2(any(ListObjectsV2Request.class));
+    verify(client, Mockito.never()).listObjectsV2(any(ListObjectsV2Request.class));
   }
 
   @Test
@@ -244,7 +246,7 @@ final class ReleaseStoreTest {
     assertEquals("EXTRACTED", updated.path("status").asText());
     verify(client, times(2)).getObject(any(GetObjectRequest.class));
     verify(client).putObject(
-        org.mockito.ArgumentMatchers.argThat((PutObjectRequest request) ->
+        ArgumentMatchers.argThat((PutObjectRequest request) ->
             "etag".equals(request.ifMatch()) && request.ifNoneMatch() == null),
         any(RequestBody.class));
   }
@@ -263,7 +265,7 @@ final class ReleaseStoreTest {
 
     assertEquals("EXTRACTED", updated.path("status").asText());
     verify(client, times(2)).putObject(
-        org.mockito.ArgumentMatchers.argThat((PutObjectRequest request) ->
+        ArgumentMatchers.argThat((PutObjectRequest request) ->
             "*".equals(request.ifNoneMatch()) && request.ifMatch() == null),
         any(RequestBody.class));
   }

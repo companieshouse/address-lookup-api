@@ -2,8 +2,14 @@ package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.util.Optional;
@@ -65,14 +71,14 @@ final class ReconciliationCursorTest {
         "sweep", KeyLayout::isDataPackageManifestKey);
 
     assertEquals(Optional.empty(), manifests.next());
-    org.junit.jupiter.api.Assertions.assertFalse(s3.objects.containsKey(CURSOR));
+    assertFalse(s3.objects.containsKey(CURSOR));
   }
 
   @Test
   void scansNextListingPageUntilManifestFound() throws IOException {
-    var client = org.mockito.Mockito.mock(S3Client.class);
+    var client = mock(S3Client.class);
     String manifest = "daily_cou/20780/1/manifest/data_package_manifest.json";
-    org.mockito.Mockito.when(client.listObjectsV2(org.mockito.ArgumentMatchers.any(ListObjectsV2Request.class)))
+    when(client.listObjectsV2(any(ListObjectsV2Request.class)))
         .thenAnswer(call -> {
           var request = call.getArgument(0, ListObjectsV2Request.class);
           if (CURSOR.equals(request.prefix())) return ListObjectsV2Response.builder().build();
@@ -87,10 +93,10 @@ final class ReconciliationCursorTest {
         client, "control", "landing", "daily_cou/", "sweep", KeyLayout::isDataPackageManifestKey);
 
     assertEquals(Optional.of(manifest), manifests.next());
-    org.mockito.Mockito.verify(client).putObject(
-        org.mockito.ArgumentMatchers.argThat((software.amazon.awssdk.services.s3.model.PutObjectRequest request) ->
+    verify(client).putObject(
+        argThat((software.amazon.awssdk.services.s3.model.PutObjectRequest request) ->
             CURSOR.equals(request.key())),
-        org.mockito.ArgumentMatchers.any(software.amazon.awssdk.core.sync.RequestBody.class));
+        any(software.amazon.awssdk.core.sync.RequestBody.class));
   }
 
   @Test

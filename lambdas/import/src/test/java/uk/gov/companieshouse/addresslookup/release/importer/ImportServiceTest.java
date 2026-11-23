@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -33,7 +34,9 @@ import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.matches;
 import static org.mockito.Mockito.*;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 
@@ -89,7 +92,7 @@ class ImportServiceTest {
 
     verify(registration)
         .register(
-            eq(manifest), eq(MANIFEST_KEY), org.mockito.ArgumentMatchers.matches("[a-f0-9]{64}"));
+            eq(manifest), eq(MANIFEST_KEY), matches("[a-f0-9]{64}"));
     verify(store).isClean(BUCKET, MANIFEST_KEY, MANIFEST_VERSION);
     verify(store).read(BUCKET, MANIFEST_KEY, MANIFEST_VERSION);
     verify(importer, never()).importClean(any(), any(), any(), any(), any(), any(), any());
@@ -109,7 +112,7 @@ class ImportServiceTest {
   }
 
   @ParameterizedTest
-  @org.junit.jupiter.params.provider.ValueSource(strings = {"dataPackageId", "versionId"})
+  @ValueSource(strings = {"dataPackageId", "versionId"})
   void rejectsManifestContentThatDoesNotMatchItsKey(String field) throws Exception {
     var store = mock(ReleaseStore.class);
     var cursor = mock(ReconciliationCursor.class);
@@ -320,16 +323,16 @@ class ImportServiceTest {
             eq(SHA256));
     verify(s3)
         .getObject(
-            org.mockito.ArgumentMatchers.argThat((GetObjectRequest request) ->
+            argThat((GetObjectRequest request) ->
                 manifestKey.equals(request.key())
                     && MANIFEST_VERSION.equals(request.versionId())));
     verify(s3)
         .getObject(
-            org.mockito.ArgumentMatchers.argThat((GetObjectRequest request) ->
+            argThat((GetObjectRequest request) ->
                 csvKey.equals(request.key()) && "csv-version".equals(request.versionId())));
     verify(s3)
         .getObjectTagging(
-            org.mockito.ArgumentMatchers.argThat((GetObjectTaggingRequest request) ->
+            argThat((GetObjectTaggingRequest request) ->
                 manifestKey.equals(request.key())
                     && MANIFEST_VERSION.equals(request.versionId())));
     String position =
@@ -379,7 +382,7 @@ class ImportServiceTest {
 
     verify(registration)
         .register(
-            eq(manifest), eq(manifestKey), org.mockito.ArgumentMatchers.matches("[a-f0-9]{64}"));
+            eq(manifest), eq(manifestKey), matches("[a-f0-9]{64}"));
     verify(importer)
         .importClean(
             eq(id),

@@ -2,6 +2,7 @@ package uk.gov.companieshouse.addresslookup;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -292,6 +293,24 @@ class DatabaseFeedIT {
                     MountableFile.forHostPath(fixtures.resolve(dataset + ".csv")),
                     directory + dataset + ".csv");
         }
+        // Supplier zips also hold side files; only <dataset>.csv may be read, so junk here must
+        // not affect the import.
+        Path sideFile = landing.resolve("side-file.csv");
+        Files.writeString(sideFile, "not,a,valid,csv\n\"unterminated\n");
+        for (String suffix : List.of("_altadd", "_rltenty", "_otrclass")) {
+            POSTGRES.copyFileToContainer(
+                    MountableFile.forHostPath(sideFile),
+                    directory + "add_gb_builtaddress" + suffix + ".csv");
+        }
+        // Geometry is built from the coordinates, so the CSV's geometry value is never parsed.
+        Path unparsedGeometry = landing.resolve("unparsed-geometry.csv");
+        String builtCsv = Files.readString(fixtures.resolve("add_gb_builtaddress.csv"));
+        String unparsedCsv = builtCsv.replace("POINT(317000 177000)", "not-a-geometry");
+        assertNotEquals(builtCsv, unparsedCsv, "fixture no longer contains the replaced geometry");
+        Files.writeString(unparsedGeometry, unparsedCsv);
+        POSTGRES.copyFileToContainer(
+                MountableFile.forHostPath(unparsedGeometry),
+                directory + "add_gb_builtaddress.csv");
         String importCall = "CALL os_ingest.import_version('p1', 'v1', 'bucket', 'eu-west-2')";
         try (Connection connection = connection();
                 Statement statement = connection.createStatement()) {
@@ -311,14 +330,12 @@ class DatabaseFeedIT {
                             + "WITH GRANT OPTION");
             long activeGbBefore =
                     scalar(statement, "SELECT count(*) FROM os_data.add_gb_royalmailaddress_v2");
-            // the new datasets are registered disabled until Discovery and the release model
-            // support them
+            // V2026.018 enables the schema 3.0 datasets, so the FULL load covers all six
             assertEquals(
-                    4,
+                    0,
                     scalar(
                             statement,
                             "SELECT count(*) FROM os_control.schema_contract WHERE NOT enabled"));
-            statement.execute("UPDATE os_control.schema_contract SET enabled = true");
             statement.execute("SET ROLE als_loader");
 
             assertImportFails(
@@ -373,6 +390,38 @@ class DatabaseFeedIT {
             POSTGRES.copyFileToContainer(
                     MountableFile.forHostPath(fixtures.resolve("add_gb_royalmailaddress.csv")),
                     directory + "add_gb_royalmailaddress.csv");
+
+            // A GB row without coordinates cannot get a geometry, so the import fails with no
+            // ledger rows left behind.
+            String nullEastingCsv = builtCsv.replace(",317000.00,177000.00,", ",,177000.00,");
+            assertNotEquals(builtCsv, nullEastingCsv);
+            Path nullEasting = landing.resolve("null-easting.csv");
+            Files.writeString(nullEasting, nullEastingCsv);
+            POSTGRES.copyFileToContainer(
+                    MountableFile.forHostPath(nullEasting), directory + "add_gb_builtaddress.csv");
+            writeAndCopyManifest(landing, directory, "rel-1", gbRows, islRows, "27700", "2.0");
+            assertTrue(
+                    assertThrows(SQLException.class, () -> statement.execute(importCall))
+                            .getMessage()
+                            .contains("easting"));
+            assertEquals(
+                    0,
+                    scalar(
+                            statement,
+                            "SELECT count(*) FROM os_stage.import_ledger WHERE release_id ="
+                                + " 'rel-1'"));
+            assertTrue(
+                    assertThrows(
+                                    SQLException.class,
+                                    () ->
+                                            statement.execute(
+                                                    "SELECT os_ingest.build_full_geometry("
+                                                        + "'os_data.add_gb_builtaddress', 3857)"))
+                            .getMessage()
+                            .contains("No coordinate columns"));
+            POSTGRES.copyFileToContainer(
+                    MountableFile.forHostPath(unparsedGeometry),
+                    directory + "add_gb_builtaddress.csv");
 
             statement.execute(importCall);
             statement.execute(importCall);
@@ -432,6 +481,19 @@ class DatabaseFeedIT {
                         scalar(
                                 statement,
                                 "SELECT Find_SRID('os_data', '" + dataset + "', 'geometry')"));
+            }
+            for (String table : Stream.concat(TABLES.stream(), NGD_V3_DATASETS.stream()).toList()) {
+                boolean gb = table.startsWith("add_gb");
+                assertEquals(
+                        0,
+                        scalar(
+                                statement,
+                                "SELECT count(*) FROM os_data."
+                                        + table
+                                        + " WHERE NOT ST_Equals(geometry, ST_SetSRID(ST_MakePoint("
+                                        + (gb ? "easting, northing), 27700" : "longitude, latitude), 4258")
+                                        + "))"),
+                        table + " geometry must be built from its coordinates");
             }
             assertEquals(1, scalar(statement, "SELECT count(*) FROM os_data.release_history"));
             assertEquals(
@@ -723,7 +785,7 @@ class DatabaseFeedIT {
     }
 
     private static void assertProductionMigrationsAreRepeatable(Flyway productionFlyway) {
-        assertEquals(17, productionFlyway.migrate().migrationsExecuted);
+        assertEquals(18, productionFlyway.migrate().migrationsExecuted);
         productionFlyway.validate();
         assertEquals(0, productionFlyway.migrate().migrationsExecuted);
     }

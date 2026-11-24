@@ -20,9 +20,9 @@ release workflows must check it using `os_data.release_history`.
 
 `os_control.schema_contract` registers six datasets, each with its `schemaVersion` and the name of its
 active table in `os_data` (`active_table`). The FULL procedures resolve tables from it and process only
-datasets with `enabled = true`. The four schema 3.0 datasets are registered with `enabled = false`
-because Discovery and the release manifest model support only the Royal Mail datasets; enable them
-once that support is deployed.
+datasets with `enabled = true`. All six are enabled (the schema 3.0 datasets by V2026.018), so a FULL
+manifest must carry a `recordCount` for each of them. Discovery and the dataset catalogue include all
+six; deploy those Lambdas before or with V2026.018.
 
 | Dataset | Schema | Active table | SRID |
 |---------|--------|--------------|------|
@@ -44,7 +44,7 @@ Flyway installs but never runs. Each call is one transaction and can be re-run a
 
 | Step | Call | Effect |
 |------|------|--------|
-| 1 | `CALL os_ingest.import_version(data_package, version_id, bucket, region [, manifest_key [, csv_prefix]])` | Reads the manifest (default `full/<data_package>/<version_id>/manifest.json`), checks its `schemaVersion` and `crs` against `os_control.schema_contract` and the active geometry SRID, recreates the `os_stage_full.<table>` tables, loads `<csv_prefix><dataset>.csv` with `aws_s3.table_import_from_s3` (header must match the table), writes the manifest and ledger rows, then fails unless the completeness check passes. |
+| 1 | `CALL os_ingest.import_version(data_package, version_id, bucket, region [, manifest_key [, csv_prefix]])` | Reads the manifest (default `full/<data_package>/<version_id>/manifest.json`), checks its `schemaVersion` and `crs` against `os_control.schema_contract` and the active geometry SRID, recreates the `os_stage_full.<table>` tables, loads `<csv_prefix><dataset>.csv` with `aws_s3.table_import_from_s3` (header must match the table), builds `geometry` from easting/northing (EPSG:27700) or longitude/latitude (EPSG:4258) instead of using the CSV's geometry column (`os_ingest.build_full_geometry`), writes the manifest and ledger rows, then fails unless the completeness check passes. |
 | 2 | `CALL os_ingest.build_indexes(release_id)` | Builds the `os_control.index_definition` indexes and keys on the FULL staging tables (`maintenance_work_mem` 1GB), then `ANALYZE`. |
 | 3 | `CALL os_ingest.promote(release_id)` | Locks the lookup view and its tables, moves the active tables to `os_prev` (one previous generation kept for rollback), moves the staging tables into `os_data`, re-points `address_lookup.address_lookup` and inserts a `FULL` row (no `previous`) in `release_history`. It refuses empty tables and a release whose `target` is older than the latest `release_history` row. |
 

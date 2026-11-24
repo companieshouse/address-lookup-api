@@ -13,9 +13,15 @@ import java.util.List;
 
 class DatasetCatalogTest {
     @Test
-    void supportRoyalMailAddressDatasets() {
+    void catalogueAllDatasetsButImportOnlyRoyalMail() {
         assertEquals(
-                List.of("add_gb_royalmailaddress", "add_isl_royalmailaddress"),
+                List.of(
+                        "add_gb_royalmailaddress",
+                        "add_isl_royalmailaddress",
+                        "add_gb_builtaddress",
+                        "add_gb_prebuildaddress",
+                        "add_isl_builtaddress",
+                        "add_isl_prebuildaddress"),
                 DatasetCatalog.tables().stream().map(DatasetCatalog.Table::name).toList());
         assertEquals(6, Dataset.values().length);
         assertEquals(
@@ -31,10 +37,16 @@ class DatasetCatalogTest {
                 "ADD_GB_BUILTADDRESS", "ADD_GB_PREBUILDADDRESS",
                 "ADD_ISL_BUILTADDRESS", "ADD_ISL_PREBUILDADDRESS"
             })
-    void keyOnlyDatasetsHaveNoImportSchemaOrDatabaseMapping(Dataset dataset) {
+    void schema3DatasetsHaveCatalogueEntryButNoDatabaseMapping(Dataset dataset) {
         assertFalse(dataset.supportsDatabaseImport());
         assertEquals(dataset, Dataset.named(dataset.datasetName()));
-        assertThrows(IllegalArgumentException.class, () -> DatasetCatalog.table(dataset));
+        var table = DatasetCatalog.table(dataset);
+        assertEquals("3.0", table.version());
+        assertEquals("uprn", table.key());
+        assertEquals(dataset.datasetName(), table.physical());
+        assertTrue(table.header().startsWith("uprn,versiondate,"));
+        assertTrue(table.header().endsWith(",geometry,positionalaccuracy,effectivestartdate,effectiveenddate"));
+        assertFalse(table.header().contains("release_id"));
         assertThrows(IllegalStateException.class, () -> dataset.landing(SupplyType.FULL));
         assertThrows(IllegalStateException.class, () -> dataset.prepareCall(SupplyType.COU));
     }

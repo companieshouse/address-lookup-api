@@ -2,7 +2,6 @@ package uk.gov.companieshouse.release.model;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.util.Arrays;
 import java.util.List;
 
 public final class DatasetCatalog {
@@ -39,16 +38,12 @@ public final class DatasetCatalog {
         try (var in = DatasetCatalog.class.getResourceAsStream("/catalog.json")) {
             if (in == null) throw new IllegalStateException("Missing pinned OS catalog");
             var tables = List.of(new ObjectMapper().readValue(in, Table[].class));
-            long importableDatasets =
-                    Arrays.stream(Dataset.values()).filter(Dataset::supportsDatabaseImport).count();
-            if (tables.size() != importableDatasets
+            // Every dataset needs an entry: acquisition validates each CSV header against it.
+            if (tables.size() != Dataset.values().length
                     || tables.stream().map(Table::name).distinct().count() != tables.size())
                 throw new IllegalStateException(
-                        "Expected one distinct catalogue entry per importable OS dataset");
-            for (var table : tables) {
-                if (!Dataset.named(table.name()).supportsDatabaseImport())
-                    throw new IllegalStateException("No database mapping for " + table.name());
-            }
+                        "Expected one distinct catalogue entry per OS dataset");
+            tables.forEach(table -> Dataset.named(table.name()));
             return tables;
         } catch (Exception e) {
             throw new ExceptionInInitializerError(e);
@@ -59,8 +54,12 @@ public final class DatasetCatalog {
         return TABLES;
     }
 
+    /** The datasets the import Lambda loads; the FULL procedures use os_control.schema_contract. */
     public static List<Dataset> datasets() {
-        return TABLES.stream().map(table -> Dataset.named(table.name())).toList();
+        return TABLES.stream()
+                .map(table -> Dataset.named(table.name()))
+                .filter(Dataset::supportsDatabaseImport)
+                .toList();
     }
 
     public static Table table(Dataset dataset) {

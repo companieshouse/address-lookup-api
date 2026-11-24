@@ -265,6 +265,7 @@ handlers that use them; they are not API startup requirements.
 | `MAX_EXTRACTED_BYTES` | Maximum extracted size in bytes. | `1073741824` (1 GiB) |
 | `ACQUISITION_SWEEP_LIMIT` | Acquisition reconciliation sweep limit. | `20` |
 | `ROYAL_MAIL_SCHEMA` | Configured Royal Mail dataset schema version. | `1.0`; must agree with the pinned release contract. |
+| `NGD_ADDRESS_SCHEMA` | Configured built address and pre-build address dataset schema version. | `3.0`; must agree with `os_control.schema_contract`. |
 
 Discovery attempts every configured daily package, reporting package-specific failures
 after the remaining packages have been attempted. Download skips an existing ZIP only

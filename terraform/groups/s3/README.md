@@ -56,17 +56,37 @@ that integration is configured and deployed.
 
 ## Deployment and state
 
-Terraform 1.7 or later is required. Review each environment's real remote-state
+Terraform 1.3 or later is required. Review each environment's real remote-state
 plan before applying; do not assume previously deployed resources or state are
 absent. The new bucket is protected by `prevent_destroy`; changing or retiring
 it requires an explicit migration decision.
 
-`removed.tf` relinquishes ownership of the former bucket resources without
-deleting them or their settings. The new resources use distinct Terraform
-addresses and bucket names; old buckets and shared-services contents are not
-moved or deleted. If data exists there, arrange and verify a separate migration.
-Existing locally managed GuardDuty resources are also protected from destruction;
-coordinate any state transfer and scanning transition before applying.
+Terraform 1.3 cannot use `removed` blocks. Before applying, inspect each
+environment's remote state and, if it contains any of the former bucket resource
+addresses below, back up the state and remove those addresses from state using
+`terraform state rm` with that environment's backend and workspace selected.
+Do not delete the resources themselves. The pipeline rejects plans containing
+deletions; do not bypass that check. The affected addresses are:
+
+```
+aws_s3_bucket.this
+aws_s3_bucket_logging.this
+module.access_logging
+aws_s3_bucket_versioning.this
+aws_s3_bucket_public_access_block.this
+aws_s3_bucket_ownership_controls.this
+aws_s3_bucket_server_side_encryption_configuration.this
+aws_s3_bucket_policy.this
+aws_s3_bucket_lifecycle_configuration.landing
+aws_s3_bucket_lifecycle_configuration.control
+aws_s3_bucket_lifecycle_configuration.quarantine
+```
+
+The new resources use distinct Terraform addresses and bucket names; old buckets
+and shared-services contents are not moved or deleted. If data exists there,
+arrange and verify a separate migration. Existing locally managed GuardDuty
+resources are also protected from destruction; coordinate any state transfer
+and scanning transition before applying.
 
 Apply with the `<env>-s3-plan` / `<env>-s3-apply` Concourse jobs after confirming
 the bucket name, key, logging destination and state transition.

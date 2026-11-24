@@ -5,8 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.core.JsonProcessingException;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,7 +16,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
+
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
@@ -24,11 +28,9 @@ import java.util.Map;
 @ExtendWith(MockitoExtension.class)
 class AbstractRequestHandlerImplTest {
 
-    @Mock
-    private TestService testService;
+    @Mock private TestService testService;
 
-    @Mock
-    private Context context;
+    @Mock private Context context;
 
     private AbstractRequestHandlerImpl<Map<String, Object>, String> testHandler;
 
@@ -48,7 +50,12 @@ class AbstractRequestHandlerImplTest {
 
     @Test
     void shouldReturnFailureForPermanentFailureException() throws Exception {
-        when(testService.run()).thenThrow(PermanentFailureException.builder().description("Something went wrong that can't be fixed with a retry").build());
+        when(testService.run())
+                .thenThrow(
+                        PermanentFailureException.builder()
+                                .description(
+                                        "Something went wrong that can't be fixed with a retry")
+                                .build());
         String response = testHandler.handleRequest(Map.of(), context);
 
         assertEquals("FAILURE", response);
@@ -56,11 +63,17 @@ class AbstractRequestHandlerImplTest {
 
     @Test
     void shouldThrowRuntimeExceptionForTransientFailureException() throws Exception {
-        when(testService.run()).thenThrow(TransientFailureException.builder().description("Something went wrong but might be OK with a retry").build());
+        when(testService.run())
+                .thenThrow(
+                        TransientFailureException.builder()
+                                .description("Something went wrong but might be OK with a retry")
+                                .build());
         Map<String, Object> request = Map.of();
-        assertThrows(RuntimeException.class, () -> {
-            testHandler.handleRequest(request, context);
-        });
+        assertThrows(
+                RuntimeException.class,
+                () -> {
+                    testHandler.handleRequest(request, context);
+                });
     }
 
     @Test
@@ -74,16 +87,20 @@ class AbstractRequestHandlerImplTest {
     }
 
     @Test
-    void shouldThrowAwsServiceExceptionForCommandDispatchExceptionNonJSONParsingException() throws Exception {
+    void shouldThrowAwsServiceExceptionForCommandDispatchExceptionNonJSONParsingException()
+            throws Exception {
         Commands.CommandDispatchException exception = mock(Commands.CommandDispatchException.class);
-        when(exception.getMessage()).thenReturn("Something went wrong sending the command, but might work next time");
+        when(exception.getMessage())
+                .thenReturn("Something went wrong sending the command, but might work next time");
 
         when(testService.run()).thenThrow(exception);
 
         Map<String, Object> request = Map.of();
-        assertThrows(AwsServiceException.class, () -> {
-            testHandler.handleRequest(request, context);
-        });
+        assertThrows(
+                AwsServiceException.class,
+                () -> {
+                    testHandler.handleRequest(request, context);
+                });
     }
 
     @Test
@@ -97,7 +114,8 @@ class AbstractRequestHandlerImplTest {
 
     @Test
     void shouldReturnFailureForAnyOtherRuntimeException() throws Exception {
-        Exception exception = new RuntimeException("Something wrong that was not anticipated, so try again");
+        Exception exception =
+                new RuntimeException("Something wrong that was not anticipated, so try again");
 
         when(testService.run()).thenThrow(exception);
 
@@ -106,22 +124,19 @@ class AbstractRequestHandlerImplTest {
     }
 
     @ParameterizedTest
-    @CsvSource({
-            "java.io.IOException, false",
-            "java.lang.IllegalArgumentException, true"
-    })
+    @CsvSource({"java.io.IOException, false", "java.lang.IllegalArgumentException, true"})
     void testIsPermanent(String exceptionClassName, boolean isPermanent) throws Exception {
         final String TEST_MESSAGE = "Test Message";
 
         Class<?> exceptionClass = Class.forName(exceptionClassName);
-        Exception exception = (Exception)exceptionClass
-                .getConstructor(String.class).newInstance(TEST_MESSAGE);
+        Exception exception =
+                (Exception) exceptionClass.getConstructor(String.class).newInstance(TEST_MESSAGE);
         assertInstanceOf(exceptionClass, exception);
         assertEquals(isPermanent, testHandler.isPermanent(exception));
     }
 
-    private static class TestRequestHandlerImpl extends
-            AbstractRequestHandlerImpl<Map<String, Object>, String> {
+    private static class TestRequestHandlerImpl
+            extends AbstractRequestHandlerImpl<Map<String, Object>, String> {
 
         private final TestService testService;
 
@@ -147,12 +162,11 @@ class AbstractRequestHandlerImplTest {
 
         @Override
         protected void handleTransientException(Exception transientException) {
-            throw  AwsServiceException.builder().cause(transientException).build();
+            throw AwsServiceException.builder().cause(transientException).build();
         }
     }
 
     private interface TestService {
         String run() throws PermanentFailureException, TransientFailureException;
     }
-
 }

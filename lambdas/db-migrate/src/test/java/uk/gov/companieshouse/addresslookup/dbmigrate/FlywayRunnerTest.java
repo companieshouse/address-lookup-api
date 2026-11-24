@@ -8,15 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
-import java.util.List;
-import java.util.function.Supplier;
-import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.ErrorCode;
 import org.flywaydb.core.api.ErrorDetails;
@@ -46,6 +37,17 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
+import java.util.List;
+import java.util.function.Supplier;
+
+import javax.sql.DataSource;
+
 /**
  * Unit tests for FlywayRunner. Flyway itself is mocked, so these cover how the runner configures
  * Flyway, builds the outcome for each command and maps failures to error codes. Running real
@@ -54,328 +56,347 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class FlywayRunnerTest {
 
-  private static final String LOCK_TIMEOUT = "10s";
+    private static final String LOCK_TIMEOUT = "10s";
 
-  @TempDir Path migrationsDir;
+    @TempDir Path migrationsDir;
 
-  @Mock(answer = Answers.RETURNS_SELF)
-  private FluentConfiguration fluentConfiguration;
+    @Mock(answer = Answers.RETURNS_SELF)
+    private FluentConfiguration fluentConfiguration;
 
-  @Mock private PostgreSQLConfigurationExtension postgresConfigurationExtension;
-  @Mock private Flyway flyway;
-  @Mock private MigrationInfoService migrationInfoService;
-  @Mock private Supplier<Connection> dbConnectionSupplier;
-  @Mock private Connection dbConnection;
+    @Mock private PostgreSQLConfigurationExtension postgresConfigurationExtension;
+    @Mock private Flyway flyway;
+    @Mock private MigrationInfoService migrationInfoService;
+    @Mock private Supplier<Connection> dbConnectionSupplier;
+    @Mock private Connection dbConnection;
 
-  private final FlywayRunner flywayRunner = new FlywayRunner();
+    private final FlywayRunner flywayRunner = new FlywayRunner();
 
-  @BeforeEach
-  void writeOneMigration() throws IOException {
-    Files.writeString(migrationsDir.resolve("V1__create_table.sql"), "CREATE TABLE t (id int);");
-  }
-
-  /** Runs the runner with Flyway.configure replaced, so no database or real Flyway is involved. */
-  private FlywayRunner.Outcome runWithMockedFlyway(Command command) {
-    try (MockedStatic<Flyway> flywayStatic = Mockito.mockStatic(Flyway.class)) {
-      flywayStatic
-          .when(() -> Flyway.configure(ArgumentMatchers.any(ClassLoader.class)))
-          .thenReturn(fluentConfiguration);
-      when(fluentConfiguration.getConfigurationExtension(PostgreSQLConfigurationExtension.class))
-          .thenReturn(postgresConfigurationExtension);
-      when(fluentConfiguration.load()).thenReturn(flyway);
-      return flywayRunner.run(command, migrationsDir, dbConnectionSupplier, LOCK_TIMEOUT);
+    @BeforeEach
+    void writeOneMigration() throws IOException {
+        Files.writeString(
+                migrationsDir.resolve("V1__create_table.sql"), "CREATE TABLE t (id int);");
     }
-  }
 
-  /** For migrate and repair, which only read the current schema version. */
-  private void stubCurrent(MigrationInfo current) {
-    when(flyway.info()).thenReturn(migrationInfoService);
-    when(migrationInfoService.current()).thenReturn(current);
-  }
+    /**
+     * Runs the runner with Flyway.configure replaced, so no database or real Flyway is involved.
+     */
+    private FlywayRunner.Outcome runWithMockedFlyway(Command command) {
+        try (MockedStatic<Flyway> flywayStatic = Mockito.mockStatic(Flyway.class)) {
+            flywayStatic
+                    .when(() -> Flyway.configure(ArgumentMatchers.any(ClassLoader.class)))
+                    .thenReturn(fluentConfiguration);
+            when(fluentConfiguration.getConfigurationExtension(
+                            PostgreSQLConfigurationExtension.class))
+                    .thenReturn(postgresConfigurationExtension);
+            when(fluentConfiguration.load()).thenReturn(flyway);
+            return flywayRunner.run(command, migrationsDir, dbConnectionSupplier, LOCK_TIMEOUT);
+        }
+    }
 
-  /** For info and validate, which also read the pending migrations. */
-  private void stubInfo(MigrationInfo current, MigrationInfo... pending) {
-    stubCurrent(current);
-    when(migrationInfoService.pending()).thenReturn(pending);
-  }
+    /** For migrate and repair, which only read the current schema version. */
+    private void stubCurrent(MigrationInfo current) {
+        when(flyway.info()).thenReturn(migrationInfoService);
+        when(migrationInfoService.current()).thenReturn(current);
+    }
 
-  private static MigrationInfo appliedMigrationInfo(String version) {
-    var migrationInfo = Mockito.mock(MigrationInfo.class);
-    when(migrationInfo.getVersion()).thenReturn(MigrationVersion.fromVersion(version));
-    return migrationInfo;
-  }
+    /** For info and validate, which also read the pending migrations. */
+    private void stubInfo(MigrationInfo current, MigrationInfo... pending) {
+        stubCurrent(current);
+        when(migrationInfoService.pending()).thenReturn(pending);
+    }
 
-  private static MigrationInfo pendingMigrationInfo(String script) {
-    var migrationInfo = Mockito.mock(MigrationInfo.class);
-    when(migrationInfo.getScript()).thenReturn(script);
-    return migrationInfo;
-  }
+    private static MigrationInfo appliedMigrationInfo(String version) {
+        var migrationInfo = Mockito.mock(MigrationInfo.class);
+        when(migrationInfo.getVersion()).thenReturn(MigrationVersion.fromVersion(version));
+        return migrationInfo;
+    }
 
-  private static MigrateOutput migrateOutput(String filepath) {
-    var output = new MigrateOutput();
-    output.filepath = filepath;
-    return output;
-  }
+    private static MigrationInfo pendingMigrationInfo(String script) {
+        var migrationInfo = Mockito.mock(MigrationInfo.class);
+        when(migrationInfo.getScript()).thenReturn(script);
+        return migrationInfo;
+    }
 
-  private static RepairOutput repairOutput(String filepath) {
-    return new RepairOutput("1", "description", filepath);
-  }
+    private static MigrateOutput migrateOutput(String filepath) {
+        var output = new MigrateOutput();
+        output.filepath = filepath;
+        return output;
+    }
 
-  // ---- Real Flyway: connection failures ----
+    private static RepairOutput repairOutput(String filepath) {
+        return new RepairOutput("1", "description", filepath);
+    }
 
-  @ParameterizedTest
-  @EnumSource(Command.class)
-  void connectionFailureKeepsItsOwnErrorCode(Command command) {
-    var connectionFailure =
-        new MigrationException(MigrationException.Code.DATABASE_UNAVAILABLE, "no route to host");
-    Supplier<Connection> failingConnectionSupplier =
-        () -> {
-          throw connectionFailure;
-        };
+    // ---- Real Flyway: connection failures ----
 
-    var e =
-        assertThrows(
-            MigrationException.class,
-            () ->
-                flywayRunner.run(command, migrationsDir, failingConnectionSupplier, LOCK_TIMEOUT));
+    @ParameterizedTest
+    @EnumSource(Command.class)
+    void connectionFailureKeepsItsOwnErrorCode(Command command) {
+        var connectionFailure =
+                new MigrationException(
+                        MigrationException.Code.DATABASE_UNAVAILABLE, "no route to host");
+        Supplier<Connection> failingConnectionSupplier =
+                () -> {
+                    throw connectionFailure;
+                };
 
-    assertEquals(MigrationException.Code.DATABASE_UNAVAILABLE, e.code());
-    assertSame(connectionFailure, e);
-  }
+        var e =
+                assertThrows(
+                        MigrationException.class,
+                        () ->
+                                flywayRunner.run(
+                                        command,
+                                        migrationsDir,
+                                        failingConnectionSupplier,
+                                        LOCK_TIMEOUT));
 
-  // ---- Flyway configuration ----
+        assertEquals(MigrationException.Code.DATABASE_UNAVAILABLE, e.code());
+        assertSame(connectionFailure, e);
+    }
 
-  @Test
-  void configuresFlywayForASafeRun() {
-    stubInfo(null);
+    // ---- Flyway configuration ----
 
-    runWithMockedFlyway(Command.INFO);
+    @Test
+    void configuresFlywayForASafeRun() {
+        stubInfo(null);
 
-    verify(fluentConfiguration).locations("filesystem:" + migrationsDir.toAbsolutePath());
-    verify(fluentConfiguration).failOnMissingLocations(true);
-    verify(fluentConfiguration).validateMigrationNaming(true);
-    verify(fluentConfiguration).cleanDisabled(true);
-    verify(fluentConfiguration).baselineOnMigrate(false);
-    verify(fluentConfiguration).outOfOrder(false);
-    verify(fluentConfiguration).connectRetries(0);
-    verify(fluentConfiguration).initSql("SET lock_timeout = '10s'");
-    verify(fluentConfiguration).ignoreMigrationPatterns("*:future");
-    verify(postgresConfigurationExtension).setTransactionalLock(false);
-  }
+        runWithMockedFlyway(Command.INFO);
 
-  @Test
-  void dataSourceHandsOutConnectionsFromTheSupplier() throws Exception {
-    stubInfo(null);
-    when(dbConnectionSupplier.get()).thenReturn(dbConnection);
+        verify(fluentConfiguration).locations("filesystem:" + migrationsDir.toAbsolutePath());
+        verify(fluentConfiguration).failOnMissingLocations(true);
+        verify(fluentConfiguration).validateMigrationNaming(true);
+        verify(fluentConfiguration).cleanDisabled(true);
+        verify(fluentConfiguration).baselineOnMigrate(false);
+        verify(fluentConfiguration).outOfOrder(false);
+        verify(fluentConfiguration).connectRetries(0);
+        verify(fluentConfiguration).initSql("SET lock_timeout = '10s'");
+        verify(fluentConfiguration).ignoreMigrationPatterns("*:future");
+        verify(postgresConfigurationExtension).setTransactionalLock(false);
+    }
 
-    runWithMockedFlyway(Command.INFO);
+    @Test
+    void dataSourceHandsOutConnectionsFromTheSupplier() throws Exception {
+        stubInfo(null);
+        when(dbConnectionSupplier.get()).thenReturn(dbConnection);
 
-    var dataSourceCaptor = ArgumentCaptor.forClass(DataSource.class);
-    verify(fluentConfiguration).dataSource(dataSourceCaptor.capture());
-    var dataSource = dataSourceCaptor.getValue();
-    assertSame(dbConnection, dataSource.getConnection());
-    assertSame(dbConnection, dataSource.getConnection("ignored-user", "ignored-password"));
-    assertNull(dataSource.getLogWriter());
-    dataSource.setLogWriter(null);
-    dataSource.setLoginTimeout(30);
-    assertEquals(0, dataSource.getLoginTimeout());
-    assertFalse(dataSource.isWrapperFor(DataSource.class));
-    assertThrows(SQLException.class, () -> dataSource.unwrap(DataSource.class));
-    assertThrows(SQLFeatureNotSupportedException.class, dataSource::getParentLogger);
-  }
+        runWithMockedFlyway(Command.INFO);
 
-  // ---- info ----
+        var dataSourceCaptor = ArgumentCaptor.forClass(DataSource.class);
+        verify(fluentConfiguration).dataSource(dataSourceCaptor.capture());
+        var dataSource = dataSourceCaptor.getValue();
+        assertSame(dbConnection, dataSource.getConnection());
+        assertSame(dbConnection, dataSource.getConnection("ignored-user", "ignored-password"));
+        assertNull(dataSource.getLogWriter());
+        dataSource.setLogWriter(null);
+        dataSource.setLoginTimeout(30);
+        assertEquals(0, dataSource.getLoginTimeout());
+        assertFalse(dataSource.isWrapperFor(DataSource.class));
+        assertThrows(SQLException.class, () -> dataSource.unwrap(DataSource.class));
+        assertThrows(SQLFeatureNotSupportedException.class, dataSource::getParentLogger);
+    }
 
-  @Test
-  void infoReportsTheCurrentSchemaVersionAndThePendingScriptFileNames() {
-    stubInfo(
-        appliedMigrationInfo("2026.003"),
-        pendingMigrationInfo("V2026.004__create_view.sql"),
-        pendingMigrationInfo("V2026.005__add_index.sql"));
+    // ---- info ----
 
-    var outcome = runWithMockedFlyway(Command.INFO);
+    @Test
+    void infoReportsTheCurrentSchemaVersionAndThePendingScriptFileNames() {
+        stubInfo(
+                appliedMigrationInfo("2026.003"),
+                pendingMigrationInfo("V2026.004__create_view.sql"),
+                pendingMigrationInfo("V2026.005__add_index.sql"));
 
-    assertEquals("2026.003", outcome.latestAppliedSchemaVersion());
-    assertEquals(
-        List.of("V2026.004__create_view.sql", "V2026.005__add_index.sql"),
-        outcome.pendingScriptFileNames());
-    assertEquals(List.of(), outcome.appliedScriptFileNames());
-    assertEquals(List.of(), outcome.repairedScriptFileNames());
-    assertEquals(List.of(), outcome.repairActions());
-  }
+        var outcome = runWithMockedFlyway(Command.INFO);
 
-  @Test
-  void infoOnAnEmptyDatabaseHasNoSchemaVersion() {
-    stubInfo(null, pendingMigrationInfo("V2026.001__create_schemas.sql"));
+        assertEquals("2026.003", outcome.latestAppliedSchemaVersion());
+        assertEquals(
+                List.of("V2026.004__create_view.sql", "V2026.005__add_index.sql"),
+                outcome.pendingScriptFileNames());
+        assertEquals(List.of(), outcome.appliedScriptFileNames());
+        assertEquals(List.of(), outcome.repairedScriptFileNames());
+        assertEquals(List.of(), outcome.repairActions());
+    }
 
-    var outcome = runWithMockedFlyway(Command.INFO);
+    @Test
+    void infoOnAnEmptyDatabaseHasNoSchemaVersion() {
+        stubInfo(null, pendingMigrationInfo("V2026.001__create_schemas.sql"));
 
-    assertNull(outcome.latestAppliedSchemaVersion());
-    assertEquals(List.of("V2026.001__create_schemas.sql"), outcome.pendingScriptFileNames());
-  }
+        var outcome = runWithMockedFlyway(Command.INFO);
 
-  @Test
-  void infoTreatsACurrentMigrationWithoutAVersionAsNoSchemaVersion() {
-    stubInfo(Mockito.mock(MigrationInfo.class));
+        assertNull(outcome.latestAppliedSchemaVersion());
+        assertEquals(List.of("V2026.001__create_schemas.sql"), outcome.pendingScriptFileNames());
+    }
 
-    var outcome = runWithMockedFlyway(Command.INFO);
+    @Test
+    void infoTreatsACurrentMigrationWithoutAVersionAsNoSchemaVersion() {
+        stubInfo(Mockito.mock(MigrationInfo.class));
 
-    assertNull(outcome.latestAppliedSchemaVersion());
-    assertEquals(List.of(), outcome.pendingScriptFileNames());
-  }
+        var outcome = runWithMockedFlyway(Command.INFO);
 
-  // ---- validate ----
+        assertNull(outcome.latestAppliedSchemaVersion());
+        assertEquals(List.of(), outcome.pendingScriptFileNames());
+    }
 
-  @Test
-  void validateReportsThePendingScriptFileNamesAndIgnoresPendingMigrations() {
-    when(flyway.validateWithResult())
-        .thenReturn(new ValidateResult("13.10.0", "db", null, true, 3, List.of(), List.of()));
-    stubInfo(appliedMigrationInfo("2026.003"), pendingMigrationInfo("V2026.004__create_view.sql"));
+    // ---- validate ----
 
-    var outcome = runWithMockedFlyway(Command.VALIDATE);
+    @Test
+    void validateReportsThePendingScriptFileNamesAndIgnoresPendingMigrations() {
+        when(flyway.validateWithResult())
+                .thenReturn(
+                        new ValidateResult("13.10.0", "db", null, true, 3, List.of(), List.of()));
+        stubInfo(
+                appliedMigrationInfo("2026.003"),
+                pendingMigrationInfo("V2026.004__create_view.sql"));
 
-    assertEquals("2026.003", outcome.latestAppliedSchemaVersion());
-    assertEquals(List.of("V2026.004__create_view.sql"), outcome.pendingScriptFileNames());
-    verify(fluentConfiguration).ignoreMigrationPatterns("*:pending");
-  }
+        var outcome = runWithMockedFlyway(Command.VALIDATE);
 
-  @Test
-  void validateFailureFailsAsValidationFailed() {
-    var failedValidation = Mockito.mock(ValidateResult.class);
-    when(failedValidation.getAllErrorMessages()).thenReturn("Checksum mismatch for V2026.001");
-    when(flyway.validateWithResult()).thenReturn(failedValidation);
+        assertEquals("2026.003", outcome.latestAppliedSchemaVersion());
+        assertEquals(List.of("V2026.004__create_view.sql"), outcome.pendingScriptFileNames());
+        verify(fluentConfiguration).ignoreMigrationPatterns("*:pending");
+    }
 
-    var e = assertThrows(MigrationException.class, () -> runWithMockedFlyway(Command.VALIDATE));
+    @Test
+    void validateFailureFailsAsValidationFailed() {
+        var failedValidation = Mockito.mock(ValidateResult.class);
+        when(failedValidation.getAllErrorMessages()).thenReturn("Checksum mismatch for V2026.001");
+        when(flyway.validateWithResult()).thenReturn(failedValidation);
 
-    assertEquals(MigrationException.Code.VALIDATION_FAILED, e.code());
-    assertEquals("VALIDATION_FAILED: Checksum mismatch for V2026.001", e.getMessage());
-  }
+        var e = assertThrows(MigrationException.class, () -> runWithMockedFlyway(Command.VALIDATE));
 
-  // ---- migrate ----
+        assertEquals(MigrationException.Code.VALIDATION_FAILED, e.code());
+        assertEquals("VALIDATION_FAILED: Checksum mismatch for V2026.001", e.getMessage());
+    }
 
-  @Test
-  void migrateReportsTheAppliedScriptFileNamesAndTheNewSchemaVersion() {
-    var migrateResult = new MigrateResult();
-    migrateResult.migrations =
-        List.of(
-            migrateOutput("/tmp/db-migrate-1/root/migrations/V2026.001__create_schemas.sql"),
-            migrateOutput("/tmp/db-migrate-1/root/migrations/V2026.002__create_tables.sql"));
-    when(flyway.migrate()).thenReturn(migrateResult);
-    stubCurrent(appliedMigrationInfo("2026.002"));
+    // ---- migrate ----
 
-    var outcome = runWithMockedFlyway(Command.MIGRATE);
+    @Test
+    void migrateReportsTheAppliedScriptFileNamesAndTheNewSchemaVersion() {
+        var migrateResult = new MigrateResult();
+        migrateResult.migrations =
+                List.of(
+                        migrateOutput(
+                                "/tmp/db-migrate-1/root/migrations/V2026.001__create_schemas.sql"),
+                        migrateOutput(
+                                "/tmp/db-migrate-1/root/migrations/V2026.002__create_tables.sql"));
+        when(flyway.migrate()).thenReturn(migrateResult);
+        stubCurrent(appliedMigrationInfo("2026.002"));
 
-    assertEquals("2026.002", outcome.latestAppliedSchemaVersion());
-    assertEquals(
-        List.of("V2026.001__create_schemas.sql", "V2026.002__create_tables.sql"),
-        outcome.appliedScriptFileNames());
-    assertEquals(List.of(), outcome.pendingScriptFileNames());
-    verify(fluentConfiguration).ignoreMigrationPatterns("*:future");
-  }
+        var outcome = runWithMockedFlyway(Command.MIGRATE);
 
-  @Test
-  void migrateWithNothingToApplyReportsNoAppliedScripts() {
-    var migrateResult = new MigrateResult();
-    migrateResult.migrations = List.of();
-    when(flyway.migrate()).thenReturn(migrateResult);
-    stubCurrent(appliedMigrationInfo("2026.004"));
+        assertEquals("2026.002", outcome.latestAppliedSchemaVersion());
+        assertEquals(
+                List.of("V2026.001__create_schemas.sql", "V2026.002__create_tables.sql"),
+                outcome.appliedScriptFileNames());
+        assertEquals(List.of(), outcome.pendingScriptFileNames());
+        verify(fluentConfiguration).ignoreMigrationPatterns("*:future");
+    }
 
-    var outcome = runWithMockedFlyway(Command.MIGRATE);
+    @Test
+    void migrateWithNothingToApplyReportsNoAppliedScripts() {
+        var migrateResult = new MigrateResult();
+        migrateResult.migrations = List.of();
+        when(flyway.migrate()).thenReturn(migrateResult);
+        stubCurrent(appliedMigrationInfo("2026.004"));
 
-    assertEquals("2026.004", outcome.latestAppliedSchemaVersion());
-    assertEquals(List.of(), outcome.appliedScriptFileNames());
-  }
+        var outcome = runWithMockedFlyway(Command.MIGRATE);
 
-  // ---- repair ----
+        assertEquals("2026.004", outcome.latestAppliedSchemaVersion());
+        assertEquals(List.of(), outcome.appliedScriptFileNames());
+    }
 
-  @Test
-  void repairReportsTheDistinctRepairedScriptFileNamesAndTheRepairActions() {
-    var repairResult = new RepairResult("13.10.0", "db");
-    repairResult.migrationsRemoved = List.of(repairOutput("/tmp/m/V1__a.sql"), repairOutput(null));
-    repairResult.migrationsDeleted = List.of(repairOutput("/tmp/m/V2__b.sql"));
-    repairResult.migrationsAligned = List.of(repairOutput("/tmp/other/V1__a.sql"));
-    repairResult.repairActions = List.of("Removed failed migration V1", "Aligned checksum of V2");
-    when(flyway.repair()).thenReturn(repairResult);
-    stubCurrent(appliedMigrationInfo("2026.003"));
+    // ---- repair ----
 
-    var outcome = runWithMockedFlyway(Command.REPAIR);
+    @Test
+    void repairReportsTheDistinctRepairedScriptFileNamesAndTheRepairActions() {
+        var repairResult = new RepairResult("13.10.0", "db");
+        repairResult.migrationsRemoved =
+                List.of(repairOutput("/tmp/m/V1__a.sql"), repairOutput(null));
+        repairResult.migrationsDeleted = List.of(repairOutput("/tmp/m/V2__b.sql"));
+        repairResult.migrationsAligned = List.of(repairOutput("/tmp/other/V1__a.sql"));
+        repairResult.repairActions =
+                List.of("Removed failed migration V1", "Aligned checksum of V2");
+        when(flyway.repair()).thenReturn(repairResult);
+        stubCurrent(appliedMigrationInfo("2026.003"));
 
-    assertEquals("2026.003", outcome.latestAppliedSchemaVersion());
-    assertEquals(List.of("V1__a.sql", "V2__b.sql"), outcome.repairedScriptFileNames());
-    assertEquals(
-        List.of("Removed failed migration V1", "Aligned checksum of V2"), outcome.repairActions());
-    assertEquals(List.of(), outcome.appliedScriptFileNames());
-    assertEquals(List.of(), outcome.pendingScriptFileNames());
-  }
+        var outcome = runWithMockedFlyway(Command.REPAIR);
 
-  @Test
-  void repairWithNothingToDoReportsEmptyLists() {
-    var repairResult = new RepairResult("13.10.0", "db");
-    repairResult.migrationsRemoved = null;
-    repairResult.migrationsDeleted = null;
-    repairResult.migrationsAligned = null;
-    repairResult.repairActions = null;
-    when(flyway.repair()).thenReturn(repairResult);
-    stubCurrent(null);
+        assertEquals("2026.003", outcome.latestAppliedSchemaVersion());
+        assertEquals(List.of("V1__a.sql", "V2__b.sql"), outcome.repairedScriptFileNames());
+        assertEquals(
+                List.of("Removed failed migration V1", "Aligned checksum of V2"),
+                outcome.repairActions());
+        assertEquals(List.of(), outcome.appliedScriptFileNames());
+        assertEquals(List.of(), outcome.pendingScriptFileNames());
+    }
 
-    var outcome = runWithMockedFlyway(Command.REPAIR);
+    @Test
+    void repairWithNothingToDoReportsEmptyLists() {
+        var repairResult = new RepairResult("13.10.0", "db");
+        repairResult.migrationsRemoved = null;
+        repairResult.migrationsDeleted = null;
+        repairResult.migrationsAligned = null;
+        repairResult.repairActions = null;
+        when(flyway.repair()).thenReturn(repairResult);
+        stubCurrent(null);
 
-    assertNull(outcome.latestAppliedSchemaVersion());
-    assertEquals(List.of(), outcome.repairedScriptFileNames());
-    assertEquals(List.of(), outcome.repairActions());
-  }
+        var outcome = runWithMockedFlyway(Command.REPAIR);
 
-  // ---- failures ----
+        assertNull(outcome.latestAppliedSchemaVersion());
+        assertEquals(List.of(), outcome.repairedScriptFileNames());
+        assertEquals(List.of(), outcome.repairActions());
+    }
 
-  @Test
-  void flywayValidateExceptionFailsAsValidationFailed() {
-    var validateException =
-        new FlywayValidateException(
-            new ErrorDetails(Mockito.mock(ErrorCode.class), "checksum mismatch"),
-            "checksum mismatch");
-    when(flyway.migrate()).thenThrow(validateException);
+    // ---- failures ----
 
-    var e = assertThrows(MigrationException.class, () -> runWithMockedFlyway(Command.MIGRATE));
+    @Test
+    void flywayValidateExceptionFailsAsValidationFailed() {
+        var validateException =
+                new FlywayValidateException(
+                        new ErrorDetails(Mockito.mock(ErrorCode.class), "checksum mismatch"),
+                        "checksum mismatch");
+        when(flyway.migrate()).thenThrow(validateException);
 
-    assertEquals(MigrationException.Code.VALIDATION_FAILED, e.code());
-    assertSame(validateException, e.getCause());
-  }
+        var e = assertThrows(MigrationException.class, () -> runWithMockedFlyway(Command.MIGRATE));
 
-  @Test
-  void otherFlywayExceptionsFailAsMigrationFailed() {
-    var flywayException = new FlywayException("Migration V2026.002 failed");
-    when(flyway.migrate()).thenThrow(flywayException);
+        assertEquals(MigrationException.Code.VALIDATION_FAILED, e.code());
+        assertSame(validateException, e.getCause());
+    }
 
-    var e = assertThrows(MigrationException.class, () -> runWithMockedFlyway(Command.MIGRATE));
+    @Test
+    void otherFlywayExceptionsFailAsMigrationFailed() {
+        var flywayException = new FlywayException("Migration V2026.002 failed");
+        when(flyway.migrate()).thenThrow(flywayException);
 
-    assertEquals(MigrationException.Code.MIGRATION_FAILED, e.code());
-    assertEquals("MIGRATION_FAILED: Migration V2026.002 failed", e.getMessage());
-    assertSame(flywayException, e.getCause());
-  }
+        var e = assertThrows(MigrationException.class, () -> runWithMockedFlyway(Command.MIGRATE));
 
-  @Test
-  void migrationExceptionWrappedDeepInsideFlywayExceptionIsRethrown() {
-    var databaseUnavailable =
-        new MigrationException(MigrationException.Code.DATABASE_UNAVAILABLE, "connection reset");
-    when(flyway.info())
-        .thenThrow(
-            new FlywayException(
-                "Unable to obtain connection",
-                new RuntimeException("wrapper", databaseUnavailable)));
+        assertEquals(MigrationException.Code.MIGRATION_FAILED, e.code());
+        assertEquals("MIGRATION_FAILED: Migration V2026.002 failed", e.getMessage());
+        assertSame(flywayException, e.getCause());
+    }
 
-    var e = assertThrows(MigrationException.class, () -> runWithMockedFlyway(Command.INFO));
+    @Test
+    void migrationExceptionWrappedDeepInsideFlywayExceptionIsRethrown() {
+        var databaseUnavailable =
+                new MigrationException(
+                        MigrationException.Code.DATABASE_UNAVAILABLE, "connection reset");
+        when(flyway.info())
+                .thenThrow(
+                        new FlywayException(
+                                "Unable to obtain connection",
+                                new RuntimeException("wrapper", databaseUnavailable)));
 
-    assertSame(databaseUnavailable, e);
-  }
+        var e = assertThrows(MigrationException.class, () -> runWithMockedFlyway(Command.INFO));
 
-  @Test
-  void migrationExceptionFromFlywayIsRethrownUnchanged() {
-    var migrationException =
-        new MigrationException(MigrationException.Code.DATABASE_UNAVAILABLE, "lock timeout");
-    when(flyway.migrate()).thenThrow(migrationException);
+        assertSame(databaseUnavailable, e);
+    }
 
-    var e = assertThrows(MigrationException.class, () -> runWithMockedFlyway(Command.MIGRATE));
+    @Test
+    void migrationExceptionFromFlywayIsRethrownUnchanged() {
+        var migrationException =
+                new MigrationException(
+                        MigrationException.Code.DATABASE_UNAVAILABLE, "lock timeout");
+        when(flyway.migrate()).thenThrow(migrationException);
 
-    assertSame(migrationException, e);
-  }
+        var e = assertThrows(MigrationException.class, () -> runWithMockedFlyway(Command.MIGRATE));
+
+        assertSame(migrationException, e);
+    }
 }

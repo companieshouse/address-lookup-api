@@ -128,8 +128,8 @@ The following environment variables can be set for the Discovery Lambda
 
 | Variable          | Proposed Value                       |
 |-------------------|--------------------------------------|
-| SOURCE_BUCKET     | (tbc)                                |
-| SCANNED_BUCKET    | (tbc)                                |
+| CONTROL_BUCKET    | (tbc)                                |
+| LANDING_BUCKET    | (tbc)                                |
 | EVENT_BUS         | default                              |
 | OS_API_KEY        | ************************************ |
 | ROYAL_MAIL_SCHEMA | 2.0                                  |

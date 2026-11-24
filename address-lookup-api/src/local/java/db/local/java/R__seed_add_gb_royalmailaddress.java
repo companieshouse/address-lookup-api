@@ -6,7 +6,7 @@ package db.local.java;
  */
 @SuppressWarnings("java:S101")
 public class R__seed_add_gb_royalmailaddress extends LocalRoyalMailCsvSeed {
-  public R__seed_add_gb_royalmailaddress() {
-    super("add_gb_royalmailaddress", "easting", "northing");
-  }
+    public R__seed_add_gb_royalmailaddress() {
+        super("add_gb_royalmailaddress", "easting", "northing");
+    }
 }

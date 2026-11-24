@@ -13,33 +13,33 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 class CommandTest {
 
-  @ParameterizedTest
-  @CsvSource({"migrate,MIGRATE", "info,INFO", "validate,VALIDATE", "repair,REPAIR"})
-  void parsesEveryWireName(String wireName, Command expectedCommand) {
-    assertEquals(expectedCommand, Command.parse(wireName));
-  }
+    @ParameterizedTest
+    @CsvSource({"migrate,MIGRATE", "info,INFO", "validate,VALIDATE", "repair,REPAIR"})
+    void parsesEveryWireName(String wireName, Command expectedCommand) {
+        assertEquals(expectedCommand, Command.parse(wireName));
+    }
 
-  @ParameterizedTest
-  @CsvSource({"MIGRATE,migrate", "INFO,info", "VALIDATE,validate", "REPAIR,repair"})
-  void wireNameIsLowerCase(Command command, String expectedWireName) {
-    assertEquals(expectedWireName, command.wireName());
-  }
+    @ParameterizedTest
+    @CsvSource({"MIGRATE,migrate", "INFO,info", "VALIDATE,validate", "REPAIR,repair"})
+    void wireNameIsLowerCase(Command command, String expectedWireName) {
+        assertEquals(expectedWireName, command.wireName());
+    }
 
-  @ParameterizedTest
-  @ValueSource(strings = {"MIGRATE", "Migrate", "clean", "undo", "", " migrate"})
-  @NullSource
-  void rejectsUnknownCommandsAsInvalidInput(String value) {
-    var e = assertThrows(MigrationException.class, () -> Command.parse(value));
+    @ParameterizedTest
+    @ValueSource(strings = {"MIGRATE", "Migrate", "clean", "undo", "", " migrate"})
+    @NullSource
+    void rejectsUnknownCommandsAsInvalidInput(String value) {
+        var e = assertThrows(MigrationException.class, () -> Command.parse(value));
 
-    assertEquals(MigrationException.Code.INVALID_INPUT, e.code());
-    assertEquals("INVALID_INPUT: Unknown command: " + value, e.getMessage());
-  }
+        assertEquals(MigrationException.Code.INVALID_INPUT, e.code());
+        assertEquals("INVALID_INPUT: Unknown command: " + value, e.getMessage());
+    }
 
-  @Test
-  void onlyMigrateAndRepairChangeTheDatabase() {
-    assertTrue(Command.MIGRATE.changesDatabase());
-    assertTrue(Command.REPAIR.changesDatabase());
-    assertFalse(Command.INFO.changesDatabase());
-    assertFalse(Command.VALIDATE.changesDatabase());
-  }
+    @Test
+    void onlyMigrateAndRepairChangeTheDatabase() {
+        assertTrue(Command.MIGRATE.changesDatabase());
+        assertTrue(Command.REPAIR.changesDatabase());
+        assertFalse(Command.INFO.changesDatabase());
+        assertFalse(Command.VALIDATE.changesDatabase());
+    }
 }

@@ -91,7 +91,10 @@ and scanning transition before applying.
 Apply with the `<env>-s3-plan` / `<env>-s3-apply` Concourse jobs after confirming
 the bucket name, key, logging destination and state transition.
 
-This is infrastructure preparation only. Java handlers retain their existing S3
-paths (`manifests/`, `ready/`, `quarantine/`, etc.) and are not yet compatible
-with the configured prefixes. Adapt the handlers and their bucket settings before
-running acquisition; changing the infrastructure does not migrate state.
+This is infrastructure preparation only. Java handlers currently use separate
+Control and Landing buckets with keys such as `cursors/` and
+`daily_cou/<package>/<version>/`. They do not prepend the environment-specific
+prefixes above. Their bucket settings and key handling must be adapted before
+running acquisition: the current prefix-scoped permissions, lifecycle rules and
+planned GuardDuty scans do not cover those keys. Changing the infrastructure
+does not migrate state.

@@ -7,13 +7,13 @@ import org.junit.jupiter.api.Test;
 
 class DownloadFailedExceptionTest {
 
-  @Test
-  void keepsCauseAndRetryMessage() {
-    var cause = new IllegalArgumentException("failed to download CVS file.");
+    @Test
+    void keepsCauseAndRetryMessage() {
+        var cause = new IllegalArgumentException("failed to download CVS file.");
 
-    var exception = new DownloadFailedException(cause);
+        var exception = new DownloadFailedException(cause);
 
-    assertEquals("download failed; durable state allows retry", exception.getMessage());
-    assertSame(cause, exception.getCause());
-  }
+        assertEquals("download failed; durable state allows retry", exception.getMessage());
+        assertSame(cause, exception.getCause());
+    }
 }

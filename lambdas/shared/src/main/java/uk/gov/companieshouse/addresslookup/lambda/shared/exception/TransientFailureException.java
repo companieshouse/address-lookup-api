@@ -4,13 +4,22 @@ import uk.gov.companieshouse.release.model.Dataset;
 
 public class TransientFailureException extends AbstractLambdaFailureException {
 
-    private TransientFailureException(String description, Dataset dataset,
-                                      String messageId, String releaseId, String reasonCode) {
+    private TransientFailureException(
+            String description,
+            Dataset dataset,
+            String messageId,
+            String releaseId,
+            String reasonCode) {
         super(description, dataset, messageId, releaseId, reasonCode);
     }
 
-    private TransientFailureException(String description, Throwable cause, Dataset dataset,
-                                      String messageId, String releaseId, String reasonCode) {
+    private TransientFailureException(
+            String description,
+            Throwable cause,
+            Dataset dataset,
+            String messageId,
+            String releaseId,
+            String reasonCode) {
         super(description, cause, dataset, messageId, releaseId, reasonCode);
     }
 
@@ -18,9 +27,11 @@ public class TransientFailureException extends AbstractLambdaFailureException {
         return new Builder<>() {
             @Override
             public TransientFailureException build() {
-                return cause == null ?
-                        new TransientFailureException(description, dataset, messageId, releaseId, reasonCode) :
-                        new TransientFailureException(description, cause, dataset, messageId, releaseId, reasonCode);
+                return cause == null
+                        ? new TransientFailureException(
+                                description, dataset, messageId, releaseId, reasonCode)
+                        : new TransientFailureException(
+                                description, cause, dataset, messageId, releaseId, reasonCode);
             }
         };
     }

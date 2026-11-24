@@ -9,8 +9,12 @@ public abstract class AbstractLambdaFailureException extends Exception {
     private final String releaseId;
     private final String description;
 
-    protected AbstractLambdaFailureException(String description, Dataset dataset,
-                                           String messageId, String releaseId, String reasonCode) {
+    protected AbstractLambdaFailureException(
+            String description,
+            Dataset dataset,
+            String messageId,
+            String releaseId,
+            String reasonCode) {
         this.description = description;
         this.dataset = dataset;
         this.reasonCode = reasonCode;
@@ -18,9 +22,13 @@ public abstract class AbstractLambdaFailureException extends Exception {
         this.releaseId = releaseId;
     }
 
-
-    protected AbstractLambdaFailureException(String description, Throwable cause, Dataset dataset,
-                                           String messageId, String releaseId, String reasonCode) {
+    protected AbstractLambdaFailureException(
+            String description,
+            Throwable cause,
+            Dataset dataset,
+            String messageId,
+            String releaseId,
+            String reasonCode) {
         super(cause);
         this.description = description;
         this.dataset = dataset;
@@ -31,7 +39,8 @@ public abstract class AbstractLambdaFailureException extends Exception {
 
     @Override
     public String getMessage() {
-        return String.format("Description [%s], dataset [%s], messageId [%s], releaseId [%s], reason code [%s]",
+        return String.format(
+                "Description [%s], dataset [%s], messageId [%s], releaseId [%s], reason code [%s]",
                 description, dataset, messageId, releaseId, reasonCode);
     }
 
@@ -94,7 +103,5 @@ public abstract class AbstractLambdaFailureException extends Exception {
         }
 
         public abstract T build();
-
     }
-
 }

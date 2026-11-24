@@ -1,11 +1,26 @@
 package uk.gov.companieshouse.addresslookup.lambda.shared.storage;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+
 import com.fasterxml.jackson.databind.node.ObjectNode;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
+
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.AbortableInputStream;
@@ -18,6 +33,7 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
+
 import uk.gov.companieshouse.addresslookup.lambda.shared.testsupport.FakeS3;
 
 import java.io.ByteArrayInputStream;
@@ -25,393 +41,415 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.function.UnaryOperator;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
-
 final class ReleaseStoreTest {
-  private static final String BUCKET = "landing-bucket";
-  private static final String KEY = "daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip";
+    private static final String BUCKET = "landing-bucket";
+    private static final String KEY =
+            "daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip";
 
-  private final FakeS3 s3 = new FakeS3();
-  private final ReleaseStore store = new ReleaseStore(s3.client());
+    private final FakeS3 s3 = new FakeS3();
+    private final ReleaseStore store = new ReleaseStore(s3.client());
 
-  @Test
-  void readReturnsNullWhenKeyDoesNotExist() throws Exception {
-    assertNull(store.read(BUCKET, "missing.json"));
-  }
-
-  @Test
-  void readParsesExistingJson() throws Exception {
-    s3.objects.put("plan.json", "{\"releaseId\":\"abc\"}".getBytes(StandardCharsets.UTF_8));
-
-    assertEquals("abc", store.read(BUCKET, "plan.json").path("releaseId").asText());
-  }
-
-  @Test
-  void readSpecificVersionUsesPinnedS3Version() throws Exception {
-    var client = mock(S3Client.class);
-    when(client.getObject(any(GetObjectRequest.class)))
-        .thenAnswer(call -> {
-          var request = call.getArgument(0, GetObjectRequest.class);
-          assertEquals(BUCKET, request.bucket());
-          assertEquals("manifest.json", request.key());
-          assertEquals("manifest-version", request.versionId());
-          return new ResponseInputStream<>(
-              GetObjectResponse.builder().build(),
-              AbortableInputStream.create(
-                  new ByteArrayInputStream("{\"version\":1}".getBytes(StandardCharsets.UTF_8))));
-        });
-
-    var manifest = new ReleaseStore(client).read(BUCKET, "manifest.json", "manifest-version");
-
-    assertEquals(1, manifest.path("version").asInt());
-    verify(client, Mockito.never()).listObjectsV2(any(ListObjectsV2Request.class));
-  }
-
-  @Test
-  void readRejectsObjectsLargerThanOneMebibyte() {
-    s3.objects.put("big.json", new byte[1024 * 1024 + 1]);
-
-    var failure =
-        assertThrows(IllegalArgumentException.class, () -> store.read(BUCKET, "big.json"));
-
-    assertEquals("Manifest exceeds 1 MiB", failure.getMessage());
-  }
-
-  @Test
-  void readReturnsNullWhenObjectDisappearsBetweenListAndGet() throws Exception {
-    var client = clientListingKey("plan.json");
-    when(client.getObject(any(GetObjectRequest.class)))
-        .thenThrow(S3Exception.builder().statusCode(404).message("gone").build());
-
-    assertNull(new ReleaseStore(client).read(BUCKET, "plan.json"));
-  }
-
-  @Test
-  void readRethrowsOtherS3Failures() {
-    var client = clientListingKey("plan.json");
-    when(client.getObject(any(GetObjectRequest.class)))
-        .thenThrow(S3Exception.builder().statusCode(403).message("denied").build());
-
-    var failingStore = new ReleaseStore(client);
-    var failure = assertThrows(S3Exception.class, () -> failingStore.read(BUCKET, "plan.json"));
-
-    assertEquals(403, failure.statusCode());
-  }
-
-  @Test
-  void immutableWritesOnceAndIgnoresExistingObject() throws Exception {
-    store.immutable(BUCKET, "receipt.json", JSON.readTree("{\"status\":\"FIRST\"}"));
-    store.immutable(BUCKET, "receipt.json", JSON.readTree("{\"status\":\"SECOND\"}"));
-
-    assertEquals("FIRST", JSON.readTree(s3.objects.get("receipt.json")).path("status").asText());
-  }
-
-  @Test
-  void immutableRethrowsUnexpectedS3Failures() {
-    var client = mock(S3Client.class);
-    when(client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
-        .thenThrow(S3Exception.builder().statusCode(500).message("boom").build());
-
-    var failingStore = new ReleaseStore(client);
-    var value = JSON.createObjectNode();
-    assertThrows(S3Exception.class, () -> failingStore.immutable(BUCKET, "receipt.json", value));
-  }
-
-  @Test
-  void keysListsObjectsUnderPrefix() {
-    s3.objects.put("control/a.json", new byte[0]);
-    s3.objects.put("control/b.json", new byte[0]);
-    s3.objects.put("other/c.json", new byte[0]);
-
-    assertEquals(List.of("control/a.json", "control/b.json"), store.keys(BUCKET, "control/"));
-  }
-
-  @Test
-  void updateStatePreservesConcurrentFieldsAndRetriesConditionalConflict() throws Exception {
-    String key = "initial_full/24833/150450/manifest/unpack_state.json";
-    s3.objects.put(key, "{\"datasets\":{\"first\":{\"status\":\"EXTRACTED\"}}}".getBytes());
-    s3.putConflicts = 1;
-
-    var updated =
-        store.updateState(
-            BUCKET,
-            key,
-            state -> {
-              state.withObject("/datasets").putObject("second").put("status", "EXTRACTED");
-              return state;
-            });
-
-    assertEquals("EXTRACTED", updated.path("datasets").path("first").path("status").asText());
-    assertEquals("EXTRACTED", updated.path("datasets").path("second").path("status").asText());
-  }
-
-  @Test
-  void updateStateCreatesMissingState() throws Exception {
-    var updated = store.updateState(BUCKET, KEY, state -> state.put("status", "EXTRACTED"));
-
-    assertEquals(updated, JSON.readTree(s3.objects.get(KEY)));
-  }
-
-  @Test
-  void updateStateBacksOffBetweenConflictsOnly() throws Exception {
-    var attempts = new java.util.ArrayList<Integer>();
-    var retryingStore = new ReleaseStore(s3.client(), attempts::add);
-    s3.putConflicts = 2;
-
-    retryingStore.updateState(BUCKET, KEY, state -> state.put("status", "EXTRACTED"));
-
-    assertEquals(List.of(1, 2), attempts);
-    assertEquals("EXTRACTED", JSON.readTree(s3.objects.get(KEY)).path("status").asText());
-  }
-
-  @Test
-  void updateStatePreservesInterruptDuringBackoff() {
-    s3.putConflicts = 1;
-    Thread.currentThread().interrupt();
-    try {
-      var failure = assertThrows(IllegalStateException.class,
-          () -> store.updateState(BUCKET, KEY, state -> state));
-      assertEquals("State update retry interrupted", failure.getMessage());
-      assertTrue(Thread.currentThread().isInterrupted());
-    } finally {
-      Thread.interrupted();
+    @Test
+    void readReturnsNullWhenKeyDoesNotExist() throws Exception {
+        assertNull(store.read(BUCKET, "missing.json"));
     }
-  }
 
-  @Test
-  void updateStateFailsAfterRepeatedConflicts() {
-    s3.putConflicts = 5;
-    UnaryOperator<ObjectNode> update = state -> state.put("status", "EXTRACTED");
+    @Test
+    void readParsesExistingJson() throws Exception {
+        s3.objects.put("plan.json", "{\"releaseId\":\"abc\"}".getBytes(StandardCharsets.UTF_8));
 
-    var failure = assertThrows(
-        IllegalStateException.class,
-        () -> store.updateState(BUCKET, KEY, update));
+        assertEquals("abc", store.read(BUCKET, "plan.json").path("releaseId").asText());
+    }
 
-    assertEquals("State update contention; retry invocation", failure.getMessage());
-    assertFalse(s3.objects.containsKey(KEY));
-  }
+    @Test
+    void readSpecificVersionUsesPinnedS3Version() throws Exception {
+        var client = mock(S3Client.class);
+        when(client.getObject(any(GetObjectRequest.class)))
+                .thenAnswer(
+                        call -> {
+                            var request = call.getArgument(0, GetObjectRequest.class);
+                            assertEquals(BUCKET, request.bucket());
+                            assertEquals("manifest.json", request.key());
+                            assertEquals("manifest-version", request.versionId());
+                            return new ResponseInputStream<>(
+                                    GetObjectResponse.builder().build(),
+                                    AbortableInputStream.create(
+                                            new ByteArrayInputStream(
+                                                    "{\"version\":1}"
+                                                            .getBytes(StandardCharsets.UTF_8))));
+                        });
 
-  @Test
-  void updateStatePropagatesUnexpectedWriteFailure() {
-    s3.putErrorStatus = 503;
+        var manifest = new ReleaseStore(client).read(BUCKET, "manifest.json", "manifest-version");
 
-    var failure = assertThrows(
-        S3Exception.class,
-        () -> store.updateState(BUCKET, KEY, state -> state));
+        assertEquals(1, manifest.path("version").asInt());
+        verify(client, Mockito.never()).listObjectsV2(any(ListObjectsV2Request.class));
+    }
 
-    assertEquals(503, failure.statusCode());
-  }
+    @Test
+    void readRejectsObjectsLargerThanOneMebibyte() {
+        s3.objects.put("big.json", new byte[1024 * 1024 + 1]);
 
-  @Test
-  void updateStateRejectsNullUpdate() {
-    var failure = assertThrows(
-        IllegalArgumentException.class,
-        () -> store.updateState(BUCKET, KEY, state -> null));
+        var failure =
+                assertThrows(IllegalArgumentException.class, () -> store.read(BUCKET, "big.json"));
 
-    assertEquals("State update returned no value", failure.getMessage());
-    assertFalse(s3.objects.containsKey(KEY));
-  }
+        assertEquals("Manifest exceeds 1 MiB", failure.getMessage());
+    }
 
-  @ParameterizedTest
-  @ValueSource(strings = {"[]", "null", ""})
-  void updateStateRejectsNonObjectState(String value) {
-    s3.objects.put(KEY, value.getBytes(StandardCharsets.UTF_8));
+    @Test
+    void readReturnsNullWhenObjectDisappearsBetweenListAndGet() throws Exception {
+        var client = clientListingKey("plan.json");
+        when(client.getObject(any(GetObjectRequest.class)))
+                .thenThrow(S3Exception.builder().statusCode(404).message("gone").build());
 
-    var failure = assertThrows(
-        IllegalArgumentException.class,
-        () -> store.updateState(BUCKET, KEY, state -> state));
+        assertNull(new ReleaseStore(client).read(BUCKET, "plan.json"));
+    }
 
-    assertEquals("State must be a JSON object", failure.getMessage());
-  }
+    @Test
+    void readRethrowsOtherS3Failures() {
+        var client = clientListingKey("plan.json");
+        when(client.getObject(any(GetObjectRequest.class)))
+                .thenThrow(S3Exception.builder().statusCode(403).message("denied").build());
 
-  @Test
-  void updateStateRejectsOversizedState() {
-    s3.objects.put(KEY, new byte[1024 * 1024 + 1]);
+        var failingStore = new ReleaseStore(client);
+        var failure = assertThrows(S3Exception.class, () -> failingStore.read(BUCKET, "plan.json"));
 
-    var failure = assertThrows(
-        IllegalArgumentException.class,
-        () -> store.updateState(BUCKET, KEY, state -> state));
+        assertEquals(403, failure.statusCode());
+    }
 
-    assertEquals("State exceeds 1 MiB", failure.getMessage());
-  }
+    @Test
+    void immutableWritesOnceAndIgnoresExistingObject() throws Exception {
+        store.immutable(BUCKET, "receipt.json", JSON.readTree("{\"status\":\"FIRST\"}"));
+        store.immutable(BUCKET, "receipt.json", JSON.readTree("{\"status\":\"SECOND\"}"));
 
-  @Test
-  void updateStateRetriesWhenListedStateDisappears() throws Exception {
-    var client = clientListingKey(KEY);
-    when(client.getObject(any(GetObjectRequest.class)))
-        .thenThrow(S3Exception.builder().statusCode(404).build())
-        .thenReturn(new ResponseInputStream<>(
-            GetObjectResponse.builder().eTag("etag").build(),
-            new ByteArrayInputStream("{}".getBytes(StandardCharsets.UTF_8))));
+        assertEquals(
+                "FIRST", JSON.readTree(s3.objects.get("receipt.json")).path("status").asText());
+    }
 
-    var updated = new ReleaseStore(client).updateState(
-        BUCKET, KEY, state -> state.put("status", "EXTRACTED"));
+    @Test
+    void immutableRethrowsUnexpectedS3Failures() {
+        var client = mock(S3Client.class);
+        when(client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenThrow(S3Exception.builder().statusCode(500).message("boom").build());
 
-    assertEquals("EXTRACTED", updated.path("status").asText());
-    verify(client, times(2)).getObject(any(GetObjectRequest.class));
-    verify(client).putObject(
-        ArgumentMatchers.argThat((PutObjectRequest request) ->
-            "etag".equals(request.ifMatch()) && request.ifNoneMatch() == null),
-        any(RequestBody.class));
-  }
+        var failingStore = new ReleaseStore(client);
+        var value = JSON.createObjectNode();
+        assertThrows(
+                S3Exception.class, () -> failingStore.immutable(BUCKET, "receipt.json", value));
+    }
 
-  @Test
-  void updateStateRetriesConditionalConflictDuringCreation() throws Exception {
-    var client = mock(S3Client.class);
-    when(client.listObjectsV2(any(ListObjectsV2Request.class)))
-        .thenReturn(ListObjectsV2Response.builder().build());
-    when(client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
-        .thenThrow(S3Exception.builder().statusCode(409).build())
-        .thenReturn(PutObjectResponse.builder().build());
+    @Test
+    void keysListsObjectsUnderPrefix() {
+        s3.objects.put("control/a.json", new byte[0]);
+        s3.objects.put("control/b.json", new byte[0]);
+        s3.objects.put("other/c.json", new byte[0]);
 
-    var updated = new ReleaseStore(client).updateState(
-        BUCKET, KEY, state -> state.put("status", "EXTRACTED"));
+        assertEquals(List.of("control/a.json", "control/b.json"), store.keys(BUCKET, "control/"));
+    }
 
-    assertEquals("EXTRACTED", updated.path("status").asText());
-    verify(client, times(2)).putObject(
-        ArgumentMatchers.argThat((PutObjectRequest request) ->
-            "*".equals(request.ifNoneMatch()) && request.ifMatch() == null),
-        any(RequestBody.class));
-  }
+    @Test
+    void updateStatePreservesConcurrentFieldsAndRetriesConditionalConflict() throws Exception {
+        String key = "initial_full/24833/150450/manifest/unpack_state.json";
+        s3.objects.put(key, "{\"datasets\":{\"first\":{\"status\":\"EXTRACTED\"}}}".getBytes());
+        s3.putConflicts = 1;
 
-  @Test
-  void updateStatePropagatesUnexpectedReadFailure() {
-    var client = clientListingKey(KEY);
-    when(client.getObject(any(GetObjectRequest.class)))
-        .thenThrow(S3Exception.builder().statusCode(403).build());
-    var failingStore = new ReleaseStore(client);
+        var updated =
+                store.updateState(
+                        BUCKET,
+                        key,
+                        state -> {
+                            state.withObject("/datasets")
+                                    .putObject("second")
+                                    .put("status", "EXTRACTED");
+                            return state;
+                        });
 
-    var failure = assertThrows(
-        S3Exception.class,
-        () -> failingStore.updateState(BUCKET, KEY, state -> state));
+        assertEquals("EXTRACTED", updated.path("datasets").path("first").path("status").asText());
+        assertEquals("EXTRACTED", updated.path("datasets").path("second").path("status").asText());
+    }
 
-    assertEquals(403, failure.statusCode());
-  }
+    @Test
+    void updateStateCreatesMissingState() throws Exception {
+        var updated = store.updateState(BUCKET, KEY, state -> state.put("status", "EXTRACTED"));
 
-  @Test
-  void updateStateRequiresEtagForExistingState() {
-    var client = clientListingKey(KEY);
-    when(client.getObject(any(GetObjectRequest.class)))
-        .thenReturn(new ResponseInputStream<>(
-            GetObjectResponse.builder().build(),
-            new ByteArrayInputStream("{}".getBytes(StandardCharsets.UTF_8))));
-    var failingStore = new ReleaseStore(client);
+        assertEquals(updated, JSON.readTree(s3.objects.get(KEY)));
+    }
 
-    var failure = assertThrows(
-        IllegalArgumentException.class,
-        () -> failingStore.updateState(BUCKET, KEY, state -> state));
+    @Test
+    void updateStateBacksOffBetweenConflictsOnly() throws Exception {
+        var attempts = new java.util.ArrayList<Integer>();
+        var retryingStore = new ReleaseStore(s3.client(), attempts::add);
+        s3.putConflicts = 2;
 
-    assertEquals("State object is missing an ETag", failure.getMessage());
-  }
+        retryingStore.updateState(BUCKET, KEY, state -> state.put("status", "EXTRACTED"));
 
-  @Test
-  void versionReturnsTheVersionedObjectId() {
-    s3.versions.put(KEY, "abc123");
+        assertEquals(List.of(1, 2), attempts);
+        assertEquals("EXTRACTED", JSON.readTree(s3.objects.get(KEY)).path("status").asText());
+    }
 
-    assertEquals("abc123", store.version(BUCKET, KEY));
-  }
+    @Test
+    void updateStatePreservesInterruptDuringBackoff() {
+        s3.putConflicts = 1;
+        Thread.currentThread().interrupt();
+        try {
+            var failure =
+                    assertThrows(
+                            IllegalStateException.class,
+                            () -> store.updateState(BUCKET, KEY, state -> state));
+            assertEquals("State update retry interrupted", failure.getMessage());
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
 
-  @Test
-  void versionRejectsUnversionedBuckets() {
-    s3.versions.put(KEY, "null");
+    @Test
+    void updateStateFailsAfterRepeatedConflicts() {
+        s3.putConflicts = 5;
+        UnaryOperator<ObjectNode> update = state -> state.put("status", "EXTRACTED");
 
-    var failure = assertThrows(IllegalArgumentException.class, () -> store.version(BUCKET, KEY));
+        var failure =
+                assertThrows(
+                        IllegalStateException.class, () -> store.updateState(BUCKET, KEY, update));
 
-    assertEquals("Versioned bucket required", failure.getMessage());
-  }
+        assertEquals("State update contention; retry invocation", failure.getMessage());
+        assertFalse(s3.objects.containsKey(KEY));
+    }
 
-  @Test
-  void scanDefaultsToPendingWhenNoTagExists() {
-    assertEquals("PENDING", store.scan(BUCKET, KEY, "v1"));
-    assertFalse(store.isClean(BUCKET, KEY, "v1"));
-  }
+    @Test
+    void updateStatePropagatesUnexpectedWriteFailure() {
+        s3.putErrorStatus = 503;
 
-  @Test
-  void isCleanIsTrueOnlyForNoThreatsFound() {
-    s3.scanStatus.put(KEY, ReleaseStore.CLEAN);
+        var failure =
+                assertThrows(
+                        S3Exception.class, () -> store.updateState(BUCKET, KEY, state -> state));
 
-    assertTrue(store.isClean(BUCKET, KEY, "v1"));
-  }
+        assertEquals(503, failure.statusCode());
+    }
 
-  @Test
-  void isCleanFailsForCompletedUnsuccessfulScan() {
-    s3.scanStatus.put(KEY, "THREATS_FOUND");
+    @Test
+    void updateStateRejectsNullUpdate() {
+        var failure =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () -> store.updateState(BUCKET, KEY, state -> null));
 
-    var failure = assertThrows(IllegalStateException.class, () -> store.isClean(BUCKET, KEY, "v1"));
+        assertEquals("State update returned no value", failure.getMessage());
+        assertFalse(s3.objects.containsKey(KEY));
+    }
 
-    assertTrue(failure.getMessage().contains("THREATS_FOUND"));
-    assertTrue(failure.getMessage().contains(KEY));
-  }
+    @ParameterizedTest
+    @ValueSource(strings = {"[]", "null", ""})
+    void updateStateRejectsNonObjectState(String value) {
+        s3.objects.put(KEY, value.getBytes(StandardCharsets.UTF_8));
 
-  @Test
-  void cleanUsesTheVersionInTheReference() {
-    s3.scanStatus.put(KEY, ReleaseStore.CLEAN);
-    var ref = JSON.createObjectNode().put("s3Key", KEY).put("version", FakeS3.DEFAULT_VERSION);
+        var failure =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () -> store.updateState(BUCKET, KEY, state -> state));
 
-    assertTrue(store.isReferenceClean(BUCKET, ref));
-  }
+        assertEquals("State must be a JSON object", failure.getMessage());
+    }
 
-  @Test
-  void cleanFallsBackToKeyAndCurrentVersionWhenReferenceHasNeither() {
-    s3.scanStatus.put(KEY, ReleaseStore.CLEAN);
-    var ref = JSON.createObjectNode().put("key", KEY);
+    @Test
+    void updateStateRejectsOversizedState() {
+        s3.objects.put(KEY, new byte[1024 * 1024 + 1]);
 
-    assertTrue(store.isReferenceClean(BUCKET, ref));
-  }
+        var failure =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () -> store.updateState(BUCKET, KEY, state -> state));
 
-  @Test
-  void cleanIsFalseWhileScanIsPending() {
-    var ref = JSON.createObjectNode().put("s3Key", KEY);
+        assertEquals("State exceeds 1 MiB", failure.getMessage());
+    }
 
-    assertFalse(store.isReferenceClean(BUCKET, ref));
-  }
+    @Test
+    void updateStateRetriesWhenListedStateDisappears() throws Exception {
+        var client = clientListingKey(KEY);
+        when(client.getObject(any(GetObjectRequest.class)))
+                .thenThrow(S3Exception.builder().statusCode(404).build())
+                .thenReturn(
+                        new ResponseInputStream<>(
+                                GetObjectResponse.builder().eTag("etag").build(),
+                                new ByteArrayInputStream("{}".getBytes(StandardCharsets.UTF_8))));
 
-  @Test
-  void cleanRejectsObjectsChangedAfterCertification() {
-    s3.scanStatus.put(KEY, ReleaseStore.CLEAN);
-    var ref = JSON.createObjectNode().put("s3Key", KEY).put("version", "certified-version");
+        var updated =
+                new ReleaseStore(client)
+                        .updateState(BUCKET, KEY, state -> state.put("status", "EXTRACTED"));
 
-    var failure =
-        assertThrows(IllegalArgumentException.class, () -> store.isReferenceClean(BUCKET, ref));
+        assertEquals("EXTRACTED", updated.path("status").asText());
+        verify(client, times(2)).getObject(any(GetObjectRequest.class));
+        verify(client)
+                .putObject(
+                        ArgumentMatchers.argThat(
+                                (PutObjectRequest request) ->
+                                        "etag".equals(request.ifMatch())
+                                                && request.ifNoneMatch() == null),
+                        any(RequestBody.class));
+    }
 
-    assertEquals("Object changed after certification: " + KEY, failure.getMessage());
-  }
+    @Test
+    void updateStateRetriesConditionalConflictDuringCreation() throws Exception {
+        var client = mock(S3Client.class);
+        when(client.listObjectsV2(any(ListObjectsV2Request.class)))
+                .thenReturn(ListObjectsV2Response.builder().build());
+        when(client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenThrow(S3Exception.builder().statusCode(409).build())
+                .thenReturn(PutObjectResponse.builder().build());
 
-  @Test
-  void objectKeyPrefersS3KeyOverKey() {
-    assertEquals(
-        "a", ReleaseStore.objectKey(JSON.createObjectNode().put("s3Key", "a").put("key", "b")));
-    assertEquals("b", ReleaseStore.objectKey(JSON.createObjectNode().put("key", "b")));
-  }
+        var updated =
+                new ReleaseStore(client)
+                        .updateState(BUCKET, KEY, state -> state.put("status", "EXTRACTED"));
 
-  @Test
-  void objectVersionUsesReferenceVersionOrLooksItUp() {
-    s3.versions.put(KEY, "looked-up");
+        assertEquals("EXTRACTED", updated.path("status").asText());
+        verify(client, times(2))
+                .putObject(
+                        ArgumentMatchers.argThat(
+                                (PutObjectRequest request) ->
+                                        "*".equals(request.ifNoneMatch())
+                                                && request.ifMatch() == null),
+                        any(RequestBody.class));
+    }
 
-    assertEquals(
-        "from-ref",
-        ReleaseStore.objectVersion(
-            store, BUCKET, JSON.createObjectNode().put("s3Key", KEY).put("version", "from-ref")));
-    assertEquals(
-        "looked-up",
-        ReleaseStore.objectVersion(store, BUCKET, JSON.createObjectNode().put("s3Key", KEY)));
-  }
+    @Test
+    void updateStatePropagatesUnexpectedReadFailure() {
+        var client = clientListingKey(KEY);
+        when(client.getObject(any(GetObjectRequest.class)))
+                .thenThrow(S3Exception.builder().statusCode(403).build());
+        var failingStore = new ReleaseStore(client);
 
-  private static S3Client clientListingKey(String key) {
-    var client = mock(S3Client.class);
-    when(client.listObjectsV2(any(ListObjectsV2Request.class)))
-        .thenReturn(
-            ListObjectsV2Response.builder().contents(S3Object.builder().key(key).build()).build());
-    return client;
-  }
+        var failure =
+                assertThrows(
+                        S3Exception.class,
+                        () -> failingStore.updateState(BUCKET, KEY, state -> state));
+
+        assertEquals(403, failure.statusCode());
+    }
+
+    @Test
+    void updateStateRequiresEtagForExistingState() {
+        var client = clientListingKey(KEY);
+        when(client.getObject(any(GetObjectRequest.class)))
+                .thenReturn(
+                        new ResponseInputStream<>(
+                                GetObjectResponse.builder().build(),
+                                new ByteArrayInputStream("{}".getBytes(StandardCharsets.UTF_8))));
+        var failingStore = new ReleaseStore(client);
+
+        var failure =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () -> failingStore.updateState(BUCKET, KEY, state -> state));
+
+        assertEquals("State object is missing an ETag", failure.getMessage());
+    }
+
+    @Test
+    void versionReturnsTheVersionedObjectId() {
+        s3.versions.put(KEY, "abc123");
+
+        assertEquals("abc123", store.version(BUCKET, KEY));
+    }
+
+    @Test
+    void versionRejectsUnversionedBuckets() {
+        s3.versions.put(KEY, "null");
+
+        var failure =
+                assertThrows(IllegalArgumentException.class, () -> store.version(BUCKET, KEY));
+
+        assertEquals("Versioned bucket required", failure.getMessage());
+    }
+
+    @Test
+    void scanDefaultsToPendingWhenNoTagExists() {
+        assertEquals("PENDING", store.scan(BUCKET, KEY, "v1"));
+        assertFalse(store.isClean(BUCKET, KEY, "v1"));
+    }
+
+    @Test
+    void isCleanIsTrueOnlyForNoThreatsFound() {
+        s3.scanStatus.put(KEY, ReleaseStore.CLEAN);
+
+        assertTrue(store.isClean(BUCKET, KEY, "v1"));
+    }
+
+    @Test
+    void isCleanFailsForCompletedUnsuccessfulScan() {
+        s3.scanStatus.put(KEY, "THREATS_FOUND");
+
+        var failure =
+                assertThrows(IllegalStateException.class, () -> store.isClean(BUCKET, KEY, "v1"));
+
+        assertTrue(failure.getMessage().contains("THREATS_FOUND"));
+        assertTrue(failure.getMessage().contains(KEY));
+    }
+
+    @Test
+    void cleanUsesTheVersionInTheReference() {
+        s3.scanStatus.put(KEY, ReleaseStore.CLEAN);
+        var ref = JSON.createObjectNode().put("s3Key", KEY).put("version", FakeS3.DEFAULT_VERSION);
+
+        assertTrue(store.isReferenceClean(BUCKET, ref));
+    }
+
+    @Test
+    void cleanFallsBackToKeyAndCurrentVersionWhenReferenceHasNeither() {
+        s3.scanStatus.put(KEY, ReleaseStore.CLEAN);
+        var ref = JSON.createObjectNode().put("key", KEY);
+
+        assertTrue(store.isReferenceClean(BUCKET, ref));
+    }
+
+    @Test
+    void cleanIsFalseWhileScanIsPending() {
+        var ref = JSON.createObjectNode().put("s3Key", KEY);
+
+        assertFalse(store.isReferenceClean(BUCKET, ref));
+    }
+
+    @Test
+    void cleanRejectsObjectsChangedAfterCertification() {
+        s3.scanStatus.put(KEY, ReleaseStore.CLEAN);
+        var ref = JSON.createObjectNode().put("s3Key", KEY).put("version", "certified-version");
+
+        var failure =
+                assertThrows(
+                        IllegalArgumentException.class, () -> store.isReferenceClean(BUCKET, ref));
+
+        assertEquals("Object changed after certification: " + KEY, failure.getMessage());
+    }
+
+    @Test
+    void objectKeyPrefersS3KeyOverKey() {
+        assertEquals(
+                "a",
+                ReleaseStore.objectKey(JSON.createObjectNode().put("s3Key", "a").put("key", "b")));
+        assertEquals("b", ReleaseStore.objectKey(JSON.createObjectNode().put("key", "b")));
+    }
+
+    @Test
+    void objectVersionUsesReferenceVersionOrLooksItUp() {
+        s3.versions.put(KEY, "looked-up");
+
+        assertEquals(
+                "from-ref",
+                ReleaseStore.objectVersion(
+                        store,
+                        BUCKET,
+                        JSON.createObjectNode().put("s3Key", KEY).put("version", "from-ref")));
+        assertEquals(
+                "looked-up",
+                ReleaseStore.objectVersion(
+                        store, BUCKET, JSON.createObjectNode().put("s3Key", KEY)));
+    }
+
+    private static S3Client clientListingKey(String key) {
+        var client = mock(S3Client.class);
+        when(client.listObjectsV2(any(ListObjectsV2Request.class)))
+                .thenReturn(
+                        ListObjectsV2Response.builder()
+                                .contents(S3Object.builder().key(key).build())
+                                .build());
+        return client;
+    }
 }

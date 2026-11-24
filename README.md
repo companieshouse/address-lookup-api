@@ -257,20 +257,34 @@ handlers that use them; they are not API startup requirements.
 | Variable | Purpose | Default or requirement |
 | --- | --- | --- |
 | `OS_API_KEY` | Authenticates the acquisition client's OS requests. | No default; required when the OS client is used. |
-| `OS_PACKAGES` | Declared acquisition package-configuration field. | Unset; not directly consumed by the checked-in handlers. |
-| `SOURCE_BUCKET` | Source acquisition storage. | Unset; configure for handlers using source storage. |
-| `SCANNED_BUCKET` | Scanned destination storage, also used by the importer. | Unset; configure for handlers using scanned storage. |
-| `INGEST_BUCKET` | Ingest bucket used by the scan-results handler. | No default; required by that handler. |
+| `OS_PACKAGES` | Comma-separated package/feed mappings, e.g. `24833=initial_full,20780=daily_cou,12345=monthly_full`. | Required for Discovery feed selection. |
+| `CONTROL_BUCKET` | Unscanned storage for acquisition cursors and operational control state. | Unset; configure for handlers using control storage. |
+| `LANDING_BUCKET` | GuardDuty-scanned storage for manifests and downloaded or extracted data. | Unset; configure for handlers using landing storage. |
 | `EVENT_BUS` | EventBridge bus for acquisition commands. | No default; required when publishing commands. |
 | `MAX_ZIP_BYTES` | Maximum ZIP size in bytes. | `21474836480` (20 GiB) |
 | `MAX_EXTRACTED_BYTES` | Maximum extracted size in bytes. | `1073741824` (1 GiB) |
 | `ACQUISITION_SWEEP_LIMIT` | Acquisition reconciliation sweep limit. | `20` |
 | `ROYAL_MAIL_SCHEMA` | Configured Royal Mail dataset schema version. | `1.0`; must agree with the pinned release contract. |
 
+Discovery attempts every configured daily package, reporting package-specific failures
+after the remaining packages have been attempted. Download skips an existing ZIP only
+when its supplier MD5 and current S3 version match the stored checksum evidence;
+missing or stale artefacts are overwritten at the deterministic key.
+
 ### Import and release settings
 
+Landing key support recognises all six Royal Mail, Built Address and Prebuild Address
+feature types, including package `26088`. CSV keys use
+`<feed>/<packageId>/<versionId>/downloads/<feature type>/<entry>.csv`.
+`KeyLayout.LandingObject.isMainCsv()` identifies `<feature type>.csv`; other safe
+CSV entry names are supported as sub-tables. This is key support only: extraction
+and database import remain limited to the pinned Royal Mail catalogue.
+
 The importer reads `lambdas/import/src/main/resources/importer.properties`
-and requires `SCANNED_BUCKET` from the acquisition settings above.
+and requires both `CONTROL_BUCKET` for reconciliation cursors and `LANDING_BUCKET`
+for manifests and scanned data.
+It lists only data-package manifests for processing, validates their package/version
+against the Landing key, and skips finished releases by manifest key before parsing.
 `MAX_PRIMARY_CSV_BYTES` belongs to the release-core local CSV reader.
 These settings do not control the local CSV seed; see `LOCAL_SEED_DIR` and
 `make db-reset` in `COMMANDS.md`.
@@ -281,7 +295,7 @@ These settings do not control the local CSV seed; see `LOCAL_SEED_DIR` and
 | `JDBC_URL` | Importer's PostgreSQL JDBC URL. | Required for the importer. |
 | `DB_USER` | Importer's database username. | Required for the importer. |
 | `DB_PASSWORD` | Importer's database password. | Required for the importer; supply securely. |
-| `IMPORTER_SWEEP_LIMIT` | Import reconciliation sweep limit. | `20` |
+| `IMPORTER_SWEEP_LIMIT` | Maximum manifests considered per feed in an import sweep; other Landing objects do not consume slots. | `20` |
 | `MAX_PRIMARY_CSV_BYTES` | Release-core local primary CSV size limit, in bytes. | `536870912` (512 MiB) |
 
 ### Database bootstrap Lambda

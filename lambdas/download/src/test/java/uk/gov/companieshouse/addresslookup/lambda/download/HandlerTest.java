@@ -53,7 +53,7 @@ class HandlerTest {
           "dataset",
           "add_gb_royalmailaddress",
           "planKey",
-          "acquisitions/2026-10-06/12345678-1234-1234-1234-123456789abc.json");
+          "initial_full/12345/159159/manifest/data_package_manifest.json");
   private static final String TEST_RESPONSE = "ZIP_SCAN";
 
   @BeforeEach
@@ -154,7 +154,6 @@ class HandlerTest {
     } finally {
       stopCapturingStructuredLogs(appender);
     }
-
     ILoggingEvent failureLog = appender.list.getFirst();
     assertEquals(expectedOutcome, structuredField(failureLog, "outcome"));
     assertEquals(failure.reasonCode(), structuredField(failureLog, "reason_code"));

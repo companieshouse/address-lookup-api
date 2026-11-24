@@ -1,25 +1,6 @@
 package uk.gov.companieshouse.addresslookup.lambda.discovery.service;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.fail;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mockStatic;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
-import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToJsonNode;
-import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToObject;
-import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.readFileFromClasspath;
-import static uk.gov.companieshouse.release.model.DetailType.DOWNLOAD;
-
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,6 +23,29 @@ import uk.gov.companieshouse.release.model.PackageVersionData;
 import uk.gov.companieshouse.release.model.ReleaseJson;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
 
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
+import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToJsonNode;
+import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToObject;
+import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.readFileFromClasspath;
+import static uk.gov.companieshouse.release.model.DetailType.DOWNLOAD;
+
 @ExtendWith(MockitoExtension.class)
 class DiscoveryServiceTest {
 
@@ -58,6 +62,15 @@ class DiscoveryServiceTest {
             "data_package": "20780",
             "version_id": "130989"
         }
+      }
+      """;
+
+  private static final String SECOND_PACKAGE_CURSOR_JSON =
+      """
+      {
+        "dataPackageId": "second",
+        "lastProcessedVersionId": "150035",
+        "lastProcessedDate": "2026-10-05"
       }
       """;
 
@@ -88,8 +101,9 @@ class DiscoveryServiceTest {
         }
       """;
 
-  private static final String TEST_SOURCE_BUCKET = "source-bucket",
-      CURSOR_KEY = "control/address-release/active.json";
+  private static final String CONTROL_BUCKET = "control-bucket",
+      LANDING_BUCKET = "landing-bucket",
+      CURSOR_KEY = "cursors/20780.json";
 
   private static final String TEST_RELEASE_ID = "12345678-1234-1234-1234-123456789abc";
 
@@ -112,30 +126,103 @@ class DiscoveryServiceTest {
             List.of(
                 new DatasetDefault("add_gb_royalmailaddress", "2.0"),
                 new DatasetDefault("add_isl_royalmailaddress", "2.0")));
+    lenient()
+        .when(properties.feedForPackage("20780"))
+        .thenReturn(
+            uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.Feed.INITIAL_FULL);
+    lenient()
+        .when(
+            properties.packagesForFeed(
+                uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.Feed.DAILY_COU))
+        .thenReturn(List.of("20780"));
 
     discoveryService = new DiscoveryService(s3Client, osClient, commands, properties);
+  }
+
+  @Test
+  void continuesToNextPackageWhenFirstPackageFails() throws Exception {
+    when(properties.packagesForFeed(
+        uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.Feed.DAILY_COU))
+        .thenReturn(List.of("first", "second"));
+    when(properties.controlBucket()).thenReturn(CONTROL_BUCKET);
+    when(properties.osHttpURLTemplate())
+        .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
+    when(s3Client.getObject(any(GetObjectRequest.class)))
+        .thenThrow(new IllegalStateException("Missing cursor"))
+        .thenReturn(TestUtils.createResponseInputStream(SECOND_PACKAGE_CURSOR_JSON));
+
+    var failure = assertThrows(
+        IllegalStateException.class, () -> discoveryService.discover(COU_REQUEST_JSON));
+
+    assertEquals(1, failure.getSuppressed().length);
+    assertEquals("Discovery failed for package first", failure.getSuppressed()[0].getMessage());
+    verify(s3Client).getObject(GetObjectRequest.builder()
+        .bucket(CONTROL_BUCKET).key("cursors/first.json").build());
+    verify(s3Client).getObject(GetObjectRequest.builder()
+        .bucket(CONTROL_BUCKET).key("cursors/second.json").build());
+    verify(osClient).json("https://api.os.uk/downloads/v1/dataPackages/second/versions/150035");
+  }
+
+  @Test
+  void returnsResultsForAllDailyPackages() throws Exception {
+    when(properties.packagesForFeed(
+        uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.Feed.DAILY_COU))
+        .thenReturn(List.of("first", "second"));
+    when(properties.controlBucket()).thenReturn(CONTROL_BUCKET);
+    when(properties.osHttpURLTemplate())
+        .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
+    when(s3Client.getObject(any(GetObjectRequest.class)))
+        .thenAnswer(call -> {
+          String packageId =
+              call.getArgument(0, GetObjectRequest.class).key().replace("cursors/", "")
+                  .replace(".json", "");
+          return TestUtils.createResponseInputStream(
+              TEST_CURSOR_JSON.replace("\"20780\"", "\"" + packageId + "\""));
+        });
+
+    assertEquals("No Next Version URL,No Next Version URL",
+        discoveryService.discover(COU_REQUEST_JSON));
+  }
+
+  @Test
+  void rejectsCursorForDifferentConfiguredPackage() throws Exception {
+    when(properties.packagesForFeed(
+        uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.Feed.DAILY_COU))
+        .thenReturn(List.of("first"));
+    when(properties.controlBucket()).thenReturn(CONTROL_BUCKET);
+    when(s3Client.getObject(any(GetObjectRequest.class)))
+        .thenReturn(TestUtils.createResponseInputStream(TEST_CURSOR_JSON));
+
+    var failure =
+        assertThrows(
+            IllegalStateException.class, () -> discoveryService.discover(COU_REQUEST_JSON));
+
+    assertEquals(1, failure.getSuppressed().length);
+    assertEquals(
+        "Cursor package ID does not match configured package",
+        failure.getSuppressed()[0].getCause().getMessage());
+    verifyNoInteractions(osClient);
   }
 
   @Test
   void shouldReturnReleaseIdForCOURequestValidDatasetAndSuccessfullySent() throws Exception {
 
     GetObjectRequest request =
-        GetObjectRequest.builder().bucket(TEST_SOURCE_BUCKET).key(CURSOR_KEY).build();
+        GetObjectRequest.builder().bucket(CONTROL_BUCKET).key(CURSOR_KEY).build();
     PutObjectRequest updateCursorRequest =
         PutObjectRequest.builder()
-            .bucket(TEST_SOURCE_BUCKET)
+            .bucket(CONTROL_BUCKET)
             .key(CURSOR_KEY)
             .contentType("application/json")
             .build();
     PutObjectRequest saveManifestRequest =
         PutObjectRequest.builder()
-            .bucket(TEST_SOURCE_BUCKET)
-            .key("acquisitions/2026-10-06/" + TEST_RELEASE_ID + ".json")
-            .ifNoneMatch("*")
+            .bucket(LANDING_BUCKET)
+            .key("daily_cou/20780/150104/manifest/data_package_manifest.json")
             .contentType("application/json")
             .build();
 
-    String expectedPlanKey = "acquisitions/2026-10-06/" + TEST_RELEASE_ID + ".json";
+    String expectedPlanKey = "daily_cou/20780/150104/manifest/data_package_manifest.json";
 
     S3PutRequestBodyMatcher<VersionCursor> cursorUpdateMatcher =
         new S3PutRequestBodyMatcher<>(TEST_COU_UPDATE_CURSOR_JSON, VersionCursor.class);
@@ -145,7 +232,8 @@ class DiscoveryServiceTest {
             ReleaseManifest.read(
                 JSON.readTree(readFileFromClasspath("output/output-manifest-COU.json"))));
 
-    when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+    when(properties.controlBucket()).thenReturn(CONTROL_BUCKET);
+    when(properties.landingBucket()).thenReturn(LANDING_BUCKET);
     when(properties.osHttpURLTemplate())
         .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
 
@@ -184,6 +272,8 @@ class DiscoveryServiceTest {
     verify(s3Client).getObject(request);
     verify(s3Client).putObject(eq(updateCursorRequest), argThat(cursorUpdateMatcher));
     verify(s3Client).putObject(eq(saveManifestRequest), argThat(manifestMatcher));
+    verifyOrderSummarySaved("daily_cou/20780/150104", "add_gb_royalmailaddress");
+    verifyOrderSummarySaved("daily_cou/20780/150104", "add_isl_royalmailaddress");
     verify(osClient).json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150035");
     verify(osClient).json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150104");
     verify(osClient)
@@ -202,19 +292,18 @@ class DiscoveryServiceTest {
   void shouldReturnReleaseIdForFULLRequestValidDatasetAndSuccessfullySent() throws Exception {
     PutObjectRequest updateCursorRequest =
         PutObjectRequest.builder()
-            .bucket(TEST_SOURCE_BUCKET)
+            .bucket(CONTROL_BUCKET)
             .key(CURSOR_KEY)
             .contentType("application/json")
             .build();
     PutObjectRequest saveManifestRequest =
         PutObjectRequest.builder()
-            .bucket(TEST_SOURCE_BUCKET)
-            .key("acquisitions/2026-05-01/" + TEST_RELEASE_ID + ".json")
-            .ifNoneMatch("*")
+            .bucket(LANDING_BUCKET)
+            .key("initial_full/20780/130989/manifest/data_package_manifest.json")
             .contentType("application/json")
             .build();
 
-    String expectedPlanKey = "acquisitions/2026-05-01/" + TEST_RELEASE_ID + ".json";
+    String expectedPlanKey = "initial_full/20780/130989/manifest/data_package_manifest.json";
 
     S3PutRequestBodyMatcher<VersionCursor> cursorUpdateMatcher =
         new S3PutRequestBodyMatcher<>(TEST_FULL_UPDATE_CURSOR_JSON, VersionCursor.class);
@@ -224,7 +313,8 @@ class DiscoveryServiceTest {
             ReleaseManifest.read(
                 JSON.readTree(readFileFromClasspath("output/output-manifest-Full.json"))));
 
-    when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+    when(properties.controlBucket()).thenReturn(CONTROL_BUCKET);
+    when(properties.landingBucket()).thenReturn(LANDING_BUCKET);
     when(properties.osHttpURLTemplate())
         .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
 
@@ -268,10 +358,22 @@ class DiscoveryServiceTest {
 
     verify(s3Client).putObject(eq(updateCursorRequest), argThat(cursorUpdateMatcher));
     verify(s3Client).putObject(eq(saveManifestRequest), argThat(manifestMatcher));
+    verifyOrderSummarySaved("initial_full/20780/130989", "add_gb_royalmailaddress");
+    verifyOrderSummarySaved("initial_full/20780/130989", "add_isl_royalmailaddress");
 
     verify(commands).send(DOWNLOAD.name(), expectedPlanKey, "add_gb_royalmailaddress");
     verify(commands).send(DOWNLOAD.name(), expectedPlanKey, "add_isl_royalmailaddress");
     assertEquals(TEST_RELEASE_ID, releaseId);
+  }
+
+  private void verifyOrderSummarySaved(String prefix, String dataset) {
+    verify(s3Client)
+        .putObject(
+            argThat((PutObjectRequest request) ->
+                request.bucket().equals(LANDING_BUCKET)
+                    && request.key().equals(prefix + "/downloads/" + dataset + "_orderSummary.json")
+                    && request.ifNoneMatch() == null),
+            any(RequestBody.class));
   }
 
   @Test
@@ -279,9 +381,9 @@ class DiscoveryServiceTest {
       throws Exception {
 
     GetObjectRequest request =
-        GetObjectRequest.builder().bucket(TEST_SOURCE_BUCKET).key(CURSOR_KEY).build();
+        GetObjectRequest.builder().bucket(CONTROL_BUCKET).key(CURSOR_KEY).build();
 
-    when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+    when(properties.controlBucket()).thenReturn(CONTROL_BUCKET);
     when(properties.osHttpURLTemplate())
         .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
 
@@ -373,7 +475,7 @@ class DiscoveryServiceTest {
   @Test
   void shouldThrowExceptionForCOUWithNoCursor() {
 
-    when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+    when(properties.controlBucket()).thenReturn(CONTROL_BUCKET);
 
     try {
       discoveryService.discover(COU_REQUEST_JSON);
@@ -381,9 +483,9 @@ class DiscoveryServiceTest {
     } catch (Throwable throwable) {
       assertEquals(
           "The active.json Cursor file could not be found in the S3 bucket.",
-          throwable.getMessage());
+          throwable.getSuppressed()[0].getCause().getMessage());
       verify(s3Client)
-          .getObject(GetObjectRequest.builder().bucket(TEST_SOURCE_BUCKET).key(CURSOR_KEY).build());
+          .getObject(GetObjectRequest.builder().bucket(CONTROL_BUCKET).key(CURSOR_KEY).build());
     }
   }
 
@@ -443,9 +545,9 @@ class DiscoveryServiceTest {
   void shouldThrowExceptionNoPackageVersionDataReturnedFromOS() throws Exception {
 
     GetObjectRequest request =
-        GetObjectRequest.builder().bucket(TEST_SOURCE_BUCKET).key(CURSOR_KEY).build();
+        GetObjectRequest.builder().bucket(CONTROL_BUCKET).key(CURSOR_KEY).build();
 
-    when(properties.sourceBucket()).thenReturn(TEST_SOURCE_BUCKET);
+    when(properties.controlBucket()).thenReturn(CONTROL_BUCKET);
 
     when(properties.osHttpURLTemplate())
         .thenReturn("https://api.os.uk/downloads/v1/dataPackages/{dataPackage}/versions/{version}");
@@ -463,7 +565,7 @@ class DiscoveryServiceTest {
     } catch (Throwable throwable) {
       assertEquals(
           "No Package Version Data for [https://api.os.uk/downloads/v1/dataPackages/20780/versions/150104]",
-          throwable.getMessage());
+          throwable.getSuppressed()[0].getCause().getMessage());
     }
     verify(s3Client).getObject(request);
     verify(osClient).json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150035");

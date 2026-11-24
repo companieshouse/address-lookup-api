@@ -9,7 +9,7 @@ import uk.gov.companieshouse.addresslookup.releasecore.state.Release;
 import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseFileRepository;
 import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseRepository;
 import uk.gov.companieshouse.addresslookup.releasecore.state.WatermarkRepository;
-import uk.gov.companieshouse.release.model.Dataset;
+import uk.gov.companieshouse.release.model.DatasetCatalog;
 
 @Service
 public class PromotionService {
@@ -36,7 +36,7 @@ public class PromotionService {
     if (release.getStatus() != Release.Status.PROCESSING) return false;
     if (!Objects.equals(watermark.getDate(), release.getValidFrom())) return false;
     var ready = files.findByReleaseId(id);
-    if (ready.size() != Dataset.values().length
+    if (ready.size() != DatasetCatalog.datasets().size()
         || ready.stream().anyMatch(f -> !f.ready(release.getSupplyType()))) return false;
     // Procedure rechecks the barrier, validates prospective data and atomically changes live
     // tables.

@@ -1,5 +1,6 @@
 package uk.gov.companieshouse.addresslookup.releasecore.service;
 
+import java.io.InputStream;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,11 +36,11 @@ public class DatasetImportService {
   public boolean importClean(
       UUID id,
       Dataset dataset,
+      InputStream csv,
       String bucket,
       String key,
       String version,
-      String checksum,
-      String region)
+      String checksum)
       throws Exception {
     var file = files.lock(id, dataset.datasetName()).orElseThrow();
     var release = releases.findById(id).orElseThrow();
@@ -55,7 +56,7 @@ public class DatasetImportService {
         .equals(summary.schemaVersion())) {
       throw new IllegalArgumentException("Deployed schema changed; manual intervention required");
     }
-    aurora.importS3(dataset, manifest.type(), id, bucket, key, region, summary.recordCount());
+    aurora.importStream(dataset, manifest.type(), id, csv, summary.recordCount());
     aurora.prepare(dataset, manifest.type(), id, manifest.target());
     file.ready(manifest.type(), bucket, key, version, checksum);
     return true;

@@ -2,8 +2,13 @@ package uk.gov.companieshouse.addresslookup.releasecore.service;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import uk.gov.companieshouse.addresslookup.releasecore.state.*;
-import uk.gov.companieshouse.release.model.Dataset;
+import uk.gov.companieshouse.addresslookup.releasecore.state.Release;
+import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseFile;
+import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseFileRepository;
+import uk.gov.companieshouse.addresslookup.releasecore.state.ReleaseRepository;
+import uk.gov.companieshouse.addresslookup.releasecore.state.SchemaContractRepository;
+import uk.gov.companieshouse.addresslookup.releasecore.state.WatermarkRepository;
+import uk.gov.companieshouse.release.model.DatasetCatalog;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
 
 @Service
@@ -35,7 +40,7 @@ public class ReleaseRegistration {
             "Immutable release changed; manual intervention required");
       return;
     }
-    for (var dataset : Dataset.values()) {
+    for (var dataset : DatasetCatalog.datasets()) {
       var summary = manifest.summary(dataset);
       if (!contracts
           .findById(dataset.datasetName())
@@ -54,6 +59,6 @@ public class ReleaseRegistration {
             key,
             digest,
             manifest.document()));
-    for (var dataset : Dataset.values()) files.save(new ReleaseFile(manifest.id(), dataset));
+    for (var dataset : DatasetCatalog.datasets()) files.save(new ReleaseFile(manifest.id(), dataset));
   }
 }

@@ -1,6 +1,7 @@
 package uk.gov.companieshouse.release.model;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Arrays;
 import java.util.List;
 
 public final class DatasetCatalog {
@@ -34,11 +35,16 @@ public final class DatasetCatalog {
     try (var in = DatasetCatalog.class.getResourceAsStream("/catalog.json")) {
       if (in == null) throw new IllegalStateException("Missing pinned OS catalog");
       var tables = List.of(new ObjectMapper().readValue(in, Table[].class));
-      if (tables.size() != Dataset.values().length
+      long importableDatasets =
+          Arrays.stream(Dataset.values()).filter(Dataset::supportsDatabaseImport).count();
+      if (tables.size() != importableDatasets
           || tables.stream().map(Table::name).distinct().count() != tables.size())
         throw new IllegalStateException(
-            "Expected one distinct catalogue entry per supported OS dataset");
-      for (var table : tables) Dataset.named(table.name());
+            "Expected one distinct catalogue entry per importable OS dataset");
+      for (var table : tables) {
+        if (!Dataset.named(table.name()).supportsDatabaseImport())
+          throw new IllegalStateException("No database mapping for " + table.name());
+      }
       return tables;
     } catch (Exception e) {
       throw new ExceptionInInitializerError(e);
@@ -49,10 +55,16 @@ public final class DatasetCatalog {
     return TABLES;
   }
 
+  public static List<Dataset> datasets() {
+    return TABLES.stream().map(table -> Dataset.named(table.name())).toList();
+  }
+
   public static Table table(Dataset dataset) {
     return DatasetCatalog.tables().stream()
         .filter(t -> t.name().equals(dataset.datasetName()))
         .findFirst()
-        .orElseThrow();
+        .orElseThrow(
+            () -> new IllegalArgumentException(
+                "No pinned import schema for " + dataset.datasetName()));
   }
 }

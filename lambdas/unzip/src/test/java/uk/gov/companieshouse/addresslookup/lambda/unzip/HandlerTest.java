@@ -38,8 +38,8 @@ class HandlerTest {
               "add_gb_royalmailaddress",
               "object",
               Map.of(
-                  "bucket", "source",
-                  "key", "Scanned/12345678-1234-1234-1234-123456789abc/add_gb_royalmailaddress.zip",
+                  "bucket", "landing",
+                  "key", "daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip",
                   "versionId", "zip-version")));
   private static final String TEST_RESPONSE = "RECONCILED";
 

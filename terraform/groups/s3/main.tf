@@ -83,11 +83,14 @@ resource "aws_s3_bucket_lifecycle_configuration" "acquisition" {
   bucket = aws_s3_bucket.acquisition.id
 
   rule {
-    id     = "expire-landing"
+    id     = "expire-landing-downloads"
     status = "Enabled"
 
     filter {
-      prefix = local.landing_prefix
+      and {
+        prefix = local.landing_prefix
+        tags   = { retention = "download" }
+      }
     }
 
     expiration {
@@ -97,9 +100,18 @@ resource "aws_s3_bucket_lifecycle_configuration" "acquisition" {
     noncurrent_version_expiration {
       noncurrent_days = var.noncurrent_retention_days
     }
+  }
+
+  rule {
+    id     = "abort-landing-uploads"
+    status = "Enabled"
+
+    filter {
+      prefix = local.landing_prefix
+    }
 
     abort_incomplete_multipart_upload {
-      days_after_initiation = 7
+      days_after_initiation = 1
     }
   }
 

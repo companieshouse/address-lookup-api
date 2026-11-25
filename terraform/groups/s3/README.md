@@ -35,9 +35,24 @@ create the log destination.
 | Prefix | Lifecycle |
 | --- | --- |
 | `<environment root>control/` | Retain current plans, cursors and receipts; expire noncurrent versions after `audit_retention_days` (365). |
-| `<environment root>landing/` | Expire current objects after `landing_retention_days` (30); expire noncurrent versions after `noncurrent_retention_days` (30). |
+| `<environment root>landing/` tagged `retention=download` | Expire current objects after `landing_retention_days` (30); expire noncurrent versions after `noncurrent_retention_days` (30). |
 
-Incomplete multipart uploads under both prefixes are aborted after seven days.
+Incomplete multipart uploads are aborted after one day under Landing and seven
+days under Control. Untagged Landing objects, including manifests and archives,
+have no expiry configured. The application does not yet add the download tag,
+so download expiry will not work until uploading and tagging are integrated.
+Manifest and archive retention periods remain to be agreed.
+
+## Database import
+
+This group creates an IAM role associated with the existing
+`<environment>-address-rds` Aurora cluster for `s3Import`. It can read only
+the Landing prefix and decrypt with the selected bucket key; that key's policy
+must allow these permissions through IAM. Apply the Aurora group first.
+The role alone does not enable imports: the database still needs the `aws_s3`
+and `aws_commons` extensions and appropriate database grants. The Aurora group
+adds S3 HTTPS egress, but endpoint routing and policy must also allow access.
+Those prerequisites and an actual import have not yet been verified.
 
 ## Download and GuardDuty
 

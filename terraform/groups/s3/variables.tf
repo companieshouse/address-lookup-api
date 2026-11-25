@@ -47,13 +47,13 @@ variable "kms_key_id" {
 
 variable "landing_retention_days" {
   type        = number
-  description = "Days before objects under the landing prefix expire"
+  description = "Days before Landing objects tagged retention=download expire"
   default     = 30
 }
 
 variable "noncurrent_retention_days" {
   type        = number
-  description = "Days before noncurrent landing object versions expire"
+  description = "Days before noncurrent Landing object versions tagged retention=download expire"
   default     = 30
 }
 

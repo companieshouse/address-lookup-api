@@ -1,6 +1,6 @@
 # Discovery Lambda
 
-Build target and Lambda runtime: Java 25.
+Minimum Build target and Lambda runtime: Java 21.
 
 ## Overview
 The *Discover Lambda* is responsible for querying the OS (Ordnance Survey) data package API, to download the Order Summary and ZIP File meta-data.  This is used to create a **Manifest* file. The manifest file is then saved in the S3 Bucket, and `DOWNLOAD` events, including the location of the manifest file, is published to the EventBridge, one for each dataset of interest, to be consumed by the *Download Lambda*.
@@ -128,8 +128,8 @@ The following environment variables can be set for the Discovery Lambda
 
 | Variable          | Proposed Value                       |
 |-------------------|--------------------------------------|
-| SOURCE_BUCKET     | (tbc)                                |
-| SCANNED_BUCKET    | (tbc)                                |
+| CONTROL_BUCKET    | (tbc)                                |
+| LANDING_BUCKET    | (tbc)                                |
 | EVENT_BUS         | default                              |
 | OS_API_KEY        | ************************************ |
 | ROYAL_MAIL_SCHEMA | 2.0                                  |

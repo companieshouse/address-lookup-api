@@ -1,0 +1,8 @@
+{
+  "source": "os.acquisition",
+  "detail-type": "DOWNLOAD",
+  "detail": {
+    "planKey": "landing/initial_full/12345/159159/manifest/data_package_manifest.json",
+    "dataset": "add_gb_royalmailaddress"
+  }
+}

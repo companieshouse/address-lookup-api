@@ -1,0 +1,4 @@
+aws_profile = "live-eu-west-2"
+environment = "live"
+acquisition_root_prefix = ""
+manage_guardduty_plan = true

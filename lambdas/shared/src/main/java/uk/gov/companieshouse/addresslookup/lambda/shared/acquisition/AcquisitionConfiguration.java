@@ -8,7 +8,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.PropertySource;
+
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
+
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AwsClientsConfiguration;
 
@@ -22,17 +24,17 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AwsClientsConfi
 @EnableConfigurationProperties(AcquisitionProperties.class)
 public class AcquisitionConfiguration {
 
-  @Bean
-  OsClient osClient(AcquisitionProperties properties) {
-    return new OsClient(
-        AcquisitionProperties.required(properties.osApiKey(), "OS_API_KEY"),
-        properties.connectTimeout(),
-        properties.requestTimeout());
-  }
+    @Bean
+    OsClient osClient(AcquisitionProperties properties) {
+        return new OsClient(
+                AcquisitionProperties.required(properties.osApiKey(), "OS_API_KEY"),
+                properties.connectTimeout(),
+                properties.requestTimeout());
+    }
 
-  @Bean
-  Commands commands(EventBridgeClient events, AcquisitionProperties properties) {
-    return new Commands(
-        events, AcquisitionProperties.required(properties.eventBus(), "EVENT_BUS"), JSON);
-  }
+    @Bean
+    Commands commands(EventBridgeClient events, AcquisitionProperties properties) {
+        return new Commands(
+                events, AcquisitionProperties.required(properties.eventBus(), "EVENT_BUS"), JSON);
+    }
 }

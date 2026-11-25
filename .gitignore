@@ -9,10 +9,11 @@ dependency-reduced-pom.xml
 
 # IntelliJ files
 .idea/
+.openidea/
 *.iml
 
 # IntelliJ HTTP client private variables (secrets)
-http-client.private.env.json
+http/http-client.private.env.json
 
 # Mac files
 .DS_Store
@@ -24,3 +25,16 @@ http-client.private.env.json
 
 # IntelliJ HTTP Client download output
 /downloads/
+
+/http/downloads/
+
+# Editor-specific files (use a global gitignore)
+.vim/
+.vscode/
+
+# Seed CSVs downloaded from the OS API; never commit
+/database/local/data/
+
+# AWS Lambda
+template.yml
+template.yaml

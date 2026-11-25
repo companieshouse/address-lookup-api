@@ -9,6 +9,7 @@ migration Lambdas read from Parameter Store.
 | What | Details |
 |------|---------|
 | Aurora cluster | `<env>-address-rds`, database `addressdb`, terraform-modules `aws/aurora`. |
+| S3 import network | Aurora security-group egress on TCP 443 to the existing VPC S3 gateway endpoint's prefix list. The endpoint must already exist and be routed from the database subnets. |
 | TLS | Cluster parameter group: `rds.force_ssl=1`, `ssl_min_protocol_version=TLSv1.3` (the agreed post-quantum readiness step). Both the master and schema-owner jdbcUrls use `sslmode=require`: always encrypted, with no CA file in the repo or the Lambda zips. The cluster refuses non-TLS and pre-1.3 connections. |
 | Credentials | SecureStrings `/address-lookup/<env>/db/master` and `/address-lookup/<env>/db/schema-owner` = `{"username","password","jdbcUrl"}` (writer endpoint), written from Vault by `module.credentials` and encrypted with `alias/<aws_profile>/environment-services-kms`. |
 | SSM endpoint | Interface endpoint `address-lookup-<env>-ssm` (private DNS off) and its security group `address-lookup-<env>-ssm-endpoint`. Its policy lets the bootstrap Lambda read both parameters and the db-migrate Lambda's role read only the schema owner's. `terraform/groups/db-migrate` looks both up by Name tag. |

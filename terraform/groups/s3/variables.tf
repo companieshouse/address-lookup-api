@@ -21,12 +21,6 @@ variable "acquisition_root_prefix" {
   }
 }
 
-variable "manage_guardduty_plan" {
-  type        = bool
-  description = "Create a GuardDuty plan in this account; disable when the bucket owner manages the plan"
-  default     = true
-}
-
 # ---------------- OPTIONAL VARIABLES ----------------
 variable "aws_region" {
   type        = string

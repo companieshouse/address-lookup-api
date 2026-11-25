@@ -1,4 +1,3 @@
 aws_profile = "live-eu-west-2"
 environment = "live"
 acquisition_root_prefix = "address-lookup/live"
-manage_guardduty_plan = false

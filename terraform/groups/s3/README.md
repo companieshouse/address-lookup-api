@@ -64,10 +64,8 @@ Lambda module's `additional_policies`, following
 `terraform/groups/db-migrate/main.tf`; this group does not deploy Download.
 
 GuardDuty is being implemented separately on `feature/als-104-guardduty`.
-The environment profiles leave `manage_guardduty_plan = false`; that work must
-be updated for one plan per new bucket, scanning the corresponding landing prefix
-and excluding control. No scan protection is created by these profiles until
-that integration is configured and deployed.
+This group does not configure scan protection. The separate integration must
+scan the corresponding landing prefix and exclude control.
 
 ## Deployment and state
 
@@ -99,9 +97,9 @@ aws_s3_bucket_lifecycle_configuration.quarantine
 
 The new resources use distinct Terraform addresses and bucket names; old buckets
 and shared-services contents are not moved or deleted. If data exists there,
-arrange and verify a separate migration. Existing locally managed GuardDuty
-resources are also protected from destruction; coordinate any state transfer
-and scanning transition before applying.
+arrange and verify a separate migration. If GuardDuty resources are already
+managed in this group's state, removing their configuration may plan their
+destruction; coordinate any state transfer and scanning transition before applying.
 
 Apply with the `<env>-s3-plan` / `<env>-s3-apply` Concourse jobs after confirming
 the bucket name, key, logging destination and state transition.

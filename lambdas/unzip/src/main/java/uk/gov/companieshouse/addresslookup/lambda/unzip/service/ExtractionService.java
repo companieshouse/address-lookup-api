@@ -53,7 +53,6 @@ public final class ExtractionService {
     private static final String RELEASE_ID_FIELD = "releaseId";
     private static final String LOG_RELEASE_ID = "release_id";
     private static final String SCHEMA_VERSION_FIELD = "schemaVersion";
-    private static final String EXTRACT_FIELD = "extract";
     private static final String CSV_SCAN_STATUS = "CSV_SCAN";
     private static final String CSV_NOT_FOUND = "CSV_NOT_FOUND";
     private static final String MALFORMED_ZIP = "MALFORMED_ZIP";

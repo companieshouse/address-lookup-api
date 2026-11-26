@@ -242,92 +242,17 @@ public final class ReleaseStore {
         return true;
     }
 
+    public static String objectKey(JsonNode ref) {
+        return ref.hasNonNull(FIELD_S3_KEY) ? required(ref, FIELD_S3_KEY) : required(ref, "key");
+    }
+
     public static String objectVersion(ReleaseStore store, String bucket, JsonNode ref) {
         return ref.hasNonNull(FIELD_VERSION)
                 ? required(ref, FIELD_VERSION)
                 : store.version(bucket, objectKey(ref));
     }
 
-  public static String objectVersion(ReleaseStore store, String bucket, JsonNode ref) {
-    return ref.hasNonNull(FIELD_VERSION) ? required(ref, FIELD_VERSION) : store.version(bucket, objectKey(ref));
-  }
-
-  public static String planKey(JsonNode plan) {
-    return "acquisitions/" + required(plan, "target") + "/" + required(plan, "releaseId") + ".json";
-  }
-
-  public static String receiptKey(String id, String dataset, String step) {
-    UUID release = UUID.fromString(id);
-    if ("download".equals(step)) {
-      return SCANNED_PREFIX + release + "/" + dataset + ".receipt.json";
-    }
-    return "control/" + release + "/" + dataset + "/" + step + ".json";
-  }
-
-  public static String extractedCsvKey(String id, String dataset) {
-    return EXTRACTED_PREFIX + id + "/" + dataset + "/" + dataset + ".csv";
-  }
-
-  public static String downloadZipKey(String id, String dataset) {
-    return SCANNED_PREFIX + UUID.fromString(id) + "/" + dataset + ".zip";
-  }
-
-  public JsonNode receipt(String bucket, String id, String dataset, String step) throws Exception {
-    return read(bucket, receiptKey(id, dataset, step));
-  }
-
-  public void receipt(
-      String bucket, String id, String dataset, String step, StreamingS3.Uploaded upload)
-      throws Exception {
-    immutable(bucket, receiptKey(id, dataset, step), JSON.valueToTree(upload));
-  }
-
-  /** Supplier ZIP details recorded in the download receipt. */
-  public record DownloadReceipt(
-      String releaseId,
-      String dataset,
-      String fileName,
-      String expectedMd5,
-      String sourceUrl,
-      Instant downloadedAt) {}
-
-  public void downloadReceipt(String bucket, DownloadReceipt details, StreamingS3.Uploaded upload)
-      throws Exception {
-    var receipt = JSON.createObjectNode();
-    receipt.put("releaseId", details.releaseId());
-    receipt.put("dataset", details.dataset());
-    receipt.put("fileName", details.fileName());
-    receipt.put(FIELD_S3_KEY, upload.key());
-    receipt.put("downloadedBytes", upload.bytes());
-    receipt.put("calculatedMd5", upload.md5());
-    receipt.put("expectedMd5", details.expectedMd5());
-    receipt.put("status", "DOWNLOADED");
-    receipt.put("downloadedAt", details.downloadedAt().toString());
-    receipt.put("sourceUrl", details.sourceUrl());
-    immutable(bucket, receiptKey(details.releaseId(), details.dataset(), "download"), receipt);
-  }
-
-  public void receipt(
-      String bucket, String releaseId, String dataset, String step, JsonNode receipt) throws Exception {
-    immutable(bucket, receiptKey(releaseId, dataset, step), receipt);
-  }
-
-  public void receiptOnce(
-      String bucket, String releaseId, String dataset, String step, JsonNode receipt) {
-    s3.putObject(
-        PutObjectRequest.builder()
-            .bucket(bucket)
-            .key(receiptKey(releaseId, dataset, step))
-            .ifNoneMatch("*")
-            .contentType(JSON_CONTENT_TYPE)
-            .build(),
-        RequestBody.fromString(receipt.toString()));
-  }
-
     public static boolean isPreconditionFailed(S3Exception e) {
         return e.statusCode() == HttpURLConnection.HTTP_PRECON_FAILED;
     }
-  public static boolean isPreconditionFailed(S3Exception e) {
-    return e.statusCode() == HttpURLConnection.HTTP_PRECON_FAILED;
-  }
 }

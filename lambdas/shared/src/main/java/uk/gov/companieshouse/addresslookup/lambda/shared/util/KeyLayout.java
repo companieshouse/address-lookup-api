@@ -204,40 +204,4 @@ public class KeyLayout {
                 };
         return new ObjectKey(identity, landing.dataset(), type, landing.packageVersion());
     }
-    Matcher scanned = SCANNED_OBJECT.matcher(key);
-    if (scanned.matches()) {
-      return new ObjectKey(
-          scanned.group(1), Dataset.named(scanned.group(2)),
-          "zip".equals(scanned.group(3)) ? FileType.ZIP : FileType.RECEIPT);
-    }
-    Matcher extracted = EXTRACTED_CSV.matcher(key);
-    if (extracted.matches()) {
-      return new ObjectKey(extracted.group(1), Dataset.named(extracted.group(2)), FileType.CSV);
-    }
-    Matcher m = OBJECT.matcher(key);
-    if (!m.matches()) throw new IllegalArgumentException("Invalid object key");
-    boolean zipKey = "zip".equals(m.group(4)) && "zips".equals(m.group(1));
-    boolean csvKey = "csv".equals(m.group(4)) && "csv".equals(m.group(1));
-    if (!zipKey && !csvKey) {
-      throw new IllegalArgumentException("Invalid object key");
-    }
-    return new ObjectKey(
-        m.group(2),
-        Dataset.named(m.group(3)),
-        "zip".equals(m.group(4)) ? FileType.ZIP : FileType.CSV);
-  }
-
-  /** @throws IllegalArgumentException if the key is not a valid ZIP key for a supported dataset */
- public static ZipKey parseZipKey(String key) {
-    ObjectKey object = parseObjectKey(key);
-    if (object.fileType() != FileType.ZIP) throw new IllegalArgumentException("Expected ZIP key");
-    return new ZipKey(object.releaseId(), object.dataset());
-  }
-
-  /** @throws IllegalArgumentException if the key is not a valid CSV key for a supported dataset */
-  public static ObjectKey parseCsvKey(String key) {
-    ObjectKey object = parseObjectKey(key);
-    if (object.fileType() != FileType.CSV) throw new IllegalArgumentException("Expected CSV key");
-    return object;
-  }
 }

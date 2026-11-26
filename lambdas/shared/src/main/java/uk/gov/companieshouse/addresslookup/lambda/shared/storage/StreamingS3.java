@@ -99,7 +99,8 @@ public final class StreamingS3 {
                 new ObjectTarget(bucket, key),
                 limit,
                 verifier,
-                ExistingObjectPolicy.failOnConflict());
+                ExistingObjectPolicy.failOnConflict(),
+                null, null);
     }
 
     public Uploaded putIdempotent(InputStream in, String bucket, String key, long limit)
@@ -174,15 +175,6 @@ public final class StreamingS3 {
             ObjectTarget target,
             long limit,
             ChecksumVerifier verifier,
-            ExistingObjectPolicy policy)
-            throws IOException,
-                    NoSuchAlgorithmException,
-                    ChecksumMismatchException,
-                    ExistingObjectVerificationException {
-        String uploadId =
-                s3.createMultipartUpload(b -> b.bucket(target.bucket()).key(target.key()))
-                        .uploadId();
-        LOG.info("Multipart upload started", target.logFields());
             ExistingObjectPolicy policy,
             BeforeCompletion beforeCompletion,
             ProgressListener progress)
@@ -213,6 +205,9 @@ public final class StreamingS3 {
             }
             // Complete the multipart upload only after proving the supplier checksum matches.
             verifier.verify(streamed.md5());
+            if (beforeCompletion != null) {
+                beforeCompletion.run();
+            }
             String version = completeUpload(target, uploadId, streamed, policy);
 
             var uploaded =

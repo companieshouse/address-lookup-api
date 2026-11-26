@@ -33,10 +33,7 @@ public final class DatasetCatalog {
     }
 
     private static final List<Table> SCHEMAS = load();
-    private static final List<Table> TABLES =
-            SCHEMAS.stream()
-                    .filter(table -> Dataset.named(table.name()).supportsDatabaseImport())
-                    .toList();
+    private static final List<Table> TABLES = SCHEMAS;
 
     private static List<Table> load() {
         try (var in = DatasetCatalog.class.getResourceAsStream("/catalog.json")) {
@@ -48,15 +45,13 @@ public final class DatasetCatalog {
                 throw new IllegalStateException(
                         "Expected one distinct catalogue entry per OS dataset");
             for (var table : tables) {
-                var dataset = Dataset.named(table.name());
+                Dataset.named(table.name());
                 if (table.columns() == null || table.columns().isEmpty()
                         || table.columns().stream().map(Column::name).distinct().count()
                                 != table.columns().size()
                         || table.version() == null)
                     throw new IllegalStateException("Invalid pinned schema for " + table.name());
-                if (dataset.supportsDatabaseImport()
-                        ? table.physical() == null || table.key() == null
-                        : table.physical() != null || table.key() != null)
+                if (table.physical() == null || table.key() == null)
                     throw new IllegalStateException("Invalid import mapping for " + table.name());
             }
             return tables;
@@ -84,7 +79,7 @@ public final class DatasetCatalog {
                 .orElseThrow(
                         () ->
                                 new IllegalArgumentException(
-                                        "No pinned import schema for " + dataset.datasetName()));
+                                        "No pinned schema for " + dataset.datasetName()));
     }
 
     public static String extractionHeader(String name) {

@@ -41,7 +41,7 @@ variable "snapshot_prefix" {
 variable "lambda_runtime" {
   type        = string
   description = "The Lambda managed runtime"
-  default     = "java21"
+  default     = "java25"
 }
 
 variable "lambda_handler_name" {

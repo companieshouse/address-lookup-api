@@ -206,7 +206,7 @@ class TlsProtocolProbeTest {
                         int next;
                         try {
                             next = in.read();
-                        } catch (SocketException reset) {
+                        } catch (SocketException _) {
                             // closing with the server's reply unread resets the connection; nothing
                             // more was sent
                             next = -1;
@@ -287,11 +287,11 @@ class TlsProtocolProbeTest {
                                     tls.startHandshake();
                                     completed.set(true);
                                     tls.getInputStream().read();
-                                } catch (Exception ignored) {
+                                } catch (Exception _) {
                                     // the refused handshake ends here
                                 }
                             }
-                        } catch (Exception ignored) {
+                        } catch (Exception _) {
                             return null;
                         }
                     }

@@ -325,7 +325,7 @@ public final class DownloadService {
     private static boolean isExistingObjectVerificationExceptionTransient(
             StreamingS3.ExistingObjectVerificationException exception) {
         return switch (exception.getCause()) {
-            case IOException ignored -> true;
+            case IOException _ -> true;
             case S3Exception s3e -> isStatusRetryable(s3e);
             default -> false;
         };

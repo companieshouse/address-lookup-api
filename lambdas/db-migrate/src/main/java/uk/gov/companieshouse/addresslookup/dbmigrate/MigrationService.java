@@ -158,7 +158,7 @@ public final class MigrationService {
             if (!dbConnection.isValid(DB_CONNECTION_VALID_TIMEOUT_SECONDS))
                 throw new MigrationException(
                         DATABASE_UNAVAILABLE, "Database connection is not valid");
-        } catch (SQLException ignored) {
+        } catch (SQLException _) {
             // The connection opened successfully, so a failure while validating or closing it does
             // not
             // matter.
@@ -217,7 +217,7 @@ public final class MigrationService {
         try (var paths = Files.walk(tempWorkDir)) {
             // Delete children before their parent directories.
             paths.sorted(Comparator.reverseOrder()).forEach(MigrationService::deletePathQuietly);
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             // Best effort: the directory name is unique per invocation.
         }
     }
@@ -229,7 +229,7 @@ public final class MigrationService {
     private static void deletePathQuietly(Path path) {
         try {
             Files.deleteIfExists(path);
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             // Best effort: the directory name is unique per invocation.
         }
     }

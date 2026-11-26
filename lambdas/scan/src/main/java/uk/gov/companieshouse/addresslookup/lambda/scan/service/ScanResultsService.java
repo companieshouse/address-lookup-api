@@ -98,7 +98,7 @@ public final class ScanResultsService {
         ObjectKey parsed;
         try {
             parsed = KeyLayout.parseObjectKey(key);
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException _) {
             parsed = null;
         }
         if (!SOURCE.equals(text(input, "source"))

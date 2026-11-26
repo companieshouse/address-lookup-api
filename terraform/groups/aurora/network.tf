@@ -71,6 +71,16 @@ resource "aws_vpc_security_group_ingress_rule" "aurora_from_db_bootstrap" {
   to_port                      = local.database_port
 }
 
+resource "aws_vpc_security_group_egress_rule" "aurora_to_s3" {
+  security_group_id = module.aurora_postgres.security_group_id
+  description       = "HTTPS to S3 through the VPC gateway endpoint for Landing imports"
+
+  prefix_list_id = data.aws_vpc_endpoint.s3.prefix_list_id
+  ip_protocol    = "tcp"
+  from_port      = 443
+  to_port        = 443
+}
+
 resource "aws_vpc_security_group_egress_rule" "db_bootstrap_dns" {
   for_each = local.dns_egress
 

@@ -30,11 +30,11 @@ public abstract class AbstractRequestHandlerImpl<I, O> implements RequestHandler
 
     protected boolean isPermanent(Exception exception) {
         return switch (exception) {
-            case TransientFailureException ignore -> false;
-            case IllegalArgumentException ignore -> true;
+            case TransientFailureException _ -> false;
+            case IllegalArgumentException _ -> true;
             case Commands.CommandDispatchException cde -> handleCommandDispatchException(cde);
-            case IOException ignore -> false;
-            case SdkClientException ignore -> false;
+            case IOException _ -> false;
+            case SdkClientException _ -> false;
             default -> true;
         };
     }

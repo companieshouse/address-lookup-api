@@ -450,7 +450,7 @@ final class DownloadServiceTest {
             when(exceptionToThrow.getCause()).thenReturn(causeException);
         }
 
-        try (MockedConstruction<StreamingS3> ignored =
+        try (var _ =
                 mockConstruction(
                         StreamingS3.class,
                         (mock, ignore) ->
@@ -512,7 +512,7 @@ final class DownloadServiceTest {
 
         when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
 
-        try (MockedConstruction<StreamingS3> ignored =
+        try (var _ =
                 mockConstruction(
                         StreamingS3.class,
                         (mock, ignore) ->
@@ -613,7 +613,7 @@ final class DownloadServiceTest {
         var downloadEvent = event();
         var digestFailure = new NoSuchAlgorithmException("MD5 not available");
 
-        try (MockedConstruction<StreamingS3> ignored =
+        try (var _ =
                 mockConstruction(
                         StreamingS3.class,
                         (mock, ignore) ->

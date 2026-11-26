@@ -31,7 +31,7 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
         JsonNode node;
         try {
             node = JSON.readTree(json);
-        } catch (IOException e) {
+        } catch (IOException _) {
             // The message could echo the secret, so it is not chained.
             throw new IllegalArgumentException("Credentials parameter is not valid JSON");
         }

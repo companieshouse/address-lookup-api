@@ -134,7 +134,7 @@ public final class ImportService {
         KeyLayout.PackageVersion packageVersion;
         try {
             packageVersion = KeyLayout.parsePackageVersionManifestKey(key);
-        } catch (IllegalArgumentException invalidLandingManifest) {
+        } catch (IllegalArgumentException _) {
             return;
         }
         importLandingManifest(store, bucket, key, packageVersion, context, failures);

@@ -36,7 +36,7 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
         JsonNode dbCredentialsJsonNode;
         try {
             dbCredentialsJsonNode = JSON.readTree(dbCredentialsJson);
-        } catch (Exception e) {
+        } catch (Exception _) {
             // Never include the credentials JSON in the error.
             throw new MigrationException(
                     CREDENTIALS_INVALID, "Database credentials are not valid JSON");
@@ -99,7 +99,7 @@ public record DatabaseCredentials(String jdbcUrl, String username, String passwo
     private static String decodeUrlComponent(String component) {
         try {
             return URLDecoder.decode(component, StandardCharsets.UTF_8);
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException _) {
             // The decoder message quotes the input, which may contain a secret.
             throw new MigrationException(
                     CREDENTIALS_INVALID, "jdbcUrl contains malformed percent-encoding");

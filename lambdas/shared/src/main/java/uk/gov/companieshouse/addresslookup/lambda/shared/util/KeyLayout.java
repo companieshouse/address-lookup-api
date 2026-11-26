@@ -154,7 +154,7 @@ public class KeyLayout {
     public static boolean isDataPackageManifestKey(String key) {
         try {
             return parseLandingObject(key).fileType() == LandingFileType.MANIFEST;
-        } catch (IllegalArgumentException invalidKey) {
+        } catch (IllegalArgumentException _) {
             return false;
         }
     }

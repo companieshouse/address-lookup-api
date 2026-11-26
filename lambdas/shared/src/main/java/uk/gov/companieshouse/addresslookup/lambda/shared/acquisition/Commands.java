@@ -14,7 +14,7 @@ import java.util.Map;
 
 public final class Commands {
     private static final Logger LOG = LoggerFactory.getLogger(Commands.class.getName());
-    private static final String INGEST_SOURCE = "uk.gov.companieshouse.address-lookup.ingest";
+    private static final String SOURCE = "os.acquisition";
 
     private final EventBridgeClient events;
     private final String bus;
@@ -39,19 +39,10 @@ public final class Commands {
 
     public void send(String action, String planKey, String dataset)
             throws CommandDispatchException {
-        send(action, Map.of("planKey", planKey, "dataset", dataset), "os.acquisition");
+        send(action, Map.of("planKey", planKey, "dataset", dataset));
     }
 
-    public void send(String action, String dataset) throws CommandDispatchException {
-        send(action, Map.of("dataset", dataset), "os.acquisition");
-    }
-
-    public void sendIngestion(String action, Map<String, ?> payload)
-            throws CommandDispatchException {
-        send(action, payload, INGEST_SOURCE);
-    }
-
-    private void send(String action, Map<String, ?> payload, String source)
+    private void send(String action, Map<String, ?> payload)
             throws CommandDispatchException {
         String detail;
         try {
@@ -67,7 +58,7 @@ public final class Commands {
                                     b.entries(
                                             PutEventsRequestEntry.builder()
                                                     .eventBusName(bus)
-                                                    .source(source)
+                                                    .source(SOURCE)
                                                     .detailType(action)
                                                     .detail(detail)
                                                     .build()));
@@ -77,7 +68,7 @@ public final class Commands {
             }
             LOG.info(
                     "Published EventBridge command",
-                    Map.of("bus", bus, "action", action, "source", source));
+                    Map.of("bus", bus, "action", action, "source", SOURCE));
         } catch (SdkException e) {
             throw new CommandDispatchException(
                     "Could not publish EventBridge command; invocation must be retried", e);

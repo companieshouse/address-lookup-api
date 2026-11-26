@@ -13,16 +13,24 @@ import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
 
 import java.io.IOException;
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.LongSupplier;
 
-/** Bounded 256 MiB parts, with checksum validation before multipart completion. */
+/** Bounded multipart uploads, with checksum validation before completion. */
 public final class StreamingS3 {
     private static final Logger LOG = LoggerFactory.getLogger(StreamingS3.class.getName());
 
@@ -30,6 +38,8 @@ public final class StreamingS3 {
     static final String KEY_FIELD = "key";
     static final String SHA_256 = "SHA-256";
     private static final int DEFAULT_PART_SIZE_BYTES = 256 * 1024 * 1024;
+    private static final int PARALLEL_PART_SIZE_BYTES = 64 * 1024 * 1024;
+    private static final int PARALLEL_UPLOADS = 4;
     private static final int MAX_PARTS = 10_000;
     private static final long DEADLINE_MARGIN_MILLIS = 30_000;
     private static final String S3_VERSIONING_MESSAGE = "S3 versioning must be enabled";
@@ -51,6 +61,14 @@ public final class StreamingS3 {
   @FunctionalInterface
   public interface BeforeCompletion {
     void run() throws IOException;
+  }
+
+  public record PartProgress(int partNumber, long bytes, long readNanos,
+                             long digestNanos, long uploadNanos, long elapsedNanos) {}
+
+  @FunctionalInterface
+  public interface ProgressListener {
+    void onPart(PartProgress progress);
   }
 
   private final S3Client s3;
@@ -90,7 +108,38 @@ public final class StreamingS3 {
                     ChecksumMismatchException,
                     ExistingObjectVerificationException {
         return put(
-                in, new ObjectTarget(bucket, key), limit, ChecksumVerifier.none(), reuseExisting);
+                in, new ObjectTarget(bucket, key), limit, ChecksumVerifier.none(), reuseExisting,
+                null, null);
+  }
+
+  public Uploaded putIdempotentWithProgress(InputStream in, String bucket, String key, long limit,
+                                            ProgressListener progress)
+      throws IOException, NoSuchAlgorithmException, ChecksumMismatchException,
+          ExistingObjectVerificationException {
+    return put(in, new ObjectTarget(bucket, key), limit, ChecksumVerifier.none(), reuseExisting,
+        null, progress);
+  }
+
+  public Uploaded putRecoverMissingWithProgress(InputStream in, String bucket, String key,
+                                                long limit, String previousVersion,
+                                                String expectedSha256, long expectedBytes,
+                                                boolean allowExisting,
+                                                ProgressListener progress)
+      throws IOException, NoSuchAlgorithmException, ChecksumMismatchException,
+          ExistingObjectVerificationException {
+    var target = new ObjectTarget(bucket, key);
+    return put(in, target, limit, ChecksumVerifier.none(),
+        new RecoverMissing(s3, new ReleaseStore(s3), previousVersion, expectedSha256,
+            expectedBytes, allowExisting), null, progress,
+        new RecoveryExpectation(expectedSha256, expectedBytes));
+  }
+
+  public Uploaded putIdempotent(InputStream in, String bucket, String key, long limit,
+                                BeforeCompletion beforeCompletion)
+      throws IOException, NoSuchAlgorithmException, ChecksumMismatchException,
+          ExistingObjectVerificationException {
+    return put(in, new ObjectTarget(bucket, key), limit, ChecksumVerifier.none(), reuseExisting,
+        beforeCompletion, null);
     }
 
     public Uploaded putOverwrite(InputStream in, String bucket, String key, long limit)
@@ -112,7 +161,8 @@ public final class StreamingS3 {
                 new ObjectTarget(bucket, key),
                 limit,
                 expectedMd5 == null ? ChecksumVerifier.none() : ChecksumVerifier.md5(expectedMd5),
-                ExistingObjectPolicy.overwrite());
+                ExistingObjectPolicy.overwrite(),
+                null, null);
     }
 
     public static String checksumKey(String key) {
@@ -133,10 +183,34 @@ public final class StreamingS3 {
                 s3.createMultipartUpload(b -> b.bucket(target.bucket()).key(target.key()))
                         .uploadId();
         LOG.info("Multipart upload started", target.logFields());
+            ExistingObjectPolicy policy,
+            BeforeCompletion beforeCompletion,
+            ProgressListener progress)
+      throws IOException, NoSuchAlgorithmException, ChecksumMismatchException,
+          ExistingObjectVerificationException {
+    return put(in, target, limit, verifier, policy, beforeCompletion, progress, null);
+  }
+
+  private record RecoveryExpectation(String sha256, long bytes) {}
+
+  private Uploaded put(InputStream in, ObjectTarget target, long limit,
+                       ChecksumVerifier verifier, ExistingObjectPolicy policy,
+                       BeforeCompletion beforeCompletion, ProgressListener progress,
+                       RecoveryExpectation expectation)
+      throws IOException, NoSuchAlgorithmException, ChecksumMismatchException,
+          ExistingObjectVerificationException {
+    String uploadId =
+        s3.createMultipartUpload(b -> b.bucket(target.bucket()).key(target.key())).uploadId();
+    LOG.info("Multipart upload started", target.logFields());
 
         try {
-            var streamed = uploadParts(in, target, uploadId, limit);
+            var streamed = uploadParts(in, target, uploadId, limit, progress);
 
+            if (expectation != null) {
+                check(expectation.bytes() == streamed.bytes()
+                        && expectation.sha256().equals(streamed.sha256()),
+                    "Recovered ZIP member differs from recorded checksum: " + target.key());
+            }
             // Complete the multipart upload only after proving the supplier checksum matches.
             verifier.verify(streamed.md5());
             String version = completeUpload(target, uploadId, streamed, policy);
@@ -160,8 +234,12 @@ public final class StreamingS3 {
      * Streams the input into bounded parts, hashing as it goes; never re-reads the object from S3.
      */
     private StreamedParts uploadParts(
-            InputStream in, ObjectTarget target, String uploadId, long limit)
+            InputStream in, ObjectTarget target, String uploadId, long limit,
+            ProgressListener progress)
             throws IOException, NoSuchAlgorithmException {
+        if (progress != null) {
+            return uploadPartsConcurrent(in, target, uploadId, limit, progress);
+        }
         var parts = new ArrayList<CompletedPart>();
         var digests = new Digests();
         long total = 0;
@@ -188,6 +266,101 @@ public final class StreamingS3 {
         return new StreamedParts(parts, total, digests.md5Hex(), digests.sha256Hex());
     }
 
+    private record UploadedPart(CompletedPart part, long uploadNanos) {}
+    private record PendingPart(Future<UploadedPart> future, int number, long bytes,
+                               long readNanos, long digestNanos) {}
+
+    private StreamedParts uploadPartsConcurrent(InputStream in, ObjectTarget target,
+                                                String uploadId, long limit,
+                                                ProgressListener progress)
+            throws IOException, NoSuchAlgorithmException {
+        var executor = Executors.newFixedThreadPool(PARALLEL_UPLOADS);
+        var pending = new ArrayDeque<PendingPart>();
+        var parts = new ArrayList<CompletedPart>();
+        var digests = new Digests();
+        long total = 0;
+        long readNanos = 0;
+        long digestNanos = 0;
+        long uploadNanos = 0;
+        long startedAt = System.nanoTime();
+        boolean finished = false;
+        try {
+            while (true) {
+                if (pending.size() == PARALLEL_UPLOADS) {
+                    uploadNanos += collectPart(pending.peekFirst(), parts, progress,
+                            uploadNanos, startedAt);
+                    pending.removeFirst();
+                }
+                check(remaining.getAsLong() > DEADLINE_MARGIN_MILLIS,
+                        "Lambda deadline approaching; retry with a new object key");
+
+                long started = System.nanoTime();
+                byte[] bytes = in.readNBytes(Math.min(partSizeBytes, PARALLEL_PART_SIZE_BYTES));
+                readNanos += System.nanoTime() - started;
+                if (bytes.length == 0) break;
+                total += bytes.length;
+                check(total <= limit && parts.size() + pending.size() < MAX_PARTS,
+                        "Object exceeds configured streaming budget");
+
+                started = System.nanoTime();
+                digests.update(bytes);
+                digestNanos += System.nanoTime() - started;
+                int number = parts.size() + pending.size() + 1;
+                var part = executor.submit(() -> {
+                    long uploadStarted = System.nanoTime();
+                    var completed = uploadPart(target, uploadId, number, bytes);
+                    return new UploadedPart(completed, System.nanoTime() - uploadStarted);
+                });
+                pending.addLast(new PendingPart(part, number, total, readNanos, digestNanos));
+            }
+            while (!pending.isEmpty()) {
+                uploadNanos += collectPart(pending.peekFirst(), parts, progress,
+                        uploadNanos, startedAt);
+                pending.removeFirst();
+            }
+            check(total > 0, "Empty object");
+            finished = true;
+            return new StreamedParts(parts, total, digests.md5Hex(), digests.sha256Hex());
+        } finally {
+            if (!finished) {
+                pending.forEach(part -> part.future().cancel(true));
+                executor.shutdownNow();
+                try {
+                    executor.awaitTermination(5, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            } else {
+                executor.shutdown();
+            }
+        }
+    }
+
+    private long collectPart(PendingPart pending, List<CompletedPart> parts,
+                             ProgressListener progress, long uploadNanos, long startedAt)
+            throws IOException {
+        try {
+            long waitMillis = remaining.getAsLong() - DEADLINE_MARGIN_MILLIS;
+            check(waitMillis > 0, "Lambda deadline approaching; retry with a new object key");
+            UploadedPart uploaded = pending.future().get(waitMillis, TimeUnit.MILLISECONDS);
+            parts.add(uploaded.part());
+            long cumulativeUploadNanos = uploadNanos + uploaded.uploadNanos();
+            progress.onPart(new PartProgress(pending.number(), pending.bytes(),
+                    pending.readNanos(), pending.digestNanos(), cumulativeUploadNanos,
+                    System.nanoTime() - startedAt));
+            return uploaded.uploadNanos();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Multipart upload interrupted", interrupted);
+        } catch (TimeoutException timeout) {
+            throw new IOException("Multipart upload deadline approaching", timeout);
+        } catch (ExecutionException failed) {
+            if (failed.getCause() instanceof RuntimeException runtime) throw runtime;
+            if (failed.getCause() instanceof Error error) throw error;
+            throw new IOException("Multipart upload part failed", failed.getCause());
+        }
+    }
+
     private CompletedPart uploadPart(
             ObjectTarget target, String uploadId, int partNumber, byte[] bytes) {
         var response =
@@ -198,7 +371,10 @@ public final class StreamingS3 {
                                         .uploadId(uploadId)
                                         .partNumber(partNumber)
                                         .contentLength((long) bytes.length),
-                        RequestBody.fromBytes(bytes));
+                        // An upload may retry the body; reuse the immutable part without copying it.
+                        RequestBody.fromContentProvider(
+                                () -> new ByteArrayInputStream(bytes),
+                                bytes.length, "application/octet-stream"));
         return CompletedPart.builder().partNumber(partNumber).eTag(response.eTag()).build();
     }
 

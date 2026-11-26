@@ -327,4 +327,7 @@ public final class ReleaseStore {
     public static boolean isPreconditionFailed(S3Exception e) {
         return e.statusCode() == HttpURLConnection.HTTP_PRECON_FAILED;
     }
+  public static boolean isPreconditionFailed(S3Exception e) {
+    return e.statusCode() == HttpURLConnection.HTTP_PRECON_FAILED;
+  }
 }

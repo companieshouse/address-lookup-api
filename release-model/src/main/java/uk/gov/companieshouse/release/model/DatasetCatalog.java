@@ -32,7 +32,11 @@ public final class DatasetCatalog {
         return "\"" + name + "\"";
     }
 
-    private static final List<Table> TABLES = load();
+    private static final List<Table> SCHEMAS = load();
+    private static final List<Table> TABLES =
+            SCHEMAS.stream()
+                    .filter(table -> Dataset.named(table.name()).supportsDatabaseImport())
+                    .toList();
 
     private static List<Table> load() {
         try (var in = DatasetCatalog.class.getResourceAsStream("/catalog.json")) {
@@ -43,7 +47,18 @@ public final class DatasetCatalog {
                     || tables.stream().map(Table::name).distinct().count() != tables.size())
                 throw new IllegalStateException(
                         "Expected one distinct catalogue entry per OS dataset");
-            tables.forEach(table -> Dataset.named(table.name()));
+            for (var table : tables) {
+                var dataset = Dataset.named(table.name());
+                if (table.columns() == null || table.columns().isEmpty()
+                        || table.columns().stream().map(Column::name).distinct().count()
+                                != table.columns().size()
+                        || table.version() == null)
+                    throw new IllegalStateException("Invalid pinned schema for " + table.name());
+                if (dataset.supportsDatabaseImport()
+                        ? table.physical() == null || table.key() == null
+                        : table.physical() != null || table.key() != null)
+                    throw new IllegalStateException("Invalid import mapping for " + table.name());
+            }
             return tables;
         } catch (Exception e) {
             throw new ExceptionInInitializerError(e);
@@ -70,5 +85,17 @@ public final class DatasetCatalog {
                         () ->
                                 new IllegalArgumentException(
                                         "No pinned import schema for " + dataset.datasetName()));
+    }
+
+    public static String extractionHeader(String name) {
+        return schema(name).header();
+    }
+
+    static Table schema(String name) {
+        return SCHEMAS.stream()
+                .filter(schema -> schema.name().equals(name))
+                .findFirst()
+                .orElseThrow(
+                        () -> new IllegalArgumentException("No pinned extraction schema for " + name));
     }
 }

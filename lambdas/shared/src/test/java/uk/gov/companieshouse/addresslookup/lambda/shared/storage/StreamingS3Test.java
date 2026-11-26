@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -42,7 +43,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 final class StreamingS3Test {
@@ -250,6 +256,125 @@ final class StreamingS3Test {
 
         assertEquals(5, uploaded.bytes());
         verify(s3, times(3)).uploadPart(any(Consumer.class), any(RequestBody.class));
+    }
+
+    @Test
+    void reportsCumulativeReadDigestAndUploadTimeAfterEachPart() throws Exception {
+        var s3 = mock(S3Client.class);
+        stubMultipartUpload(s3, "new-version");
+        when(s3.putObject(any(Consumer.class), any(RequestBody.class)))
+                .thenReturn(PutObjectResponse.builder().build());
+        var progress = new ArrayList<StreamingS3.PartProgress>();
+
+        new StreamingS3(s3, () -> 900_000, new ReleaseStore(s3), 2)
+                .putIdempotentWithProgress(
+                        new ByteArrayInputStream("abcde".getBytes(StandardCharsets.UTF_8)),
+                        BUCKET, KEY, 100, progress::add);
+
+        assertEquals(3, progress.size());
+        assertEquals(2, progress.get(0).bytes());
+        assertEquals(4, progress.get(1).bytes());
+        assertEquals(5, progress.get(2).bytes());
+        for (int i = 0; i < progress.size(); i++) {
+            assertEquals(i + 1, progress.get(i).partNumber());
+            assertTrue(progress.get(i).readNanos() >= 0);
+            assertTrue(progress.get(i).digestNanos() >= 0);
+            assertTrue(progress.get(i).uploadNanos() >= 0);
+            assertTrue(progress.get(i).elapsedNanos() >= 0);
+        }
+    }
+
+    @Test
+    void uploadsPartsConcurrentlyButCompletesInPartOrder() throws Exception {
+        var s3 = mock(S3Client.class);
+        stubMultipartUpload(s3, "new-version");
+        when(s3.putObject(any(Consumer.class), any(RequestBody.class)))
+                .thenReturn(PutObjectResponse.builder().build());
+        var started = new CountDownLatch(4);
+        var release = new CountDownLatch(1);
+        var active = new AtomicInteger();
+        var maximum = new AtomicInteger();
+        doAnswer(invocation -> {
+            var builder = UploadPartRequest.builder();
+            invocation.<Consumer<UploadPartRequest.Builder>>getArgument(0).accept(builder);
+            int current = active.incrementAndGet();
+            maximum.accumulateAndGet(current, Math::max);
+            started.countDown();
+            try {
+                if (!release.await(5, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Timed out waiting for other parts");
+                }
+                return UploadPartResponse.builder()
+                        .eTag("part-" + builder.build().partNumber()).build();
+            } finally {
+                active.decrementAndGet();
+            }
+        }).when(s3).uploadPart(any(Consumer.class), any(RequestBody.class));
+
+        var worker = Executors.newSingleThreadExecutor();
+        try {
+            var progress = new ArrayList<StreamingS3.PartProgress>();
+            var future = worker.submit(() -> new StreamingS3(s3, () -> 900_000,
+                    new ReleaseStore(s3), 2)
+                    .putIdempotentWithProgress(new ByteArrayInputStream(
+                            "abcdefghij".getBytes(StandardCharsets.UTF_8)),
+                            BUCKET, KEY, 100, progress::add));
+            assertTrue(started.await(5, TimeUnit.SECONDS), "four parts should overlap");
+            assertEquals(4, maximum.get());
+            release.countDown();
+            assertEquals(10, future.get(5, TimeUnit.SECONDS).bytes());
+            assertEquals(5, progress.size());
+            for (int i = 0; i < progress.size(); i++) {
+                assertEquals(i + 1, progress.get(i).partNumber());
+            }
+            var complete = ArgumentCaptor.forClass(Consumer.class);
+            verify(s3).completeMultipartUpload(complete.capture());
+            var request = CompleteMultipartUploadRequest.builder();
+            ((Consumer<CompleteMultipartUploadRequest.Builder>) complete.getValue())
+                    .accept(request);
+            assertEquals(
+                    java.util.List.of("part-1", "part-2", "part-3", "part-4", "part-5"),
+                    request.build().multipartUpload().parts().stream()
+                            .map(software.amazon.awssdk.services.s3.model.CompletedPart::eTag)
+                            .toList());
+        } finally {
+            release.countDown();
+            worker.shutdownNow();
+        }
+    }
+
+    @Test
+    void abortsConcurrentUploadWhenAnyPartFails() throws Exception {
+        var s3 = mock(S3Client.class);
+        stubMultipartUpload(s3, "unused");
+        var secondStarted = new CountDownLatch(1);
+        var secondCancelled = new CountDownLatch(1);
+        var failure = S3Exception.builder().statusCode(503).message("part failed").build();
+        doAnswer(invocation -> {
+            var builder = UploadPartRequest.builder();
+            invocation.<Consumer<UploadPartRequest.Builder>>getArgument(0).accept(builder);
+            if (builder.build().partNumber() == 1) {
+                assertTrue(secondStarted.await(5, TimeUnit.SECONDS));
+                throw failure;
+            }
+            secondStarted.countDown();
+            try {
+                new CountDownLatch(1).await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                secondCancelled.countDown();
+                Thread.currentThread().interrupt();
+            }
+            return UploadPartResponse.builder().eTag("part-2").build();
+        }).when(s3).uploadPart(any(Consumer.class), any(RequestBody.class));
+
+        var thrown = assertThrows(S3Exception.class, () -> new StreamingS3(s3,
+                () -> 900_000, new ReleaseStore(s3), 2)
+                .putIdempotentWithProgress(new ByteArrayInputStream("abcd".getBytes(
+                        StandardCharsets.UTF_8)), BUCKET, KEY, 100, progress -> {}));
+        assertSame(failure, thrown);
+        assertTrue(secondCancelled.await(5, TimeUnit.SECONDS));
+        verify(s3).abortMultipartUpload(any(Consumer.class));
+        verify(s3, never()).completeMultipartUpload(any(Consumer.class));
     }
 
     @Test

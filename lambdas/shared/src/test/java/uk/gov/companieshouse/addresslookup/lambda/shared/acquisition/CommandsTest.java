@@ -38,7 +38,7 @@ final class CommandsTest {
     }
 
     @Test
-    void sendsCommandsWithAndWithoutPlanKey() {
+    void sendsDownloadCommand() {
         when(events.putEvents(any(Consumer.class)))
                 .thenAnswer(
                         invocation -> {
@@ -49,21 +49,16 @@ final class CommandsTest {
                             var entry = request.build().entries().getFirst();
                             assertEquals("test-bus", entry.eventBusName());
                             assertEquals("os.acquisition", entry.source());
-                            if ("DOWNLOAD".equals(entry.detailType())) {
+                            assertEquals("DOWNLOAD", entry.detailType());
                                 assertEquals(
                                         Map.of("planKey", "plan.json", "dataset", "dataset"),
                                         JSON.readValue(entry.detail(), Map.class));
-                            } else {
-                                assertEquals("CSV_SCAN", entry.detailType());
-                                assertEquals(
-                                        Map.of("dataset", "dataset"),
-                                        JSON.readValue(entry.detail(), Map.class));
-                            }
+
                             return PutEventsResponse.builder().failedEntryCount(0).build();
                         });
 
         commands.send("DOWNLOAD", "plan.json", "dataset");
-        commands.send("CSV_SCAN", "dataset");
+
     }
 
     @Test
@@ -76,7 +71,7 @@ final class CommandsTest {
         var thrown =
                 assertThrows(
                         Commands.CommandDispatchException.class,
-                        () -> failingCommands.send("CSV_SCAN", "dataset"));
+                        () -> failingCommands.send("DOWNLOAD", "plan.json", "dataset"));
 
         assertEquals(failure, thrown.getCause());
         verifyNoInteractions(events);
@@ -90,7 +85,7 @@ final class CommandsTest {
         var thrown =
                 assertThrows(
                         Commands.CommandDispatchException.class,
-                        () -> commands.send("CSV_SCAN", "dataset"));
+                        () -> commands.send("DOWNLOAD", "plan.json", "dataset"));
 
         assertTrue(thrown.getMessage().contains("EventBridge rejected command"));
     }

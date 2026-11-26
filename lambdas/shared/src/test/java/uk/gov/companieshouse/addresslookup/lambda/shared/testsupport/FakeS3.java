@@ -34,7 +34,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.function.Consumer;
 
 /**
@@ -109,14 +109,32 @@ public final class FakeS3 {
     private ResponseInputStream<GetObjectResponse> getObject(GetObjectRequest request) {
         byte[] bytes = objects.get(request.key());
         if (bytes == null) throw S3Exception.builder().statusCode(404).message("Not found").build();
+        int start = 0;
+        int end = bytes.length - 1;
+        String contentRange = null;
+        if (request.range() != null) {
+            var range = java.util.regex.Pattern.compile("bytes=(\\d+)-(\\d+)")
+                    .matcher(request.range());
+            if (!range.matches()) throw new IllegalArgumentException("Invalid S3 range");
+            start = Math.toIntExact(Long.parseLong(range.group(1)));
+            end = Math.toIntExact(Long.parseLong(range.group(2)));
+            if (start > end || end >= bytes.length)
+                throw S3Exception.builder().statusCode(416).message("Invalid range").build();
+            contentRange = "bytes " + start + "-" + end + "/" + bytes.length;
+        }
         return new ResponseInputStream<>(
-                GetObjectResponse.builder().eTag(etag(bytes)).build(),
-                AbortableInputStream.create(new ByteArrayInputStream(bytes)));
+                GetObjectResponse.builder().eTag(etag(bytes))
+                        .versionId(versions.getOrDefault(request.key(), DEFAULT_VERSION))
+                        .contentRange(contentRange).build(),
+                AbortableInputStream.create(new ByteArrayInputStream(bytes, start, end - start + 1)));
     }
 
     private HeadObjectResponse headObject(HeadObjectRequest request) {
+        byte[] bytes = objects.get(request.key());
         return HeadObjectResponse.builder()
                 .versionId(versions.getOrDefault(request.key(), DEFAULT_VERSION))
+                .contentLength(bytes == null ? 0L : (long) bytes.length)
+                .eTag(bytes == null ? null : etag(bytes))
                 .build();
     }
 
@@ -148,7 +166,8 @@ public final class FakeS3 {
 
     private CompleteMultipartUploadResponse completeMultipartUpload(
             CompleteMultipartUploadRequest request) {
-        Upload upload = uploads.remove(request.uploadId());
+        if ("*".equals(request.ifNoneMatch()) && objects.containsKey(request.key()))
+      throw S3Exception.builder().statusCode(412).message("exists").build();Upload upload = uploads.remove(request.uploadId());
         byte[] combined =
                 upload.parts.values().stream()
                         .reduce(
@@ -273,7 +292,7 @@ public final class FakeS3 {
 
     public record Upload(String key, Map<Integer, byte[]> parts) {
         Upload(String key) {
-            this(key, new TreeMap<>());
+            this(key, new ConcurrentSkipListMap<>());
         }
     }
 }

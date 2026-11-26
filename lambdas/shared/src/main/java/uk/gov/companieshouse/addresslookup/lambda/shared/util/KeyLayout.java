@@ -39,7 +39,6 @@ public class KeyLayout {
             throw new IllegalArgumentException("Invalid feed");
         }
     }
-
     public record PackageVersion(Feed feed, String packageId, String versionId) {
         public PackageVersion {
             if (feed == null) throw new IllegalArgumentException("Missing feed");

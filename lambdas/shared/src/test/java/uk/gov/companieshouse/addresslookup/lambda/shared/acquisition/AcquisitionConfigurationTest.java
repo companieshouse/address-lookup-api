@@ -54,19 +54,19 @@ final class AcquisitionConfigurationTest {
         assertEquals("Missing EVENT_BUS", failure.getMessage());
     }
 
-    private static AcquisitionProperties properties(String osApiKey, String eventBus) {
-        return new AcquisitionProperties(
-                "control-bucket",
-                "landing-bucket",
-                eventBus,
-                osApiKey,
-                "{}",
-                1024L,
-                null,
-                null,
-                1024L,
-                20,
-                Duration.ofSeconds(20),
-                Duration.ofSeconds(840));
-    }
+  private static AcquisitionProperties properties(String osApiKey, String eventBus) {
+    return new AcquisitionProperties(
+        "control-bucket",
+        "landing-bucket",
+        eventBus,
+        osApiKey,
+        "{}",
+        1024L,
+        null,
+        null,
+        1024L,
+        20,
+        Duration.ofSeconds(20),
+        Duration.ofSeconds(840));
+  }
 }

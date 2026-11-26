@@ -20,8 +20,7 @@
         <module>lambdas/shared</module>
         <module>lambdas/discovery</module>
         <module>lambdas/download</module>
-        <module>lambdas/scan</module>
-        <module>lambdas/unzip</module>
+        <module>lambdas/extraction</module>
         <module>lambdas/import</module>
         <module>lambdas/db-bootstrap</module>
         <module>lambdas/db-migrate</module>

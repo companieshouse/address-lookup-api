@@ -21,7 +21,7 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AwsClientsConfi
 @Lazy
 @PropertySource("classpath:acquisition.properties")
 @Import(AwsClientsConfiguration.class)
-@EnableConfigurationProperties(AcquisitionProperties.class)
+@EnableConfigurationProperties({AcquisitionProperties.class, ExtractionProperties.class})
 public class AcquisitionConfiguration {
 
     @Bean

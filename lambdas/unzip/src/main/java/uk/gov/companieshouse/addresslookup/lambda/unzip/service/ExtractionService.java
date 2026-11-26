@@ -219,8 +219,7 @@ public final class ExtractionService {
                         new StreamingS3(s3, context::getRemainingTimeInMillis)
                                 .putOverwrite(csv, checked, csvKey, max);
 
-                recordUnpackState(
-                        store, checked, packageVersion, table.name(), zipKey, zipVersion, result);
+                recordUnpackState(store, packageVersion, table.name(), zipKey, zipVersion, result);
                 recordExtractionCursor(
                         store, packageVersion, table.name(), zipKey, zipVersion, result.key());
 
@@ -273,7 +272,7 @@ public final class ExtractionService {
             String csvKey)
             throws Exception {
         JsonNode state =
-                store.read(properties.landingBucket(), KeyLayout.unpackStateKey(packageVersion));
+                store.read(properties.controlBucket(), KeyLayout.unpackStateKey(packageVersion));
         JsonNode extracted = state == null ? null : state.path(DATASETS_FIELD).path(dataset);
         if (extracted == null
                 || !extracted.isObject()
@@ -289,7 +288,6 @@ public final class ExtractionService {
 
     private void recordUnpackState(
             ReleaseStore store,
-            String bucket,
             KeyLayout.PackageVersion packageVersion,
             String dataset,
             String zipKey,
@@ -298,7 +296,7 @@ public final class ExtractionService {
             throws java.io.IOException {
         String stateKey = KeyLayout.unpackStateKey(packageVersion);
         store.updateState(
-                bucket,
+                properties.controlBucket(),
                 stateKey,
                 current -> {
                     current.put("packageId", packageVersion.packageId());

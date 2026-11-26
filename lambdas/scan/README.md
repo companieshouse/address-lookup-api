@@ -1,5 +1,9 @@
 # Scan Lambda
 
+> **Legacy:** Do not connect this Lambda to GuardDuty scan results for the
+> acquisition pipeline. Extraction and import use scheduled reconciliation and
+> re-check S3 object tags instead.
+
 Build target and Lambda runtime: Java 25.
 
 Stateless router for GuardDuty Malware Protection scan results (EventBridge, `aws.guardduty`).

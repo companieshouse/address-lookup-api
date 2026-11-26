@@ -107,7 +107,7 @@ class DiscoveryServiceTest {
 
     private static final String CONTROL_BUCKET = "control-bucket",
             LANDING_BUCKET = "landing-bucket",
-            CURSOR_KEY = "cursors/20780.json";
+            CURSOR_KEY = "control/cursors/20780.json";
 
     private static final String TEST_RELEASE_ID = "12345678-1234-1234-1234-123456789abc";
 
@@ -170,13 +170,13 @@ class DiscoveryServiceTest {
                 .getObject(
                         GetObjectRequest.builder()
                                 .bucket(CONTROL_BUCKET)
-                                .key("cursors/first.json")
+                                .key("control/cursors/first.json")
                                 .build());
         verify(s3Client)
                 .getObject(
                         GetObjectRequest.builder()
                                 .bucket(CONTROL_BUCKET)
-                                .key("cursors/second.json")
+                                .key("control/cursors/second.json")
                                 .build());
         verify(osClient).json("https://api.os.uk/downloads/v1/dataPackages/second/versions/150035");
     }
@@ -197,7 +197,7 @@ class DiscoveryServiceTest {
                             String packageId =
                                     call.getArgument(0, GetObjectRequest.class)
                                             .key()
-                                            .replace("cursors/", "")
+                                            .replace("control/cursors/", "")
                                             .replace(".json", "");
                             return TestUtils.createResponseInputStream(
                                     TEST_CURSOR_JSON.replace("\"20780\"", "\"" + packageId + "\""));
@@ -244,11 +244,11 @@ class DiscoveryServiceTest {
         PutObjectRequest saveManifestRequest =
                 PutObjectRequest.builder()
                         .bucket(LANDING_BUCKET)
-                        .key("daily_cou/20780/150104/manifest/data_package_manifest.json")
+                        .key("landing/daily_cou/20780/150104/manifest/data_package_manifest.json")
                         .contentType("application/json")
                         .build();
 
-        String expectedPlanKey = "daily_cou/20780/150104/manifest/data_package_manifest.json";
+        String expectedPlanKey = "landing/daily_cou/20780/150104/manifest/data_package_manifest.json";
 
         S3PutRequestBodyMatcher<VersionCursor> cursorUpdateMatcher =
                 new S3PutRequestBodyMatcher<>(TEST_COU_UPDATE_CURSOR_JSON, VersionCursor.class);
@@ -304,8 +304,8 @@ class DiscoveryServiceTest {
         verify(s3Client).getObject(request);
         verify(s3Client).putObject(eq(updateCursorRequest), argThat(cursorUpdateMatcher));
         verify(s3Client).putObject(eq(saveManifestRequest), argThat(manifestMatcher));
-        verifyOrderSummarySaved("daily_cou/20780/150104", "add_gb_royalmailaddress");
-        verifyOrderSummarySaved("daily_cou/20780/150104", "add_isl_royalmailaddress");
+        verifyOrderSummarySaved("landing/daily_cou/20780/150104", "add_gb_royalmailaddress");
+        verifyOrderSummarySaved("landing/daily_cou/20780/150104", "add_isl_royalmailaddress");
         verify(osClient).json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150035");
         verify(osClient).json("https://api.os.uk/downloads/v1/dataPackages/20780/versions/150104");
         verify(osClient)
@@ -331,11 +331,11 @@ class DiscoveryServiceTest {
         PutObjectRequest saveManifestRequest =
                 PutObjectRequest.builder()
                         .bucket(LANDING_BUCKET)
-                        .key("initial_full/20780/130989/manifest/data_package_manifest.json")
+                        .key("landing/initial_full/20780/130989/manifest/data_package_manifest.json")
                         .contentType("application/json")
                         .build();
 
-        String expectedPlanKey = "initial_full/20780/130989/manifest/data_package_manifest.json";
+        String expectedPlanKey = "landing/initial_full/20780/130989/manifest/data_package_manifest.json";
 
         S3PutRequestBodyMatcher<VersionCursor> cursorUpdateMatcher =
                 new S3PutRequestBodyMatcher<>(TEST_FULL_UPDATE_CURSOR_JSON, VersionCursor.class);
@@ -396,8 +396,8 @@ class DiscoveryServiceTest {
 
         verify(s3Client).putObject(eq(updateCursorRequest), argThat(cursorUpdateMatcher));
         verify(s3Client).putObject(eq(saveManifestRequest), argThat(manifestMatcher));
-        verifyOrderSummarySaved("initial_full/20780/130989", "add_gb_royalmailaddress");
-        verifyOrderSummarySaved("initial_full/20780/130989", "add_isl_royalmailaddress");
+        verifyOrderSummarySaved("landing/initial_full/20780/130989", "add_gb_royalmailaddress");
+        verifyOrderSummarySaved("landing/initial_full/20780/130989", "add_isl_royalmailaddress");
 
         verify(commands).send(DOWNLOAD.name(), expectedPlanKey, "add_gb_royalmailaddress");
         verify(commands).send(DOWNLOAD.name(), expectedPlanKey, "add_isl_royalmailaddress");

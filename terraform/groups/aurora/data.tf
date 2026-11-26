@@ -20,6 +20,17 @@ data "aws_subnets" "data" {
   }
 }
 
+data "aws_vpc_endpoint" "s3" {
+  vpc_id       = data.aws_vpc.vpc.id
+  service_name = "com.amazonaws.${var.aws_region}.s3"
+  state        = "available"
+
+  filter {
+    name   = "vpc-endpoint-type"
+    values = ["Gateway"]
+  }
+}
+
 data "vault_generic_secret" "aurora" {
   path = "applications/${var.aws_profile}/${var.environment}/${local.stack_name}-stack/${local.service_name}"
 }

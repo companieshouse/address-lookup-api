@@ -72,7 +72,7 @@ final class DownloadServiceTest {
             (Logger) LoggerFactory.getLogger(StructuredLogger.class);
     private static final String BUCKET = "landing-bucket";
     private static final String PLAN_KEY =
-            "initial_full/12345/159159/manifest/data_package_manifest.json";
+            "landing/initial_full/12345/159159/manifest/data_package_manifest.json";
     private static final String RELEASE_ID = "4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56";
     private static final String DATASET = "add_gb_royalmailaddress";
 
@@ -80,11 +80,43 @@ final class DownloadServiceTest {
 
     @Mock private Context context;
 
+    private static FakeS3 cleanManifestS3() {
+        var s3 = new FakeS3();
+        s3.scanStatus.put(PLAN_KEY, "NO_THREATS_FOUND");
+        return s3;
+    }
+
+    @Test
+    void waitsForManifestScanBeforeDownloading() throws Exception {
+        var s3 = cleanManifestS3();
+        s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
+        s3.scanStatus.remove(PLAN_KEY);
+        var service = new DownloadService(s3.client(), os, properties());
+
+        var failure =
+                assertThrows(
+                        TransientFailureException.class,
+                        () -> service.download(event(), context));
+        assertEquals("MANIFEST_SCAN_PENDING", failure.reasonCode());
+        verifyNoInteractions(os);
+    }
+
+    @Test
+    void refusesManifestWithThreatsBeforeDownloading() throws Exception {
+        var s3 = cleanManifestS3();
+        s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
+        s3.scanStatus.put(PLAN_KEY, "THREATS_FOUND");
+        var service = new DownloadService(s3.client(), os, properties());
+
+        assertThrows(IllegalStateException.class, () -> service.download(event(), context));
+        verifyNoInteractions(os);
+    }
+
     @Test
     void downloadsOnlyTheDatasetNamedByTheEventBridgeCommand() throws Exception {
         byte[] zip = "local test zip bytes".getBytes(StandardCharsets.UTF_8);
         JsonNode manifest = manifestWithSelectedMd5(md5(zip));
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
         s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifest));
         String expectedUrl = manifest.path(DATASET).path("zip").path("url").asText();
         when(os.download(expectedUrl)).thenReturn(new ByteArrayInputStream(zip));
@@ -94,7 +126,7 @@ final class DownloadServiceTest {
 
         assertEquals("ZIP_SCAN", service.download(event(), context));
 
-        String expectedZipKey = "initial_full/12345/159159/downloads/" + DATASET + ".zip";
+        String expectedZipKey = "landing/initial_full/12345/159159/downloads/" + DATASET + ".zip";
         verify(os).download(expectedUrl);
         assertEquals(List.of(expectedZipKey), s3.completedKeys);
         var extractionInput = KeyLayout.parseLandingObject(s3.completedKeys.getFirst());
@@ -106,7 +138,7 @@ final class DownloadServiceTest {
         assertTrue(s3.completedKeys.stream().noneMatch(k -> k.contains("add_gb_builtaddress")));
         assertTrue(s3.objects.keySet().stream().noneMatch(k -> k.endsWith(".receipt.json")));
         String checksumKey =
-                "metadata/checksums/"
+                "control/metadata/checksums/"
                         + sha256(expectedZipKey.getBytes(StandardCharsets.UTF_8))
                         + ".json";
         JsonNode evidence = JSON.readTree(s3.objects.get(checksumKey));
@@ -229,7 +261,7 @@ final class DownloadServiceTest {
     void rejectsCommandWithUnknownDataset() throws Exception {
         var event = event();
         event.put("detail", Map.of("planKey", PLAN_KEY, "dataset", "not_a_real_dataset"));
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
         var service = new DownloadService(s3.client(), os, properties());
 
         Exception exception =
@@ -243,7 +275,7 @@ final class DownloadServiceTest {
     @Test
     void trimsPlanKeyAndDatasetBeforeProcessing() throws Exception {
         byte[] zip = "trimmed command zip".getBytes(StandardCharsets.UTF_8);
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
         s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifestWithSelectedMd5(md5(zip))));
         when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
         when(context.getRemainingTimeInMillis()).thenReturn(900000);
@@ -256,14 +288,14 @@ final class DownloadServiceTest {
 
         assertEquals("ZIP_SCAN", service.download(event, context));
         assertEquals(
-                List.of("initial_full/12345/159159/downloads/" + DATASET + ".zip"),
+                List.of("landing/initial_full/12345/159159/downloads/" + DATASET + ".zip"),
                 s3.completedKeys);
     }
 
     @Test
     void doesNotPublishDownloadCompleteEventAfterSuccessfulDownload() throws Exception {
         byte[] zip = "event zip bytes".getBytes(StandardCharsets.UTF_8);
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
         s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifestWithSelectedMd5(md5(zip))));
         when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
         when(context.getRemainingTimeInMillis()).thenReturn(900000);
@@ -277,7 +309,7 @@ final class DownloadServiceTest {
 
     @Test
     void doesNotPublishEventOnChecksumMismatch() throws Exception {
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
         s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
         when(os.download(anyString()))
                 .thenReturn(
@@ -297,7 +329,7 @@ final class DownloadServiceTest {
 
     @Test
     void failsWithoutDownloadingWhenPlanFileDoesNotExist() throws Exception {
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
         var service = new DownloadService(s3.client(), os, properties());
         var event = event();
 
@@ -319,7 +351,7 @@ final class DownloadServiceTest {
     }
 
     private void assertRejected(Map<String, Object> event, String expectedMessage) {
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
         var service = new DownloadService(s3.client(), os, properties());
 
         var failure =
@@ -337,7 +369,7 @@ final class DownloadServiceTest {
     void eachDatasetCommandDownloadsOnlyItsNamedZip(String dataset) throws Exception {
         byte[] zip = ("zip for " + dataset).getBytes(StandardCharsets.UTF_8);
         var manifest = manifestWithMd5(dataset, md5(zip));
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
         s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifest));
         var event = event();
         event.put("detail", Map.of("planKey", PLAN_KEY, "dataset", dataset));
@@ -348,7 +380,7 @@ final class DownloadServiceTest {
 
         assertEquals("ZIP_SCAN", service.download(event, context));
         assertEquals(
-                List.of("initial_full/12345/159159/downloads/" + dataset + ".zip"),
+                List.of("landing/initial_full/12345/159159/downloads/" + dataset + ".zip"),
                 s3.completedKeys);
         assertTrue(s3.objects.keySet().stream().noneMatch(k -> k.endsWith(".receipt.json")));
         assertTrue(
@@ -357,7 +389,7 @@ final class DownloadServiceTest {
 
     @Test
     void checksumMismatchAbortsUploadAndDoesNotPublishReceipt() throws Exception {
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
         s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
         when(os.download(anyString()))
                 .thenReturn(
@@ -376,7 +408,7 @@ final class DownloadServiceTest {
                 "mismatch must include both MD5 values");
         assertTrue(
                 failureMessage.contains(
-                        "s3Key=initial_full/12345/159159/downloads/" + DATASET + ".zip"),
+                        "s3Key=landing/initial_full/12345/159159/downloads/" + DATASET + ".zip"),
                 "mismatch must include the S3 key");
         assertEquals("CHECKSUM_MISMATCH", failure.reasonCode());
         assertEquals(RELEASE_ID, failure.releaseId());
@@ -396,7 +428,7 @@ final class DownloadServiceTest {
         final String EXCEPTION_MESSAGE = "exception message";
         Exception thrownException = mock(exceptionClass);
         when(thrownException.getMessage()).thenReturn(EXCEPTION_MESSAGE);
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
 
         s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
 
@@ -430,7 +462,7 @@ final class DownloadServiceTest {
 
         var manifest = manifestWithMd5(dataset, md5(zip));
 
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
         s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifest));
 
         Map<String, Object> event = event();
@@ -504,7 +536,7 @@ final class DownloadServiceTest {
 
         var manifest = manifestWithMd5(dataset, md5(zip));
 
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
         s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifest));
 
         Map<String, Object> event = event();
@@ -567,7 +599,7 @@ final class DownloadServiceTest {
 
     @Test
     void unreadableManifestFailsAsTransientFailedToReadManifest() throws Exception {
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
         s3.objects.put(PLAN_KEY, "{not json".getBytes(StandardCharsets.UTF_8));
         var service = new DownloadService(s3.client(), os, properties());
         var downloadEvent = event();
@@ -585,10 +617,10 @@ final class DownloadServiceTest {
 
     @Test
     void unreadableChecksumEvidenceFailsAsTransient() throws Exception {
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
         s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
         s3.objects.put(
-                KeyLayout.checksumKey("initial_full/12345/159159/downloads/" + DATASET + ".zip"),
+                KeyLayout.checksumKey("landing/initial_full/12345/159159/downloads/" + DATASET + ".zip"),
                 "{not json".getBytes(StandardCharsets.UTF_8));
         var service = new DownloadService(s3.client(), os, properties());
         var downloadEvent = event();
@@ -606,7 +638,7 @@ final class DownloadServiceTest {
 
     @Test
     void missingDigestAlgorithmFailsAsPermanentUnrecognisedDigestScheme() throws Exception {
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
         s3.objects.put(PLAN_KEY, fixtureBytes("4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56.json"));
         when(os.download(anyString()))
                 .thenReturn(new ByteArrayInputStream("zip bytes".getBytes(StandardCharsets.UTF_8)));
@@ -654,9 +686,9 @@ final class DownloadServiceTest {
 
     @Test
     void repeatedDownloadSkipsCurrentVersionWithMatchingEvidence() throws Exception {
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
         byte[] zip = "repeat download".getBytes(StandardCharsets.UTF_8);
-        String zipKey = "initial_full/12345/159159/downloads/" + DATASET + ".zip";
+        String zipKey = "landing/initial_full/12345/159159/downloads/" + DATASET + ".zip";
         s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifestWithSelectedMd5(md5(zip))));
         s3.objects.put(zipKey, "old content".getBytes(StandardCharsets.UTF_8));
         when(os.download(anyString())).thenReturn(new ByteArrayInputStream(zip));
@@ -674,9 +706,9 @@ final class DownloadServiceTest {
     @ParameterizedTest
     @ValueSource(strings = {"missing", "replaced", "md5"})
     void downloadsAgainWhenExistingZipEvidenceIsStale(String reason) throws Exception {
-        var s3 = new FakeS3();
+        var s3 = cleanManifestS3();
         byte[] zip = "repeat download".getBytes(StandardCharsets.UTF_8);
-        String zipKey = "initial_full/12345/159159/downloads/" + DATASET + ".zip";
+        String zipKey = "landing/initial_full/12345/159159/downloads/" + DATASET + ".zip";
         s3.objects.put(PLAN_KEY, JSON.writeValueAsBytes(manifestWithSelectedMd5(md5(zip))));
         when(os.download(anyString())).thenAnswer(call -> new ByteArrayInputStream(zip));
         when(context.getRemainingTimeInMillis()).thenReturn(900000);

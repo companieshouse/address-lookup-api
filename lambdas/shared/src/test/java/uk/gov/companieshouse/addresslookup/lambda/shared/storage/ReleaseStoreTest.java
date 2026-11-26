@@ -44,7 +44,7 @@ import java.util.function.UnaryOperator;
 final class ReleaseStoreTest {
     private static final String BUCKET = "landing-bucket";
     private static final String KEY =
-            "daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip";
+            "landing/daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip";
 
     private final FakeS3 s3 = new FakeS3();
     private final ReleaseStore store = new ReleaseStore(s3.client());
@@ -148,7 +148,7 @@ final class ReleaseStoreTest {
 
     @Test
     void updateStatePreservesConcurrentFieldsAndRetriesConditionalConflict() throws Exception {
-        String key = "initial_full/24833/150450/manifest/unpack_state.json";
+        String key = "landing/initial_full/24833/150450/manifest/unpack_state.json";
         s3.objects.put(key, "{\"datasets\":{\"first\":{\"status\":\"EXTRACTED\"}}}".getBytes());
         s3.putConflicts = 1;
 

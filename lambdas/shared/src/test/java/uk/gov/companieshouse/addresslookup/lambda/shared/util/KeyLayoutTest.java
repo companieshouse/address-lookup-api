@@ -14,21 +14,21 @@ class KeyLayoutTest {
     void buildsAndParsesPerVersionLandingKeys() {
         for (var feed : KeyLayout.Feed.values()) {
             var version = new KeyLayout.PackageVersion(feed, "24833", "150450");
-            String prefix = feed.name().toLowerCase(java.util.Locale.ROOT) + "/24833/150450/";
+            String prefix =
+                    "landing/" + feed.name().toLowerCase(java.util.Locale.ROOT) + "/24833/150450/";
             String manifest = KeyLayout.dataPackageManifestKey(version);
             String state = KeyLayout.unpackStateKey(version);
             assertEquals(prefix + "manifest/data_package_manifest.json", manifest);
             assertTrue(KeyLayout.isDataPackageManifestKey(manifest));
             assertFalse(KeyLayout.isDataPackageManifestKey(state));
-            assertEquals(prefix + "manifest/unpack_state.json", state);
+            assertEquals(
+                    prefix.replaceFirst("landing/", "control/") + "manifest/unpack_state.json",
+                    state);
             assertEquals(
                     new KeyLayout.LandingObject(
                             version, null, KeyLayout.LandingFileType.MANIFEST, null),
                     KeyLayout.parseLandingObject(manifest));
-            assertEquals(
-                    new KeyLayout.LandingObject(
-                            version, null, KeyLayout.LandingFileType.UNPACK_STATE, null),
-                    KeyLayout.parseLandingObject(state));
+            assertThrows(IllegalArgumentException.class, () -> KeyLayout.parseLandingObject(state));
             for (Dataset dataset : Dataset.values()) {
                 String name = dataset.datasetName();
                 String zip = KeyLayout.downloadZipKey(version, dataset);
@@ -87,8 +87,8 @@ class KeyLayoutTest {
 
     @Test
     void buildsPerPackageCursorKeys() {
-        assertEquals("cursors/24833.json", KeyLayout.downloadCursorKey("24833"));
-        assertEquals("cursors/24833.extraction.json", KeyLayout.extractionCursorKey("24833"));
+        assertEquals("control/cursors/24833.json", KeyLayout.downloadCursorKey("24833"));
+        assertEquals("control/cursors/24833.extraction.json", KeyLayout.extractionCursorKey("24833"));
         assertThrows(IllegalArgumentException.class, () -> KeyLayout.downloadCursorKey("../24833"));
     }
 
@@ -97,20 +97,20 @@ class KeyLayoutTest {
     @ValueSource(
             strings = {
                 "",
-                "initial_full/package.id/150450/manifest/data_package_manifest.json",
-                "initial_full/24833/version.id/manifest/data_package_manifest.json",
-                "initial_full//150450/manifest/data_package_manifest.json",
-                "initial_full/24833//manifest/data_package_manifest.json",
-                "initial_full/../150450/manifest/data_package_manifest.json",
-                "initial_full/24833/../manifest/data_package_manifest.json",
-                "initial_full/24833/150450/downloads/unknown.zip",
-                "initial_full/24833/150450/downloads/add_gb_royalmailaddress/../data.csv",
-                "initial_full/24833/150450/downloads/add_gb_royalmailaddress/a..csv",
-                "initial_full/24833/150450/downloads/add_gb_royalmailaddress/data.txt",
-                "initial_full/24833/150450/downloads/add_gb_royalmailaddress/.csv",
-                "initial_full/24833/150450/downloads/add_gb_royalmailaddress/data file.csv",
-                "initial_full/24833/150450/downloads/add_gb_royalmailaddress/data\\file.csv",
-                "initial_full/24833/150450/downloads/add_gb_royalmailaddress/data.csv/extra",
+                "landing/initial_full/package.id/150450/manifest/data_package_manifest.json",
+                "landing/initial_full/24833/version.id/manifest/data_package_manifest.json",
+                "landing/initial_full//150450/manifest/data_package_manifest.json",
+                "landing/initial_full/24833//manifest/data_package_manifest.json",
+                "landing/initial_full/../150450/manifest/data_package_manifest.json",
+                "landing/initial_full/24833/../manifest/data_package_manifest.json",
+                "landing/initial_full/24833/150450/downloads/unknown.zip",
+                "landing/initial_full/24833/150450/downloads/add_gb_royalmailaddress/../data.csv",
+                "landing/initial_full/24833/150450/downloads/add_gb_royalmailaddress/a..csv",
+                "landing/initial_full/24833/150450/downloads/add_gb_royalmailaddress/data.txt",
+                "landing/initial_full/24833/150450/downloads/add_gb_royalmailaddress/.csv",
+                "landing/initial_full/24833/150450/downloads/add_gb_royalmailaddress/data file.csv",
+                "landing/initial_full/24833/150450/downloads/add_gb_royalmailaddress/data\\file.csv",
+                "landing/initial_full/24833/150450/downloads/add_gb_royalmailaddress/data.csv/extra",
                 "other/24833/150450/manifest/data_package_manifest.json"
             })
     void rejectsInvalidLandingKeys(String key) {
@@ -144,7 +144,6 @@ class KeyLayoutTest {
                 KeyLayout.parseObjectKey(
                         KeyLayout.extractedCsvKey(
                                 version, dataset, dataset.datasetName() + ".csv"));
-        var unpackState = KeyLayout.parseObjectKey(KeyLayout.unpackStateKey(version));
         var orderSummary = KeyLayout.parseObjectKey(KeyLayout.orderSummaryKey(version, dataset));
 
         assertEquals(version, manifest.packageVersion());
@@ -155,8 +154,9 @@ class KeyLayoutTest {
         assertEquals(version, csv.packageVersion());
         assertEquals(dataset, csv.dataset());
         assertEquals(KeyLayout.FileType.CSV, csv.fileType());
-        assertEquals(version, unpackState.packageVersion());
-        assertEquals(KeyLayout.FileType.UNPACK_STATE, unpackState.fileType());
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> KeyLayout.parseObjectKey(KeyLayout.unpackStateKey(version)));
         assertEquals(version, orderSummary.packageVersion());
         assertEquals(dataset, orderSummary.dataset());
         assertEquals(KeyLayout.FileType.ORDER_SUMMARY, orderSummary.fileType());

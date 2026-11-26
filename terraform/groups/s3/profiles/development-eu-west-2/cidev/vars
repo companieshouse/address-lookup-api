@@ -1,0 +1,4 @@
+aws_profile = "development-eu-west-2"
+environment = "cidev"
+acquisition_root_prefix = ""
+manage_guardduty_plan = true

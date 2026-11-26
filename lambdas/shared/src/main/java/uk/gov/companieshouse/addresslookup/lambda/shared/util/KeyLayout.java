@@ -10,6 +10,8 @@ public class KeyLayout {
     private static final String PACKAGE_ID = "package ID";
     private static final String JSON_EXTENSION = ".json";
     private static final String DOWNLOADS_PREFIX = "downloads/";
+    private static final String LANDING_PREFIX = "landing/";
+    private static final String CONTROL_PREFIX = "control/";
     private static final Pattern COMPONENT = Pattern.compile("[A-Za-z0-9_-]+");
     private static final Pattern CSV_NAME = Pattern.compile("[A-Za-z0-9_-][A-Za-z0-9_.-]*\\.csv");
     private static final Pattern LANDING_SUFFIX =
@@ -69,26 +71,33 @@ public class KeyLayout {
     }
 
     public static String downloadCursorKey(String packageId) {
-        return "cursors/" + requireComponent(packageId, PACKAGE_ID) + JSON_EXTENSION;
+        return CONTROL_PREFIX + "cursors/" + requireComponent(packageId, PACKAGE_ID) + JSON_EXTENSION;
     }
 
     public static String extractionCursorKey(String packageId) {
-        return "cursors/" + requireComponent(packageId, PACKAGE_ID) + ".extraction.json";
+        return CONTROL_PREFIX
+                + "cursors/"
+                + requireComponent(packageId, PACKAGE_ID)
+                + ".extraction.json";
     }
 
     public static String reconciliationCursorKey(String name) {
-        return "reconciliation/" + requireComponent(name, "reconciliation name") + JSON_EXTENSION;
+        return CONTROL_PREFIX
+                + "reconciliation/"
+                + requireComponent(name, "reconciliation name")
+                + JSON_EXTENSION;
     }
 
     public static String checksumKey(String key) {
-        return "metadata/checksums/"
+        return CONTROL_PREFIX + "metadata/checksums/"
                 + uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sha(
                         key.getBytes(java.nio.charset.StandardCharsets.UTF_8))
                 + JSON_EXTENSION;
     }
 
     public static String versionPrefix(PackageVersion version) {
-        return version.feed().prefix + "/" + version.packageId() + "/" + version.versionId() + "/";
+        return LANDING_PREFIX
+                + version.feed().prefix + "/" + version.packageId() + "/" + version.versionId() + "/";
     }
 
     public static String dataPackageManifestKey(PackageVersion version) {
@@ -96,7 +105,13 @@ public class KeyLayout {
     }
 
     public static String unpackStateKey(PackageVersion version) {
-        return versionPrefix(version) + "manifest/unpack_state.json";
+        return CONTROL_PREFIX
+                + version.feed().prefix
+                + "/"
+                + version.packageId()
+                + "/"
+                + version.versionId()
+                + "/manifest/unpack_state.json";
     }
 
     public static String downloadZipKey(PackageVersion version, Dataset dataset) {
@@ -117,6 +132,9 @@ public class KeyLayout {
 
     public static LandingObject parseLandingObject(String key) {
         if (key == null) throw new IllegalArgumentException("Missing S3 key");
+        if (!key.startsWith(LANDING_PREFIX))
+            throw new IllegalArgumentException("Invalid landing object key");
+        key = key.substring(LANDING_PREFIX.length());
         String[] parts = key.split("/", 4);
         if (parts.length != 4) throw new IllegalArgumentException("Invalid landing object key");
         Matcher match = LANDING_SUFFIX.matcher(parts[3]);
@@ -185,7 +203,7 @@ public class KeyLayout {
             String releaseId, Dataset dataset, FileType fileType, PackageVersion packageVersion) {}
 
     public static String feedManifestPrefix(Feed feed) {
-        return feed.prefix + "/";
+        return LANDING_PREFIX + feed.prefix + "/";
     }
 
     /**

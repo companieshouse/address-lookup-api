@@ -40,13 +40,13 @@ import java.util.stream.Stream;
 class ScanResultsServiceTest {
     private static final String MANIFEST_RELEASE = "20780-150104";
     private static final String MANIFEST_KEY =
-            "daily_cou/20780/150104/manifest/data_package_manifest.json";
+            "landing/daily_cou/20780/150104/manifest/data_package_manifest.json";
     private static final String BUCKET = "landing-bucket";
     private static final String CLEAN_BUCKET = BUCKET;
     private static final String KEY =
-            "daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip";
+            "landing/daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip";
     private static final String CSV_KEY =
-            "daily_cou/20780/150104/downloads/add_gb_royalmailaddress/"
+            "landing/daily_cou/20780/150104/downloads/add_gb_royalmailaddress/"
                     + "add_gb_royalmailaddress.csv";
     private static final String VERSION = "3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY";
 
@@ -176,7 +176,7 @@ class ScanResultsServiceTest {
     @Test
     void feedZipPreservesPackageVersionAndExactObject() throws Exception {
         String releaseId = "20780-150104";
-        String key = "daily_cou/20780/150104/downloads/add_isl_royalmailaddress.zip";
+        String key = "landing/daily_cou/20780/150104/downloads/add_isl_royalmailaddress.zip";
         service.scan(event(BUCKET, key, VERSION, "NO_THREATS_FOUND"));
         assertEquals(List.of("ExtractRequested"), types());
         JsonNode payload = detail(0);
@@ -300,7 +300,7 @@ class ScanResultsServiceTest {
 
     @Test
     void invalidKeyPreservesExactObjectAndUri() throws Exception {
-        String key = "daily_cou/20780/150104/downloads/unknown file.zip";
+        String key = "landing/daily_cou/20780/150104/downloads/unknown file.zip";
         service.scan(event(BUCKET, key, VERSION, "NO_THREATS_FOUND"));
 
         assertEquals(
@@ -381,7 +381,7 @@ class ScanResultsServiceTest {
         service.scan(
                 event(
                         BUCKET,
-                        "daily_cou/20780/150104/downloads/" + dataset + ".zip",
+                        "landing/daily_cou/20780/150104/downloads/" + dataset + ".zip",
                         VERSION,
                         "NO_THREATS_FOUND"));
         assertEquals(List.of("ExtractRequested"), types());
@@ -437,21 +437,21 @@ class ScanResultsServiceTest {
                         "unknown dataset",
                         event(
                                 BUCKET,
-                                "daily_cou/20780/150104/downloads/unknown.zip",
+                                "landing/daily_cou/20780/150104/downloads/unknown.zip",
                                 VERSION,
                                 "NO_THREATS_FOUND")),
                 Arguments.of(
                         "unsafe path",
                         event(
                                 BUCKET,
-                                "daily_cou/../150104/downloads/add_gb_builtaddress.zip",
+                                "landing/daily_cou/../150104/downloads/add_gb_builtaddress.zip",
                                 VERSION,
                                 "NO_THREATS_FOUND")),
                 Arguments.of(
                         "incorrect extension for prefix",
                         event(
                                 BUCKET,
-                                "daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip.csv",
+                                "landing/daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip.csv",
                                 VERSION,
                                 "NO_THREATS_FOUND")),
                 Arguments.of("missing version", event(BUCKET, KEY, null, "NO_THREATS_FOUND")),

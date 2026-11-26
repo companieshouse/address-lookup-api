@@ -211,7 +211,7 @@ class ImportServiceTest {
         var cursor = mock(ReconciliationCursor.class);
         when(cursor.next())
                 .thenReturn(
-                        Optional.of("daily_cou/20780/150104/downloads/not-a-manifest.zip"),
+                        Optional.of("landing/daily_cou/20780/150104/downloads/not-a-manifest.zip"),
                         Optional.empty());
 
         assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, context));
@@ -226,7 +226,7 @@ class ImportServiceTest {
         var cursor = mock(ReconciliationCursor.class);
         when(cursor.next())
                 .thenReturn(
-                        Optional.of("daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip"),
+                        Optional.of("landing/daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip"),
                         Optional.empty());
 
         assertEquals("RECONCILED", service.reconcile(store, cursor, BUCKET, context));

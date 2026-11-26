@@ -47,7 +47,7 @@ class HandlerTest {
                                 {
                                   "bucketName":"landing-bucket",
                                   "versionId":"3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY",
-                                  "objectKey":"daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip"
+                                  "objectKey":"landing/daily_cou/20780/150104/downloads/add_gb_royalmailaddress.zip"
                                 },
                                 "scanResultDetails":
                                   {

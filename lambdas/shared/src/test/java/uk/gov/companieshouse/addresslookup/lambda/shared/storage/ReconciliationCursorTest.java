@@ -28,7 +28,7 @@ import java.io.IOException;
 import java.util.Optional;
 
 final class ReconciliationCursorTest {
-    private static final String CURSOR = "reconciliation/sweep.json";
+    private static final String CURSOR = "control/reconciliation/sweep.json";
 
     private final FakeS3 s3 = new FakeS3();
     private ReconciliationCursor cursor;
@@ -94,7 +94,7 @@ final class ReconciliationCursorTest {
     @Test
     void scansNextListingPageUntilManifestFound() throws IOException {
         var client = mock(S3Client.class);
-        String manifest = "daily_cou/20780/1/manifest/data_package_manifest.json";
+        String manifest = "landing/daily_cou/20780/1/manifest/data_package_manifest.json";
         when(client.listObjectsV2(any(ListObjectsV2Request.class)))
                 .thenAnswer(
                         call -> {
@@ -106,7 +106,7 @@ final class ReconciliationCursorTest {
                                             .contents(
                                                     S3Object.builder()
                                                             .key(
-                                                                    "daily_cou/20780/1/downloads/data.zip")
+                                                                    "landing/daily_cou/20780/1/downloads/data.zip")
                                                             .build())
                                             .nextContinuationToken("page-2")
                                             .build()
@@ -119,7 +119,7 @@ final class ReconciliationCursorTest {
                         client,
                         "control",
                         "landing",
-                        "daily_cou/",
+                        "landing/daily_cou/",
                         "sweep",
                         KeyLayout::isDataPackageManifestKey);
 

@@ -58,7 +58,7 @@ class HandlerTest {
                     "dataset",
                     "add_gb_royalmailaddress",
                     "planKey",
-                    "initial_full/12345/159159/manifest/data_package_manifest.json");
+                    "landing/initial_full/12345/159159/manifest/data_package_manifest.json");
     private static final String TEST_RESPONSE = "ZIP_SCAN";
 
     @BeforeEach

@@ -76,7 +76,7 @@ final class ExtractionServiceTest {
             (Logger) LoggerFactory.getLogger(StructuredLogger.class);
     private static final String DATASET = "add_gb_royalmailaddress";
     private static final String ID = "12345678-1234-1234-1234-123456789abc";
-    private static final String ZIP_KEY = "daily_cou/20780/150104/downloads/" + DATASET + ".zip";
+    private static final String ZIP_KEY = "landing/daily_cou/20780/150104/downloads/" + DATASET + ".zip";
     private static final String SOURCE = "landing";
     private static final String CHECKED = SOURCE;
 
@@ -394,7 +394,7 @@ final class ExtractionServiceTest {
                         .readTree(
                                 objects.get(
                                         stored(
-                                                CHECKED,
+                                                "control",
                                                 KeyLayout.unpackStateKey(
                                                         new KeyLayout.PackageVersion(
                                                                 KeyLayout.Feed.DAILY_COU,
@@ -675,7 +675,7 @@ final class ExtractionServiceTest {
 
     private PutObjectResponse recordObject(PutObjectRequest request, RequestBody body)
             throws Exception {
-        if (failEvidenceOnce && request.key().startsWith("metadata/checksums/")) {
+        if (failEvidenceOnce && request.key().startsWith("control/metadata/checksums/")) {
             failEvidenceOnce = false;
             throw S3Exception.builder().statusCode(503).message("S3 unavailable").build();
         }
@@ -687,7 +687,7 @@ final class ExtractionServiceTest {
     }
 
     private static String csvKey() {
-        return "daily_cou/20780/150104/downloads/" + DATASET + "/" + DATASET + ".csv";
+        return "landing/daily_cou/20780/150104/downloads/" + DATASET + "/" + DATASET + ".csv";
     }
 
     private static StoredObject stored(String bucket, String key) {

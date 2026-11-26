@@ -241,8 +241,7 @@ public final class DownloadService {
             ReleaseStore store, String landingBucket, String planKey, String dataset)
             throws TransientFailureException {
         try {
-            var manifest = store.read(landingBucket, planKey);
-            if (manifest == null) {
+            if (!store.exists(landingBucket, planKey)) {
                 String message =
                         String.format(
                                 "Acquisition plan not found planKey=%s dataset=%s",
@@ -252,6 +251,17 @@ public final class DownloadService {
                         Map.of("plan_key", planKey, DOWNLOAD_COMMAND_DATASET, dataset));
                 throw new IllegalArgumentException(message);
             }
+            String version = store.version(landingBucket, planKey);
+            if (!store.isClean(landingBucket, planKey, version)) {
+                throw TransientFailureException.builder()
+                        .description("Manifest scan is pending")
+                        .dataset(Dataset.named(dataset))
+                        .reasonCode("MANIFEST_SCAN_PENDING")
+                        .build();
+            }
+            var manifest = store.read(landingBucket, planKey, version);
+            check(manifest != null, "Manifest version no longer exists");
+            check(version.equals(store.version(landingBucket, planKey)), "Manifest changed after scan");
             return manifest;
         } catch (IOException ioException) {
             throw TransientFailureException.builder()

@@ -1,4 +1,4 @@
-package uk.gov.companieshouse.addresslookup.lambda.discovery.service;
+package uk.gov.companieshouse.addresslookup.lambda.download.service;
 
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
@@ -13,36 +13,7 @@ import com.fasterxml.jackson.core.TreeNode;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
-
-import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
-import software.amazon.awssdk.annotations.NotNull;
-import software.amazon.awssdk.core.ResponseInputStream;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectResponse;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.model.S3Exception;
-
-import uk.gov.companieshouse.addresslookup.lambda.discovery.exception.DiscoveryLambdaException;
-import uk.gov.companieshouse.addresslookup.lambda.discovery.model.OrderSummary;
-import uk.gov.companieshouse.addresslookup.lambda.discovery.model.VersionCursor;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
-import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
-import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
-import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
-import uk.gov.companieshouse.logging.Logger;
-import uk.gov.companieshouse.logging.LoggerFactory;
-import uk.gov.companieshouse.release.model.DatasetDefault;
-import uk.gov.companieshouse.release.model.DetailType;
-import uk.gov.companieshouse.release.model.Download;
-import uk.gov.companieshouse.release.model.PackageVersionData;
-import uk.gov.companieshouse.release.model.ReleaseManifest;
-import uk.gov.companieshouse.release.model.SupplyType;
-
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -51,6 +22,34 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import software.amazon.awssdk.annotations.NotNull;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
+import uk.gov.companieshouse.addresslookup.lambda.download.model.OrderSummary;
+import uk.gov.companieshouse.addresslookup.lambda.download.model.VersionCursor;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
+import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
+import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
+import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
+import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
+import uk.gov.companieshouse.logging.Logger;
+import uk.gov.companieshouse.logging.LoggerFactory;
+import uk.gov.companieshouse.release.model.Dataset;
+import uk.gov.companieshouse.release.model.DatasetDefault;
+import uk.gov.companieshouse.release.model.DetailType;
+import uk.gov.companieshouse.release.model.Download;
+import uk.gov.companieshouse.release.model.PackageVersionData;
+import uk.gov.companieshouse.release.model.ReleaseManifest;
+import uk.gov.companieshouse.release.model.SupplyType;
 
 /**
  * Scheduled acquisition; the supply cursor is published acquisition descriptions, not the DB
@@ -93,19 +92,22 @@ public final class DiscoveryService {
         this.properties = properties;
         datasets = properties.datasets();
         if (datasets.isEmpty()) {
-            throw new DiscoveryLambdaException("No datasets defined");
+            throw new IllegalArgumentException("No datasets defined");
         }
     }
 
-    public String discover(Map<String, Object> event) throws Exception {
+    public String discover(Map<String, Object> event) throws PermanentFailureException,
+            TransientFailureException {
         return discover(detail(event));
     }
 
-    public String discover(String event) throws Exception {
+    public String discover(String event) throws PermanentFailureException,
+            TransientFailureException {
         return discover(detail(event));
     }
 
-    private String discover(JsonNode input) throws Exception {
+    private String discover(JsonNode input) throws PermanentFailureException,
+            TransientFailureException {
         SupplyType mode = deriveMode(input);
         if (mode == COU) {
             List<String> packageIds = properties.packagesForFeed(KeyLayout.Feed.DAILY_COU);
@@ -137,14 +139,15 @@ public final class DiscoveryService {
         return discover(input, null);
     }
 
-    private String discover(JsonNode input, String configuredPackageId) throws Exception {
+    private String discover(JsonNode input, String configuredPackageId) throws PermanentFailureException,
+            TransientFailureException {
         SupplyType mode = deriveMode(input);
 
         LOG.debug("Starting discovery", Map.of("mode", mode.name()));
 
-        String urlPackageVersionData = "";
+        String urlPackageVersionData;
         VersionCursor cursor = null;
-        String packageId = null;
+        String packageId;
         KeyLayout.Feed feed;
         if (mode == FULL) {
             // Get version from input
@@ -219,9 +222,9 @@ public final class DiscoveryService {
 
         final String planKey = saveManifestReturnPlanKey(releaseManifest, packageVersion);
 
-        datasets.stream()
-                .map(DatasetDefault::name)
-                .forEach(dataset -> publishDownloadCommands(planKey, dataset));
+        for (DatasetDefault dataset : datasets) {
+            publishDownloadCommands(planKey, dataset.name());
+        }
 
         cursor =
                 new VersionCursor(
@@ -243,7 +246,7 @@ public final class DiscoveryService {
         return SupplyType.valueOf(mode);
     }
 
-    private VersionCursor getCurrentCursor(String packageId) throws Exception {
+    private VersionCursor getCurrentCursor(String packageId) throws PermanentFailureException {
         String cursorKey = KeyLayout.downloadCursorKey(packageId);
 
         ResponseInputStream<GetObjectResponse> response =
@@ -254,16 +257,25 @@ public final class DiscoveryService {
                                 .build());
 
         check(response != null, MISSING_CURSOR_FILE_MESSAGE);
-        return JSON.readValue(response, VersionCursor.class);
+        VersionCursor versionCursor;
+        try {
+            versionCursor = JSON.readValue(response, VersionCursor.class);
+        } catch (IOException e) {
+            throw PermanentFailureException.builder()
+                    .description("Failed to parse Version Cursor")
+                    .cause(e)
+                    .build();
+        }
+        return versionCursor;
     }
 
     private void saveOrUpdateCursorToS3Bucket(Object payload, String packageId)
-            throws JsonProcessingException {
+            throws PermanentFailureException, TransientFailureException {
         saveToS3Bucket(payload, properties.controlBucket(), KeyLayout.downloadCursorKey(packageId));
     }
 
     private void saveToS3Bucket(Object payload, String bucket, String key)
-            throws JsonProcessingException {
+            throws PermanentFailureException, TransientFailureException {
         try {
             s3Client.putObject(
                     PutObjectRequest.builder()
@@ -273,12 +285,21 @@ public final class DiscoveryService {
                             .build(),
                     RequestBody.fromString(JSON.writeValueAsString(payload)));
         } catch (S3Exception e) {
-            LOG.error("Failed to save to S3", e, Map.of("bucket", bucket, "key", key));
-            throw e;
+            LOG.error("Failed to save to S3", Map.of("bucket", bucket, "key", key));
+            throw TransientFailureException.builder()
+                    .description(String.format("Failed to save to S3, bucket [%s], key[%s]", bucket, key))
+                    .cause(e)
+                    .build();
+        } catch (JsonProcessingException e) {
+            LOG.error("Failed parse payload", Map.of("payload", payload));
+            throw PermanentFailureException.builder()
+                    .description(String.format("Failed parse payload [%s]", payload))
+                    .cause(e)
+                    .build();
         }
     }
 
-    private String getNextVersionUrl(@NotNull VersionCursor cursor) {
+    private String getNextVersionUrl(@NotNull VersionCursor cursor) throws PermanentFailureException, TransientFailureException {
         String urlForPrevious =
                 generatePackageVersionDataOsUrl(
                         cursor.lastProcessedVersionId(), cursor.dataPackageId());
@@ -291,62 +312,68 @@ public final class DiscoveryService {
         return packageVersionData.nextVersionUrl();
     }
 
-    private PackageVersionData getPackageVersionData(String url) {
+    private PackageVersionData getPackageVersionData(String url) throws PermanentFailureException, TransientFailureException {
         LOG.info("Retrieving package version data", Map.of("url", sanitizeUrl(url)));
         return retrieveOSData(url, PackageVersionData.class);
     }
 
     private Map<DatasetDefault, DownloadDoublet> verifyPackageVersionDataAndReturnDownloads(
-            PackageVersionData packageVersionData) {
+            PackageVersionData packageVersionData) throws PermanentFailureException {
 
         Map<DatasetDefault, DownloadDoublet> datasetDownloadsMap = new HashMap<>();
 
-        datasets.forEach(
-                datasetDefault -> {
-                    Download zipDownload =
-                            findMatchingDownload(
-                                    packageVersionData, datasetDefault.name() + ".zip");
-                    Download orderSummaryDownload =
-                            findMatchingDownload(
-                                    packageVersionData,
-                                    datasetDefault.name() + "_orderSummary.json");
-                    check(
-                            zipDownload.md5() != null,
-                            String.format(
-                                    "md5 value missing for %s ZIP download",
-                                    datasetDefault.name()));
-                    datasetDownloadsMap.put(
-                            datasetDefault, new DownloadDoublet(orderSummaryDownload, zipDownload));
-                });
+        for (DatasetDefault dataset : datasets) {
+            checkDatasets(dataset, packageVersionData, datasetDownloadsMap);
+        }
 
         check(!datasetDownloadsMap.isEmpty(), "No Data to update");
         return datasetDownloadsMap;
     }
 
-    private Download findMatchingDownload(PackageVersionData packageVersionData, String filename) {
+    private void checkDatasets(DatasetDefault dataset, PackageVersionData packageVersionData,
+                               Map<DatasetDefault, DownloadDoublet> datasetDownloadsMap) throws PermanentFailureException {
+        Download zipDownload =
+                findMatchingDownload(
+                        packageVersionData, dataset.name() + ".zip");
+        Download orderSummaryDownload =
+                findMatchingDownload(
+                        packageVersionData,
+                        dataset.name() + "_orderSummary.json");
+        check(
+                zipDownload.md5() != null,
+                String.format(
+                        "md5 value missing for %s ZIP download",
+                        dataset.name()));
+        datasetDownloadsMap.put(
+                dataset, new DownloadDoublet(orderSummaryDownload, zipDownload));
+    }
+
+    private Download findMatchingDownload(PackageVersionData packageVersionData, String filename) throws PermanentFailureException {
         return packageVersionData.downloads().stream()
                 .filter(download -> matchDownloadToDataset(download, filename))
                 .findFirst()
                 .orElseThrow(
                         () ->
-                                new DiscoveryLambdaException(
-                                        String.format("Failed to find entry for [%s]", filename)));
+                                PermanentFailureException.builder().description(
+                                        String.format("Failed to find entry for [%s]", filename))
+                                        .build());
     }
 
     private Map<String, OrderSummary> retrieveAndValidateOrderSummaries(
-            Map<DatasetDefault, DownloadDoublet> downloads) {
+            Map<DatasetDefault, DownloadDoublet> downloads) throws PermanentFailureException, TransientFailureException {
         final Map<String, OrderSummary> orderSummaries = new HashMap<>();
 
-        downloads
-                .entrySet()
-                .forEach(entry -> retrieveAndValidateOrderSummary(entry, orderSummaries));
+        for (Map.Entry<DatasetDefault, DownloadDoublet> entry : downloads
+                .entrySet()) {
+            retrieveAndValidateOrderSummary(entry, orderSummaries);
+        }
 
         return orderSummaries;
     }
 
-    private void retrieveAndValidateOrderSummary(
+    private void retrieveAndValidateOrderSummary (
             Map.Entry<DatasetDefault, DownloadDoublet> entry,
-            Map<String, OrderSummary> orderSummaries) {
+            Map<String, OrderSummary> orderSummaries) throws PermanentFailureException, TransientFailureException {
 
         String url = entry.getValue().orderSummaryDownload.url();
         OrderSummary orderSummary = retrieveOSData(url, OrderSummary.class);
@@ -427,7 +454,7 @@ public final class DiscoveryService {
             Map<String, OrderSummary> orderSummaries,
             LocalDate targetDate,
             String previousDate)
-            throws Exception {
+            throws PermanentFailureException {
 
         final ObjectNode rootNode = JSON.createObjectNode();
         String mode = packageVersionData.supplyType().name();
@@ -465,58 +492,72 @@ public final class DiscoveryService {
         return ReleaseManifest.read(manifestNode);
     }
 
-    private UUID generateReleaseId(JsonNode releaseManifest) throws Exception {
+    private UUID generateReleaseId(JsonNode releaseManifest) throws PermanentFailureException {
 
         JsonNode copyOfReleaseManifest = releaseManifest.deepCopy();
 
         copyOfReleaseManifest.findValues("zip").forEach(zip -> ((ObjectNode) zip).remove("url"));
 
-        String json = JSON.writeValueAsString(copyOfReleaseManifest);
+        String json;
+        try {
+            json = JSON.writeValueAsString(copyOfReleaseManifest);
+        } catch (JsonProcessingException e) {
+            throw PermanentFailureException.builder().
+            description("Failed to parse manifest to derive ReleaseId")
+                    .cause(e).build();
+        }
         return UUID.nameUUIDFromBytes(json.getBytes(StandardCharsets.UTF_8));
     }
 
     private String saveManifestReturnPlanKey(
             ReleaseManifest releaseManifest, KeyLayout.PackageVersion packageVersion)
-            throws JsonProcessingException {
+            throws PermanentFailureException, TransientFailureException {
         String pathKey = KeyLayout.dataPackageManifestKey(packageVersion);
 
-        saveToS3Bucket(releaseManifest.json(), properties.landingBucket(), pathKey);
+        try {
+            saveToS3Bucket(releaseManifest.json(), properties.landingBucket(), pathKey);
+        } catch (JsonProcessingException e) {
+            throw PermanentFailureException.builder()
+                    .description("Unable to save the manifest for package manifest")
+                    .cause(e).build();
+        }
         return pathKey;
     }
 
     private void saveOrderSummaries(
             Map<String, OrderSummary> orderSummaries, KeyLayout.PackageVersion packageVersion)
-            throws JsonProcessingException {
+            throws PermanentFailureException, TransientFailureException {
         for (var entry : orderSummaries.entrySet()) {
             saveToS3Bucket(
                     entry.getValue(),
                     properties.landingBucket(),
                     KeyLayout.orderSummaryKey(
                             packageVersion,
-                            uk.gov.companieshouse.release.model.Dataset.named(entry.getKey())));
+                            Dataset.named(entry.getKey())));
         }
     }
 
     private void publishDownloadCommands(String planKey, String dataset)
-            throws DiscoveryLambdaException {
+            throws TransientFailureException {
         try {
             commands.send(DetailType.DOWNLOAD.name(), planKey, dataset);
             LOG.info("Published download command", Map.of("dataset", dataset, "plan_key", planKey));
-        } catch (Throwable throwable) {
-            throw new DiscoveryLambdaException(
+        } catch (Exception exception) {
+            throw TransientFailureException.builder().description(
                     "An exception occurred whilst attempting to send a DOWNLOAD command to the"
-                        + " EventBridge",
-                    throwable);
+                        + " EventBridge").cause(exception).build();
         }
     }
 
-    private <T> T retrieveOSData(String url, Class<T> clazz) {
+    private <T> T retrieveOSData(String url, Class<T> clazz) throws PermanentFailureException,
+            TransientFailureException {
         TreeNode treeNode;
         try {
             treeNode = osClient.json(url);
         } catch (Exception e) {
             LOG.error("Failed to get data from OS", e, Map.of("url", sanitizeUrl(url)));
-            throw new DiscoveryLambdaException(e);
+            throw TransientFailureException.builder().description("Failed to get data from OS")
+                    .cause(e).build();
         }
         if (treeNode == null || treeNode.size() == 0) {
             LOG.error("OS returned no data", Map.of("url", sanitizeUrl(url)));
@@ -531,7 +572,7 @@ public final class DiscoveryService {
                     "Failed to parse OS response",
                     e,
                     Map.of("response_type", clazz.getName(), "url", sanitizeUrl(url)));
-            throw new DiscoveryLambdaException(e);
+            throw PermanentFailureException.builder().description("Failed to parse OS response").cause(e).build();
         }
 
         return t;

@@ -6,6 +6,7 @@ import com.amazonaws.services.lambda.runtime.Context;
 
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
+import uk.gov.companieshouse.addresslookup.lambda.download.service.DiscoveryService;
 import uk.gov.companieshouse.addresslookup.lambda.download.service.DownloadService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.AbstractRequestHandlerImpl;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.AbstractLambdaFailureException;
@@ -21,6 +22,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public final class Handler extends AbstractRequestHandlerImpl<Map<String, Object>, String> {
+    private final DiscoveryService discoveryService = AcquisitionApplication.start(DiscoveryService.class);
     private final DownloadService service = AcquisitionApplication.start(DownloadService.class);
 
     private static final Logger LOG = LoggerFactory.getLogger(Handler.class.getName());
@@ -36,7 +38,8 @@ public final class Handler extends AbstractRequestHandlerImpl<Map<String, Object
     @Override
     protected String requestOperation(Map<String, Object> request, Context context)
             throws PermanentFailureException, TransientFailureException {
-        return service.download(request, context);
+        String downloadManifestJson = discoveryService.discover(request);
+        return service.download(Map.of("manifest", downloadManifestJson), context);
     }
 
     @Override

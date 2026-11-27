@@ -2,9 +2,6 @@ package uk.gov.companieshouse.addresslookup.lambda.shared.runtime;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-import uk.gov.companieshouse.release.model.ReleaseJson;
-
 import java.io.IOException;
 import java.net.URI;
 import java.security.MessageDigest;
@@ -13,6 +10,7 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
+import uk.gov.companieshouse.release.model.ReleaseJson;
 
 public final class RuntimeSupport {
     public static final ObjectMapper JSON = ReleaseJson.MAPPER;
@@ -54,12 +52,12 @@ public final class RuntimeSupport {
         }
     }
 
-    public static JsonNode detail(String e) throws IOException {
-        return detailNode(JSON.readTree(e));
-    }
-
-    private static JsonNode detailNode(JsonNode node) {
-        return node.has(DETAIL_FIELD) ? node.get(DETAIL_FIELD) : node;
+    public static JsonNode detail(String e) {
+        try {
+            return JSON.readTree(e);
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("Invalid event detail", ex);
+        }
     }
 
     public static String required(JsonNode jsonNode, String field) {

@@ -1,4 +1,4 @@
-package uk.gov.companieshouse.addresslookup.lambda.discovery.model;
+package uk.gov.companieshouse.addresslookup.lambda.download.model;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 

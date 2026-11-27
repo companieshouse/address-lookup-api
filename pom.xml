@@ -18,7 +18,6 @@
         <module>release-core</module>
         <module>address-lookup-api</module>
         <module>lambdas/shared</module>
-        <module>lambdas/discovery</module>
         <module>lambdas/download</module>
         <module>lambdas/scan</module>
         <module>lambdas/unzip</module>

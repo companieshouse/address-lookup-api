@@ -1,20 +1,21 @@
 package uk.gov.companieshouse.addresslookup.lambda.download.service;
 
 import static uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionSupport.releaseId;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.check;
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.detail;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.getExceptionText;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.required;
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.sanitizeUrl;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
-
+import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
+import java.util.Map;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
-
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.S3Exception;
-
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
@@ -25,18 +26,15 @@ import uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout;
 import uk.gov.companieshouse.logging.Logger;
 import uk.gov.companieshouse.logging.LoggerFactory;
 import uk.gov.companieshouse.release.model.Dataset;
-import uk.gov.companieshouse.release.model.DatasetCatalog;
-
-import java.io.IOException;
-import java.security.NoSuchAlgorithmException;
-import java.util.Map;
-import java.util.Objects;
+import uk.gov.companieshouse.release.model.DatasetDefault;
+import uk.gov.companieshouse.release.model.ReleaseManifest;
+import uk.gov.companieshouse.release.model.SupplyType;
 
 @Component
 public final class DownloadService {
     private static final Logger LOG = LoggerFactory.getLogger(DownloadService.class.getName());
-    private static final String DOWNLOAD_COMMAND_PLAN_KEY = "planKey";
     private static final String DOWNLOAD_COMMAND_DATASET = "dataset";
+    private static final String MANIFEST_EVENT_FIELD =  "manifest";
     private static final String LOG_RELEASE_ID = "release_id";
 
     private static final String CHECKSUM_FAILURE_MESSAGE = "Download failure, checksum mismatch";
@@ -50,71 +48,76 @@ public final class DownloadService {
     private final OsClient os;
     private final AcquisitionProperties properties;
 
+    private final ReleaseStore store;
+
     public DownloadService(S3Client s3, OsClient os, AcquisitionProperties properties) {
         this.s3 = s3;
         this.os = os;
         this.properties = properties;
+        store = new ReleaseStore(s3);
         AcquisitionProperties.required(properties.landingBucket(), "LANDING_BUCKET");
     }
 
     public String download(Map<String, Object> event, Context context)
             throws PermanentFailureException, TransientFailureException {
-        var input = validateCommand(event);
 
-        String downloadCommandPlanKey = input.get(DOWNLOAD_COMMAND_PLAN_KEY).asText().trim();
-        String downloadCommandDataset =
-                DatasetCatalog.table(
-                                Dataset.named(input.get(DOWNLOAD_COMMAND_DATASET).asText().trim()))
-                        .name();
-
-        var store = new ReleaseStore(s3);
-        String landingBucket = properties.landingBucket();
-
-        KeyLayout.PackageVersion packageVersion;
-        try {
-            packageVersion = KeyLayout.parsePackageVersionManifestKey(downloadCommandPlanKey);
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid plan key", e);
-        }
-        var manifest =
-                readManifest(store, landingBucket, downloadCommandPlanKey, downloadCommandDataset);
-        check(
-                packageVersion.packageId().equals(required(manifest, "dataPackageId"))
-                        && packageVersion.versionId().equals(required(manifest, "versionId")),
-                "Manifest package/version does not match its Landing key");
+        JsonNode manifest = validateEvent(event);
 
         String manifestReleaseId = releaseId(manifest).toString();
+
+        ReleaseManifest releaseManifest = ReleaseManifest.read(manifest);
+
+        KeyLayout.PackageVersion packageVersion = derivePackageVersionFromManifest(releaseManifest);
+
+        String landingBucket = properties.landingBucket();
+
+        StringBuilder response = null;
+        for (DatasetDefault dataset : properties.datasets()) {
+            String result = processDataSet(dataset.name(), manifestReleaseId, packageVersion, landingBucket,
+                    manifest, context);
+            if (response == null) {
+                response = new StringBuilder(result);
+            } else {
+                response.append(",").append(result);
+            }
+        }
+
+        return response == null ? "" : response.toString();
+    }
+
+    private String processDataSet(String dataset, String manifestReleaseId, KeyLayout.PackageVersion packageVersion,
+                                String landingBucket,JsonNode manifest, Context context
+                                ) throws PermanentFailureException, TransientFailureException {
         LOG.info(
                 "Download command accepted",
                 Map.of(
                         LOG_RELEASE_ID,
                         Objects.toString(manifestReleaseId),
                         DOWNLOAD_COMMAND_DATASET,
-                        Objects.toString(downloadCommandDataset),
-                        "plan_key",
-                        downloadCommandPlanKey));
+                        Objects.toString(dataset)));
 
         // Read only the dataset requested by the EventBridge command.
-        var datasetJsonObj = manifest.path(downloadCommandDataset);
+        var datasetJsonObj = manifest.path(dataset);
         check(datasetJsonObj.isObject(), "Missing dataset in acquisition plan");
 
         var datasetZipJsonObj = datasetJsonObj.path("zip");
         String datasetFileName = required(datasetZipJsonObj, "fileName");
-        check((downloadCommandDataset + ".zip").equals(datasetFileName), "Unexpected ZIP filename");
+        check((dataset + ".zip").equals(datasetFileName), "Unexpected ZIP filename");
 
         String expectedDatasetMd5 = required(datasetZipJsonObj, "md5");
         check(expectedDatasetMd5.matches("(?i)[0-9a-f]{32}"), "Invalid ZIP MD5");
 
         String datasetUrl = required(datasetZipJsonObj, "url");
+
         String zipUploadS3Path =
-                KeyLayout.downloadZipKey(packageVersion, Dataset.named(downloadCommandDataset));
+                KeyLayout.downloadZipKey(packageVersion, Dataset.named(dataset));
         var evidence =
-                readChecksumEvidence(store, landingBucket, zipUploadS3Path, downloadCommandDataset);
+                readChecksumEvidence(store, landingBucket, zipUploadS3Path, dataset);
         if (evidence != null
                 && expectedDatasetMd5.equalsIgnoreCase(evidence.path("md5").asText())
                 && store.exists(landingBucket, zipUploadS3Path)
                 && store.version(landingBucket, zipUploadS3Path)
-                        .equals(evidence.path("versionId").asText())) {
+                .equals(evidence.path("versionId").asText())) {
             LOG.info("Download already present", Map.of("s3_key", zipUploadS3Path));
             return "SKIPPED";
         }
@@ -126,7 +129,7 @@ public final class DownloadService {
                         LOG_RELEASE_ID,
                         Objects.toString(manifestReleaseId),
                         DOWNLOAD_COMMAND_DATASET,
-                        Objects.toString(downloadCommandDataset),
+                        Objects.toString(dataset),
                         "file_name",
                         datasetFileName,
                         "source_url",
@@ -142,7 +145,7 @@ public final class DownloadService {
                         zipUploadS3Path,
                         expectedDatasetMd5,
                         manifestReleaseId,
-                        downloadCommandDataset);
+                        dataset);
 
         LOG.info(
                 "Download completed",
@@ -150,37 +153,20 @@ public final class DownloadService {
                         LOG_RELEASE_ID,
                         Objects.toString(manifestReleaseId),
                         DOWNLOAD_COMMAND_DATASET,
-                        Objects.toString(downloadCommandDataset),
+                        Objects.toString(dataset),
                         "s3_key",
                         Objects.toString(upload.key())));
 
         return "ZIP_SCAN";
     }
-
     // Accepts only EventBridge DOWNLOAD commands with a non-blank textual planKey and dataset.
-    private static JsonNode validateCommand(Map<String, Object> event) {
+    private static JsonNode validateEvent(Map<String, Object> event) {
         check(event != null, "Missing download event");
-        check(
-                (!event.containsKey("source") || "os.acquisition".equals(event.get("source")))
-                        && (!event.containsKey("detail-type")
-                                || "DOWNLOAD".equals(event.get("detail-type"))),
-                "Unexpected download event");
 
-        check(
-                event.get("detail") instanceof Map<?, ?> d && !d.isEmpty(),
-                "Missing detail in download command");
-        var input = detail(event);
+        check(event.containsKey(MANIFEST_EVENT_FIELD) &&
+                event.get(MANIFEST_EVENT_FIELD) != null, "Missing manifest entry");
 
-        check(
-                input.hasNonNull(DOWNLOAD_COMMAND_PLAN_KEY)
-                        && input.get(DOWNLOAD_COMMAND_PLAN_KEY).isTextual()
-                        && !input.get(DOWNLOAD_COMMAND_PLAN_KEY).asText().isBlank(),
-                "Missing detail.planKey in download command");
-        check(
-                input.hasNonNull(DOWNLOAD_COMMAND_DATASET)
-                        && input.get(DOWNLOAD_COMMAND_DATASET).isTextual()
-                        && !input.get(DOWNLOAD_COMMAND_DATASET).asText().isBlank(),
-                "Missing detail.dataset in download command");
+        var input =  deriveManifestFromEvent(event);
         return input;
     }
 
@@ -332,6 +318,30 @@ public final class DownloadService {
     }
 
     private static boolean isStatusRetryable(S3Exception s3Exception) {
-        return (s3Exception.statusCode() >= 500);
+        if (s3Exception.statusCode() >= 500) return true;
+        if (s3Exception.statusCode() == 429) return true;
+        return s3Exception.getCause() instanceof IOException;
+    }
+
+    private static JsonNode deriveManifestFromEvent(Map<String, Object> event) {
+        JsonNode eventRoot = JSON.valueToTree(event);
+        try {
+            return JSON.readTree(eventRoot.get(MANIFEST_EVENT_FIELD).asText());
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("Invalid manifest entry", ex);
+        }
+    }
+
+    private KeyLayout.PackageVersion derivePackageVersionFromManifest(ReleaseManifest releaseManifest) {
+        String versionId = releaseManifest.versionId();
+        String packageId = releaseManifest.dataPackageId();
+        SupplyType mode = releaseManifest.type();
+
+        KeyLayout.Feed feed = switch(mode) {
+            case SupplyType.COU -> KeyLayout.Feed.DAILY_COU;
+            default -> KeyLayout.Feed.INITIAL_FULL;
+        };
+
+        return new KeyLayout.PackageVersion(feed, packageId, versionId);
     }
 }

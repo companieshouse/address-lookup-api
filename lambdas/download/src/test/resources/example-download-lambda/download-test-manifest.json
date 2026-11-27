@@ -1,0 +1,38 @@
+{
+  "releaseId": "6d5dccf3-5b0f-3134-b244-e0bdb67938ab",
+  "mode": "FULL",
+  "target": "2026-05-16",
+  "previous": null,
+  "dataPackageId": "12345",
+  "versionId": "159159",
+  "add_gb_royalmailaddress": {
+    "zip": {
+      "fileName": "add_gb_royalmailaddress.zip",
+      "url": "https://api.os.uk/downloads/v1/dataPackages/12345/versions/159159/downloads?fileName=add_gb_royalmailaddress.zip",
+      "md5": "e729426f4c816c3d6acbf05182243366"
+    },
+    "summary": {
+      "featureName": "add-gb-royalmailaddress",
+      "crs": "http://www.opengis.net/def/crs/EPSG/0/27700",
+      "schemaVersion": "2.0",
+      "validFromDate": "2026-05-15",
+      "validToDate": "2026-05-16",
+      "recordCount": 1870000
+    }
+  },
+  "add_isl_royalmailaddress": {
+    "zip": {
+      "fileName": "add_isl_royalmailaddress.zip",
+      "url": "https://api.os.uk/downloads/v1/dataPackages/12345/versions/159159/downloads?fileName=add_isl_royalmailaddress.zip",
+      "md5": "24a96e8c0a6bb39c2da62cee70d57f5f"
+    },
+    "summary": {
+      "featureName": "add-isl-royalmailaddress",
+      "crs": "http://www.opengis.net/def/crs/EPSG/0/4258",
+      "schemaVersion": "2.0",
+      "validFromDate": "2026-05-15",
+      "validToDate": "2026-05-16",
+      "recordCount": 145000
+    }
+  }
+}

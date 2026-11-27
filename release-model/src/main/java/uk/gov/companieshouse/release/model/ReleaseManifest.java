@@ -57,7 +57,7 @@ public record ReleaseManifest(
     }
 
     /** A detached wire-format copy for adapters that need to publish or amend a description. */
-    public JsonNode json() throws com.fasterxml.jackson.core.JsonProcessingException {
+    public JsonNode json() throws JsonProcessingException {
         return ReleaseJson.MAPPER.readTree(document);
     }
 

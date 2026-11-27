@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.when;
 
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
@@ -27,12 +28,14 @@ import org.slf4j.LoggerFactory;
 
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
+import uk.gov.companieshouse.addresslookup.lambda.download.service.DiscoveryService;
 import uk.gov.companieshouse.addresslookup.lambda.download.service.DownloadService;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.AbstractLambdaFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.LambdaFailureRuntimeException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.PermanentFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.exception.TransientFailureException;
 import uk.gov.companieshouse.addresslookup.lambda.shared.runtime.AcquisitionApplication;
+import uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils;
 import uk.gov.companieshouse.logging.StructuredLogger;
 import uk.gov.companieshouse.release.model.Dataset;
 
@@ -47,36 +50,48 @@ class HandlerTest {
     private static final String RELEASE_ID = "4b845f1a-b0dc-33f1-b76b-b76bb7cd0c56";
     private static final String DATASET_NAME = "add_gb_royalmailaddress";
 
-    @Mock private DownloadService service;
+    @Mock
+    private DownloadService downloadService;
 
-    @Mock private Context context;
+    @Mock
+    private DiscoveryService discoveryService;
+
+    @Mock
+    private Context context;
 
     private Handler handler;
 
-    private static final Map<String, Object> TEST_EVENT =
-            Map.of(
-                    "dataset",
-                    "add_gb_royalmailaddress",
-                    "planKey",
-                    "initial_full/12345/159159/manifest/data_package_manifest.json");
+    private static final Map<String, Object> TEST_FULL_UPDATE_CURSOR_JSON =
+            Map.of("dataPackageId", "20780",
+            "lastProcessedVersionId", "130989",
+            "lastProcessedDate", "2026-05-01");
+
     private static final String TEST_RESPONSE = "ZIP_SCAN";
 
+    private static String TEST_MANIFEST_JSON;
     @BeforeEach
-    void setup() {
+    void setup() throws Exception {
+        TEST_MANIFEST_JSON = TestUtils.readFileFromClasspath("output/output-manifest-Full.json");
+
         try (MockedStatic<AcquisitionApplication> mockApp =
                 Mockito.mockStatic(AcquisitionApplication.class)) {
             mockApp.when(() -> AcquisitionApplication.start(DownloadService.class))
-                    .thenReturn(service);
+                    .thenReturn(downloadService);
+            mockApp.when(() -> AcquisitionApplication.start(DiscoveryService.class))
+                    .thenReturn(discoveryService);
             handler = new Handler();
         }
     }
 
     @Test
     void shouldReturnResponseForSuccessfulDownload() throws Exception {
+        //final String TEST_MANIFEST_JSON = TestUtils.readFileFromClasspath("output/output-manifest-Full.json");
+        Map<String, Object> downloadRequest = Map.of("manifest", TEST_MANIFEST_JSON);
 
-        Mockito.when(service.download(TEST_EVENT, context)).thenReturn(TEST_RESPONSE);
+        when(discoveryService.discover(TEST_FULL_UPDATE_CURSOR_JSON)).thenReturn(TEST_MANIFEST_JSON);
+        when(downloadService.download(downloadRequest, context)).thenReturn(TEST_RESPONSE);
 
-        String response = handler.handleRequest(TEST_EVENT, context);
+        String response = handler.handleRequest(TEST_FULL_UPDATE_CURSOR_JSON, context);
 
         assertEquals(TEST_RESPONSE, response);
     }
@@ -85,14 +100,16 @@ class HandlerTest {
     void shouldThrowExceptionForTransientFailureException() throws Exception {
 
         final String EXCEPTION_TEXT = "Something went wrong!!";
+        Map<String, Object> downloadRequest = Map.of("manifest", TEST_MANIFEST_JSON);
 
-        Mockito.when(service.download(TEST_EVENT, context))
+        when(discoveryService.discover(TEST_FULL_UPDATE_CURSOR_JSON)).thenReturn(TEST_MANIFEST_JSON);
+        when(downloadService.download(downloadRequest, context))
                 .thenThrow(TransientFailureException.builder().description(EXCEPTION_TEXT).build());
 
         Exception exception =
                 assertThrows(
                         LambdaFailureRuntimeException.class,
-                        () -> handler.handleRequest(TEST_EVENT, context));
+                        () -> handler.handleRequest(TEST_FULL_UPDATE_CURSOR_JSON, context));
 
         assertEquals("download failed; durable state allows retry", exception.getMessage());
         assertTrue(exception.getCause().getMessage().contains(EXCEPTION_TEXT));
@@ -118,12 +135,14 @@ class HandlerTest {
     }
 
     private void doTestForExceptionFailingInvocation(Exception exception) throws Exception {
-        Mockito.when(service.download(TEST_EVENT, context)).thenThrow(exception);
+        Map<String, Object> downloadRequest = Map.of("manifest", TEST_MANIFEST_JSON);
+        when(discoveryService.discover(TEST_FULL_UPDATE_CURSOR_JSON)).thenReturn(TEST_MANIFEST_JSON);
+        when(downloadService.download(downloadRequest, context)).thenThrow(exception);
 
         Exception failure =
                 assertThrows(
                         LambdaFailureRuntimeException.class,
-                        () -> handler.handleRequest(TEST_EVENT, context));
+                        () -> handler.handleRequest(TEST_FULL_UPDATE_CURSOR_JSON, context));
 
         assertEquals("Download failed and a retry will not succeed", failure.getMessage());
         assertSame(exception, failure.getCause());
@@ -153,13 +172,15 @@ class HandlerTest {
     @MethodSource("failuresAndExpectedOutcomes")
     void failureLogHasOutcomeReasonCodeReleaseIdAndDataset(
             AbstractLambdaFailureException failure, String expectedOutcome) throws Exception {
-        Mockito.when(service.download(TEST_EVENT, context)).thenThrow(failure);
+        Map<String, Object> downloadRequest = Map.of("manifest", TEST_MANIFEST_JSON);
+        when(discoveryService.discover(TEST_FULL_UPDATE_CURSOR_JSON)).thenReturn(TEST_MANIFEST_JSON);
+        when(downloadService.download(downloadRequest, context)).thenThrow(failure);
         var appender = captureStructuredLogs();
 
         try {
             assertThrows(
                     LambdaFailureRuntimeException.class,
-                    () -> handler.handleRequest(TEST_EVENT, context));
+                    () -> handler.handleRequest(TEST_FULL_UPDATE_CURSOR_JSON, context));
         } finally {
             stopCapturingStructuredLogs(appender);
         }
@@ -177,13 +198,15 @@ class HandlerTest {
                         .description("Failed to read manifest")
                         .reasonCode("FAILED_TO_READ_MANIFEST")
                         .build();
-        Mockito.when(service.download(TEST_EVENT, context)).thenThrow(failure);
+        Map<String, Object> downloadRequest = Map.of("manifest", TEST_MANIFEST_JSON);
+        when(discoveryService.discover(TEST_FULL_UPDATE_CURSOR_JSON)).thenReturn(TEST_MANIFEST_JSON);
+        when(downloadService.download(downloadRequest, context)).thenThrow(failure);
         var appender = captureStructuredLogs();
 
         try {
             assertThrows(
                     LambdaFailureRuntimeException.class,
-                    () -> handler.handleRequest(TEST_EVENT, context));
+                    () -> handler.handleRequest(TEST_FULL_UPDATE_CURSOR_JSON, context));
         } finally {
             stopCapturingStructuredLogs(appender);
         }

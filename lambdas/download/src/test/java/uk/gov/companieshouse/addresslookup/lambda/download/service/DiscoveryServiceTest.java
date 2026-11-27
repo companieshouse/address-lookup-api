@@ -1,6 +1,7 @@
-package uk.gov.companieshouse.addresslookup.lambda.discovery.service;
+package uk.gov.companieshouse.addresslookup.lambda.download.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -13,15 +14,18 @@ import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-
 import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.JSON;
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToJsonNode;
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.jsonFileToObject;
 import static uk.gov.companieshouse.addresslookup.lambda.test.utils.TestUtils.readFileFromClasspath;
 import static uk.gov.companieshouse.release.model.DetailType.DOWNLOAD;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-
+import java.lang.reflect.Method;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,13 +33,11 @@ import org.mockito.ArgumentMatcher;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
-
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-
-import uk.gov.companieshouse.addresslookup.lambda.discovery.model.VersionCursor;
+import uk.gov.companieshouse.addresslookup.lambda.download.model.VersionCursor;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.AcquisitionProperties;
 import uk.gov.companieshouse.addresslookup.lambda.shared.acquisition.Commands;
 import uk.gov.companieshouse.addresslookup.lambda.shared.os.OsClient;
@@ -45,10 +47,6 @@ import uk.gov.companieshouse.release.model.OrderSummary;
 import uk.gov.companieshouse.release.model.PackageVersionData;
 import uk.gov.companieshouse.release.model.ReleaseJson;
 import uk.gov.companieshouse.release.model.ReleaseManifest;
-
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 
 @ExtendWith(MockitoExtension.class)
 class DiscoveryServiceTest {
@@ -209,7 +207,7 @@ class DiscoveryServiceTest {
     }
 
     @Test
-    void rejectsCursorForDifferentConfiguredPackage() throws Exception {
+    void rejectsCursorForDifferentConfiguredPackage() {
         when(properties.packagesForFeed(
                         uk.gov.companieshouse.addresslookup.lambda.shared.util.KeyLayout.Feed
                                 .DAILY_COU))
@@ -379,7 +377,7 @@ class DiscoveryServiceTest {
             mockedUUID.when(() -> UUID.fromString(anyString())).thenCallRealMethod();
             releaseId =
                     discoveryService.discover(
-                            Map.<String, Object>of(
+                            Map.of(
                                     "mode",
                                     "FULL",
                                     "versions",
@@ -672,67 +670,66 @@ class DiscoveryServiceTest {
         assertNotNull(manifest);
     }
 
-    private static class S3PutRequestBodyMatcher<T> implements ArgumentMatcher<RequestBody> {
+    @Test
+    void testReleaseIdGeneration() throws Exception {
+        Method method = DiscoveryService.class.getDeclaredMethod("generateReleaseId", JsonNode.class);
 
-        private final String expectedBodyJson;
-        private final Class<T> clazz;
+        method.setAccessible(true);
+        JsonNode manifestNode = JSON.readTree(readFileFromClasspath("example-download-lambda/download-test-manifest.json"));
 
-        S3PutRequestBodyMatcher(String expectedBodyJson, Class<T> clazz) {
-            this.expectedBodyJson = expectedBodyJson;
-            this.clazz = clazz;
-        }
+        UUID uuid = (UUID)(method.invoke(discoveryService, manifestNode));
+
+        assertNotNull(uuid);
+        assertFalse(uuid.toString().isBlank());
+    }
+
+    private record S3PutRequestBodyMatcher<T>(String expectedBodyJson, Class<T> clazz) implements ArgumentMatcher<RequestBody> {
 
         @Override
-        public boolean matches(RequestBody requestBody) {
-            boolean valid = false;
-            try {
-                T expected = JSON.readValue(expectedBodyJson, clazz);
-                T test = JSON.readValue(requestBody.contentStreamProvider().newStream(), clazz);
-                if (expected != null && expected.equals(test)) {
+            public boolean matches(RequestBody requestBody) {
+                boolean valid = false;
+                try {
+                    T expected = JSON.readValue(expectedBodyJson, clazz);
+                    T test = JSON.readValue(requestBody.contentStreamProvider().newStream(), clazz);
+                    if (expected != null && expected.equals(test)) {
+                        valid = true;
+                    }
+                } catch (Exception exception) {
+                    exception.printStackTrace();
+                    return false;
+                }
+                return valid;
+            }
+
+            @Override
+            public Class<RequestBody> type() {
+                return RequestBody.class;
+            }
+        }
+
+    private record S3PutReleaseManifestRequestBodyMatcher(ReleaseManifest expectedManifest)
+                implements ArgumentMatcher<RequestBody> {
+
+        @Override
+            public boolean matches(RequestBody requestBody) {
+                boolean valid = false;
+                try {
+                    ReleaseManifest test =
+                            ReleaseManifest.read(
+                                    JSON.readTree(requestBody.contentStreamProvider().newStream()));
+                    if (expectedManifest != null) {
+                        assertEquals(expectedManifest.json(), test.json());
+                    }
                     valid = true;
+                } catch (Exception exception) {
+                    exception.printStackTrace();
                 }
-            } catch (Exception exception) {
-                exception.printStackTrace();
-                return false;
+                return valid;
             }
-            return valid;
-        }
 
-        @Override
-        public Class<RequestBody> type() {
-            return RequestBody.class;
-        }
-    }
-
-    private static class S3PutReleaseManifestRequestBodyMatcher
-            implements ArgumentMatcher<RequestBody> {
-
-        private final ReleaseManifest expectedManifest;
-
-        S3PutReleaseManifestRequestBodyMatcher(ReleaseManifest expectedManifest) {
-            this.expectedManifest = expectedManifest;
-        }
-
-        @Override
-        public boolean matches(RequestBody requestBody) {
-            boolean valid = false;
-            try {
-                ReleaseManifest test =
-                        ReleaseManifest.read(
-                                JSON.readTree(requestBody.contentStreamProvider().newStream()));
-                if (expectedManifest != null) {
-                    assertEquals(expectedManifest.json(), test.json());
-                }
-                valid = true;
-            } catch (Exception exception) {
-                exception.printStackTrace();
+            @Override
+            public Class<RequestBody> type() {
+                return RequestBody.class;
             }
-            return valid;
         }
-
-        @Override
-        public Class<RequestBody> type() {
-            return RequestBody.class;
-        }
-    }
 }

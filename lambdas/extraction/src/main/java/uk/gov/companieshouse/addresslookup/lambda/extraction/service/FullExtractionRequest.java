@@ -13,8 +13,7 @@ record FullExtractionRequest(String packageId, String versionId) {
     JsonNode versions = request.path("versions");
     String packageId = required(versions, "data_package");
     String versionId = required(versions, "version_id");
-    check(packageId.matches("\\d+") && versionId.matches("\\d+"),
-        "Invalid package or version ID");
+    check(packageId.matches("\\d+") && versionId.matches("\\d+"), "Invalid package or version ID");
     return new FullExtractionRequest(packageId, versionId);
   }
 }

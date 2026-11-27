@@ -53,8 +53,8 @@ final class FullVersionExtractionTest {
   private static final String CSV = PREFIX + "downloads/" + DATASET + "/" + DATASET + ".csv";
   private static final String OUTPUT_SUMMARY =
       PREFIX + "downloads/" + DATASET + "/" + DATASET + "_orderSummary.json";
-  private static final Map<String, Object> REQUEST = Map.of("mode", "FULL",
-      "versions", Map.of("data_package", "24833", "version_id", "150450"));
+  private static final Map<String, Object> REQUEST =
+      Map.of("mode", "FULL", "versions", Map.of("data_package", "24833", "version_id", "150450"));
 
   private FakeS3 fake;
   private S3Client s3;
@@ -65,13 +65,16 @@ final class FullVersionExtractionTest {
   void setUp() throws Exception {
     fake = new FakeS3();
     s3 = spy(fake.client());
-    doAnswer(invocation -> {
-      HeadObjectRequest request = invocation.getArgument(0);
-      if (request.key().endsWith(".csv") && !fake.objects.containsKey(request.key())) {
-        throw S3Exception.builder().statusCode(404).message("Not found").build();
-      }
-      return fake.client().headObject(request);
-    }).when(s3).headObject(any(HeadObjectRequest.class));
+    doAnswer(
+            invocation -> {
+              HeadObjectRequest request = invocation.getArgument(0);
+              if (request.key().endsWith(".csv") && !fake.objects.containsKey(request.key())) {
+                throw S3Exception.builder().statusCode(404).message("Not found").build();
+              }
+              return fake.client().headObject(request);
+            })
+        .when(s3)
+        .headObject(any(HeadObjectRequest.class));
     fullContext = TestContext.withRemainingMillis(900_000);
     service = component(List.of(policy(DATASET, 1024 * 1024)));
     fake.objects.put(ZIP, zip(Map.of(DATASET + ".csv", header() + "\n")));
@@ -83,10 +86,21 @@ final class FullVersionExtractionTest {
   }
 
   private ExtractionComponent component(List<ExtractionProperties.DatasetPolicy> policies) {
-    return new ExtractionComponent(s3,
-        new AcquisitionProperties("control-bucket", "landing-bucket", "events", "key",
-            "packages", 1024 * 1024, null, null, 1024 * 1024, 20,
-            Duration.ofSeconds(20), Duration.ofSeconds(60)),
+    return new ExtractionComponent(
+        s3,
+        new AcquisitionProperties(
+            "control-bucket",
+            "landing-bucket",
+            "events",
+            "key",
+            "packages",
+            1024 * 1024,
+            null,
+            null,
+            1024 * 1024,
+            20,
+            Duration.ofSeconds(20),
+            Duration.ofSeconds(60)),
         new ExtractionProperties(
             new ExtractionProperties.Feed("24833", "control/", "landing/", policies), null));
   }
@@ -101,28 +115,38 @@ final class FullVersionExtractionTest {
   }
 
   private static ExtractionProperties.DatasetPolicy policy(
-      String dataset, List<String> extractOnly, List<String> skip, long max,
-      int maxEntries, int maxEntryRatio, int maxArchiveRatio) {
-    return new ExtractionProperties.DatasetPolicy(dataset, extractOnly, skip, max,
-        maxEntries, maxEntryRatio, maxArchiveRatio);
+      String dataset,
+      List<String> extractOnly,
+      List<String> skip,
+      long max,
+      int maxEntries,
+      int maxEntryRatio,
+      int maxArchiveRatio) {
+    return new ExtractionProperties.DatasetPolicy(
+        dataset, extractOnly, skip, max, maxEntries, maxEntryRatio, maxArchiveRatio);
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"add_gb_builtaddress", "add_gb_prebuildaddress",
-      "add_isl_builtaddress", "add_isl_prebuildaddress"})
+  @ValueSource(
+      strings = {
+        "add_gb_builtaddress",
+        "add_gb_prebuildaddress",
+        "add_isl_builtaddress",
+        "add_isl_prebuildaddress"
+      })
   void extractsBuiltAddressWithoutDatabaseImportMapping(String dataset) throws Exception {
     String key = PREFIX + "downloads/" + dataset + ".zip";
     fake.objects.remove(ZIP);
     fake.objects.remove(SUMMARY);
-    fake.objects.put(key, zip(Map.of(dataset + ".csv",
-        DatasetCatalog.extractionHeader(dataset) + "\n")));
+    fake.objects.put(
+        key, zip(Map.of(dataset + ".csv", DatasetCatalog.extractionHeader(dataset) + "\n")));
     fake.versions.put(key, "built-v1");
     fake.scanStatus.put(key, "NO_THREATS_FOUND");
     service = component(List.of(policy(dataset, 1024 * 1024)));
 
     assertEquals(ExtractionResult.Status.COMPLETE, service.extract(REQUEST, fullContext).status());
-    assertArrayEquals((DatasetCatalog.extractionHeader(dataset) + "\n")
-            .getBytes(StandardCharsets.UTF_8),
+    assertArrayEquals(
+        (DatasetCatalog.extractionHeader(dataset) + "\n").getBytes(StandardCharsets.UTF_8),
         fake.objects.get(PREFIX + "downloads/" + dataset + "/" + dataset + ".csv"));
     assertTrue(state().path("complete").asBoolean());
   }
@@ -174,9 +198,12 @@ final class FullVersionExtractionTest {
     assertEquals(1, partial.filesDone());
     assertEquals(1, partial.filesRemaining());
     assertTrue(fake.objects.containsKey(CSV));
-    verify(s3, atLeastOnce()).getObject(argThat((GetObjectRequest request) ->
-        ZIP.equals(request.key()) && "zip-v1".equals(request.versionId())
-            && request.range() != null));
+    verify(s3, atLeastOnce())
+        .getObject(
+            argThat((GetObjectRequest request) ->
+                ZIP.equals(request.key())
+                    && "zip-v1".equals(request.versionId())
+                    && request.range() != null));
     assertEquals("UNPACKED", state().path("files").path(ZIP).path("status").asText());
     assertEquals("PENDING", state().path("files").path(SUMMARY).path("status").asText());
 
@@ -188,21 +215,25 @@ final class FullVersionExtractionTest {
     assertEquals(0, complete.filesRemaining());
     assertEquals(List.of(), complete.failed());
     assertArrayEquals("{}".getBytes(StandardCharsets.UTF_8), fake.objects.get(OUTPUT_SUMMARY));
-    verify(s3).getObject(argThat((GetObjectRequest request) ->
-        SUMMARY.equals(request.key()) && "summary-v1".equals(request.versionId())));
+    verify(s3)
+        .getObject(
+            argThat((GetObjectRequest request) ->
+                SUMMARY.equals(request.key()) && "summary-v1".equals(request.versionId())));
     assertTrue(state().path("complete").asBoolean());
     assertEquals(CSV, state().path("files").path(ZIP).path("outputKeys").get(0).asText());
-    assertEquals(OUTPUT_SUMMARY,
-        state().path("files").path(SUMMARY).path("outputKeys").get(0).asText());
+    assertEquals(
+        OUTPUT_SUMMARY, state().path("files").path(SUMMARY).path("outputKeys").get(0).asText());
     var repeated = service.extract(REQUEST, TestContext.withRemainingMillis(900_000));
     assertEquals(ExtractionResult.Status.COMPLETE, repeated.status());
     assertEquals(2, repeated.filesDone());
     assertEquals(0, repeated.filesRemaining());
     assertEquals(2, fake.completedKeys.size());
-    assertEquals("unchanged", new String(fake.objects.get("control/active.json"),
-        StandardCharsets.UTF_8));
-    verify(s3, never()).getObject(argThat((GetObjectRequest request) ->
-        request.key() != null && request.key().startsWith("control/")));
+    assertEquals(
+        "unchanged", new String(fake.objects.get("control/active.json"), StandardCharsets.UTF_8));
+    verify(s3, never())
+        .getObject(
+            argThat((GetObjectRequest request) ->
+                request.key() != null && request.key().startsWith("control/")));
   }
 
   @Test
@@ -212,8 +243,7 @@ final class FullVersionExtractionTest {
     assertEquals(ExtractionResult.Status.NEEDS_ATTENTION, attention.status());
     assertEquals(0, attention.filesDone());
     assertEquals(2, attention.filesRemaining());
-    assertEquals(List.of(new ExtractionResult.Failure(ZIP, "THREATS_FOUND")),
-        attention.failed());
+    assertEquals(List.of(new ExtractionResult.Failure(ZIP, "THREATS_FOUND")), attention.failed());
     assertEquals("PENDING", state().path("files").path(ZIP).path("status").asText());
     assertFalse(fake.objects.containsKey(CSV));
     fake.scanStatus.put(ZIP, "NO_THREATS_FOUND");
@@ -223,11 +253,13 @@ final class FullVersionExtractionTest {
 
   @Test
   void resumesFromDiscoveredFilesRatherThanIncludingNewObjects() throws Exception {
-    assertEquals(ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
-    fake.objects.put(PREFIX + "downloads/unexpected.txt",
-        "unexpected".getBytes(StandardCharsets.UTF_8));
+    assertEquals(
+        ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
+    fake.objects.put(
+        PREFIX + "downloads/unexpected.txt", "unexpected".getBytes(StandardCharsets.UTF_8));
 
-    assertEquals(ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
+    assertEquals(
+        ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
     assertEquals(2, state().path("files").size());
     assertEquals("zip-v1", state().path("files").path(ZIP).path("versionId").asText());
   }
@@ -236,10 +268,12 @@ final class FullVersionExtractionTest {
   void ignoresExistingExtractedOutputsWhenDiscoveringInputs() throws Exception {
     fake.objects.put(CSV, "previous output".getBytes(StandardCharsets.UTF_8));
     fake.objects.put(OUTPUT_SUMMARY, "{}".getBytes(StandardCharsets.UTF_8));
-    fake.objects.put(PREFIX + "downloads/" + DATASET + "/" + DATASET + "_multires.csv",
+    fake.objects.put(
+        PREFIX + "downloads/" + DATASET + "/" + DATASET + "_multires.csv",
         "previous output".getBytes(StandardCharsets.UTF_8));
 
-    assertEquals(ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
+    assertEquals(
+        ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
     assertEquals(2, state().path("files").size());
     assertTrue(state().path("files").has(ZIP));
     assertTrue(state().path("files").has(SUMMARY));
@@ -247,16 +281,19 @@ final class FullVersionExtractionTest {
 
   @Test
   void failsExplicitlyIfNewStateCannotBeReadAfterWrite() {
-    doAnswer(invocation -> {
-      var request = invocation.getArgument(0, ListObjectsV2Request.class);
-      if (STATE.equals(request.prefix()) && fake.objects.containsKey(STATE)) {
-        return ListObjectsV2Response.builder().build();
-      }
-      return fake.client().listObjectsV2(request);
-    }).when(s3).listObjectsV2(any(ListObjectsV2Request.class));
+    doAnswer(
+            invocation -> {
+              var request = invocation.getArgument(0, ListObjectsV2Request.class);
+              if (STATE.equals(request.prefix()) && fake.objects.containsKey(STATE)) {
+                return ListObjectsV2Response.builder().build();
+              }
+              return fake.client().listObjectsV2(request);
+            })
+        .when(s3)
+        .listObjectsV2(any(ListObjectsV2Request.class));
 
-    var failure = assertThrows(IllegalStateException.class,
-        () -> service.extract(REQUEST, fullContext));
+    var failure =
+        assertThrows(IllegalStateException.class, () -> service.extract(REQUEST, fullContext));
     assertTrue(failure.getMessage().contains("FULL unpack state is unreadable after write"));
     assertFalse(fake.objects.containsKey(CSV));
   }
@@ -266,15 +303,16 @@ final class FullVersionExtractionTest {
     fake.scanStatus.put(ZIP, "NO_THREATS_FOUND");
     fake.scanStatus.put(SUMMARY, "NO_THREATS_FOUND");
     Context context = mock(Context.class);
-    when(context.getRemainingTimeInMillis()).thenAnswer(
-        invocation -> fake.completedKeys.isEmpty() ? 900_000 : 100_000);
+    when(context.getRemainingTimeInMillis())
+        .thenAnswer(invocation -> fake.completedKeys.isEmpty() ? 900_000 : 100_000);
     var partial = service.extract(REQUEST, context);
     assertEquals(ExtractionResult.Status.IN_PROGRESS, partial.status());
     assertEquals(1, partial.filesDone());
     assertEquals(1, partial.filesRemaining());
     assertEquals("UNPACKED", state().path("files").path(ZIP).path("status").asText());
     assertEquals("PENDING", state().path("files").path(SUMMARY).path("status").asText());
-    assertEquals(ExtractionResult.Status.COMPLETE,
+    assertEquals(
+        ExtractionResult.Status.COMPLETE,
         service.extract(REQUEST, TestContext.withRemainingMillis(900_000)).status());
     assertEquals(2, fake.completedKeys.size());
   }
@@ -304,22 +342,28 @@ final class FullVersionExtractionTest {
     fake.objects.put(ZIP, zip(members));
 
     var failOnce = new AtomicBoolean(true);
-    doAnswer(invocation -> {
-      if (failOnce.get() && fake.uploads.values().stream()
-          .anyMatch(upload -> ancillary.equals(upload.key()))) {
-        failOnce.set(false);
-        throw S3Exception.builder().statusCode(503).message("upload failed").build();
-      }
-      return fake.client().uploadPart(
-          invocation.<java.util.function.Consumer<UploadPartRequest.Builder>>getArgument(0),
-          invocation.getArgument(1, RequestBody.class));
-    }).when(s3).uploadPart(any(java.util.function.Consumer.class), any(RequestBody.class));
+    doAnswer(
+            invocation -> {
+              if (failOnce.get()
+                  && fake.uploads.values().stream()
+                      .anyMatch(upload -> ancillary.equals(upload.key()))) {
+                failOnce.set(false);
+                throw S3Exception.builder().statusCode(503).message("upload failed").build();
+              }
+              return fake.client()
+                  .uploadPart(
+                      invocation
+                          .<java.util.function.Consumer<UploadPartRequest.Builder>>getArgument(0),
+                      invocation.getArgument(1, RequestBody.class));
+            })
+        .when(s3)
+        .uploadPart(any(java.util.function.Consumer.class), any(RequestBody.class));
 
     var failure = assertThrows(S3Exception.class, () -> service.extract(REQUEST, fullContext));
     assertEquals(503, failure.statusCode());
     assertFalse(failOnce.get());
-    assertArrayEquals(members.get(DATASET + ".csv").getBytes(StandardCharsets.UTF_8),
-        fake.objects.get(CSV));
+    assertArrayEquals(
+        members.get(DATASET + ".csv").getBytes(StandardCharsets.UTF_8), fake.objects.get(CSV));
     assertEquals(List.of(CSV), fake.completedKeys);
     assertFalse(fake.objects.containsKey(ancillary));
     assertEquals(1, fake.abortedUploads);
@@ -331,31 +375,41 @@ final class FullVersionExtractionTest {
     assertEquals("LOAD", primary.path("action").asText());
     assertEquals(CSV, primary.path("outputKey").asText());
     assertEquals(fake.versions.get(CSV), primary.path("versionId").asText());
-    assertEquals(members.get(DATASET + ".csv").getBytes(StandardCharsets.UTF_8).length,
+    assertEquals(
+        members.get(DATASET + ".csv").getBytes(StandardCharsets.UTF_8).length,
         primary.path("bytes").asLong());
     assertEquals(64, primary.path("sha256").asText().length());
-    assertEquals("SKIP", state().path("files").path(ZIP).path("members")
-        .path(DATASET + "_rltenty.csv").path("action").asText());
+    assertEquals(
+        "SKIP",
+        state()
+            .path("files")
+            .path(ZIP)
+            .path("members")
+            .path(DATASET + "_rltenty.csv")
+            .path("action")
+            .asText());
     assertFalse(state().path("complete").asBoolean());
 
     assertEquals(ExtractionResult.Status.COMPLETE, service.extract(REQUEST, fullContext).status());
-    verify(s3, atLeastOnce()).getObject(argThat((GetObjectRequest request) ->
-        ZIP.equals(request.key()) && "zip-v1".equals(request.versionId())
-            && request.range() != null));
+    verify(s3, atLeastOnce())
+        .getObject(
+            argThat((GetObjectRequest request) ->
+                ZIP.equals(request.key())
+                    && "zip-v1".equals(request.versionId())
+                    && request.range() != null));
     assertEquals(List.of(CSV, ancillary, OUTPUT_SUMMARY), fake.completedKeys);
     assertEquals(4, fake.uploadCounter);
-    verify(s3, never()).getObject(argThat((GetObjectRequest request) ->
-        CSV.equals(request.key())));
-    assertArrayEquals(members.get(DATASET + ".csv").getBytes(StandardCharsets.UTF_8),
-        fake.objects.get(CSV));
+    verify(s3, never()).getObject(argThat((GetObjectRequest request) -> CSV.equals(request.key())));
+    assertArrayEquals(
+        members.get(DATASET + ".csv").getBytes(StandardCharsets.UTF_8), fake.objects.get(CSV));
     assertArrayEquals("a,b\n".getBytes(StandardCharsets.UTF_8), fake.objects.get(ancillary));
     assertTrue(fake.uploads.isEmpty());
     assertEquals("UNPACKED", state().path("files").path(ZIP).path("status").asText());
     assertEquals(2, state().path("files").path(ZIP).path("outputKeys").size());
     assertEquals(CSV, state().path("files").path(ZIP).path("outputKeys").get(0).asText());
     assertEquals(ancillary, state().path("files").path(ZIP).path("outputKeys").get(1).asText());
-    assertEquals(DATASET + "_rltenty.csv",
-        state().path("files").path(ZIP).path("skipped").get(0).asText());
+    assertEquals(
+        DATASET + "_rltenty.csv", state().path("files").path(ZIP).path("skipped").get(0).asText());
     assertTrue(state().path("complete").asBoolean());
   }
 
@@ -369,14 +423,19 @@ final class FullVersionExtractionTest {
     members.put(DATASET + "_multires.csv", "a,b\n");
     fake.objects.put(ZIP, zip(members));
     var failOnce = new AtomicBoolean(true);
-    doAnswer(invocation -> {
-      if (fake.completedKeys.contains(CSV) && failOnce.getAndSet(false)) {
-        throw S3Exception.builder().statusCode(503).message("upload failed").build();
-      }
-      return fake.client().uploadPart(
-          invocation.<java.util.function.Consumer<UploadPartRequest.Builder>>getArgument(0),
-          invocation.getArgument(1, RequestBody.class));
-    }).when(s3).uploadPart(any(java.util.function.Consumer.class), any(RequestBody.class));
+    doAnswer(
+            invocation -> {
+              if (fake.completedKeys.contains(CSV) && failOnce.getAndSet(false)) {
+                throw S3Exception.builder().statusCode(503).message("upload failed").build();
+              }
+              return fake.client()
+                  .uploadPart(
+                      invocation
+                          .<java.util.function.Consumer<UploadPartRequest.Builder>>getArgument(0),
+                      invocation.getArgument(1, RequestBody.class));
+            })
+        .when(s3)
+        .uploadPart(any(java.util.function.Consumer.class), any(RequestBody.class));
 
     assertThrows(S3Exception.class, () -> service.extract(REQUEST, fullContext));
     var legacyState = (com.fasterxml.jackson.databind.node.ObjectNode) state();
@@ -386,23 +445,31 @@ final class FullVersionExtractionTest {
     int uploadsBeforeRetry = fake.uploadCounter;
     String evidenceKey = StreamingS3.checksumKey(CSV);
     byte[] evidence = fake.objects.get(evidenceKey);
-    var changedEvidence = (com.fasterxml.jackson.databind.node.ObjectNode)
-        RuntimeSupport.JSON.readTree(evidence);
+    var changedEvidence =
+        (com.fasterxml.jackson.databind.node.ObjectNode) RuntimeSupport.JSON.readTree(evidence);
     changedEvidence.put("sha256", "0".repeat(64));
     fake.objects.put(evidenceKey, RuntimeSupport.JSON.writeValueAsBytes(changedEvidence));
 
-    var mismatch = assertThrows(IllegalArgumentException.class,
-        () -> service.extract(REQUEST, fullContext));
+    var mismatch =
+        assertThrows(IllegalArgumentException.class, () -> service.extract(REQUEST, fullContext));
     assertTrue(mismatch.getMessage().contains("Completed ZIP member content changed"));
     assertFalse(state().path("files").path(ZIP).has("members"));
     assertEquals(uploadsBeforeRetry, fake.uploadCounter);
     fake.objects.put(evidenceKey, evidence);
 
-    assertEquals(ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
+    assertEquals(
+        ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
     assertEquals(uploadsBeforeRetry + 1, fake.uploadCounter);
     assertEquals(List.of(CSV, ancillary), fake.completedKeys);
-    assertEquals(CSV, state().path("files").path(ZIP).path("members")
-        .path(DATASET + ".csv").path("outputKey").asText());
+    assertEquals(
+        CSV,
+        state()
+            .path("files")
+            .path(ZIP)
+            .path("members")
+            .path(DATASET + ".csv")
+            .path("outputKey")
+            .asText());
     assertEquals("UNPACKED", state().path("files").path(ZIP).path("status").asText());
   }
 
@@ -415,28 +482,40 @@ final class FullVersionExtractionTest {
     members.put(DATASET + "_multires.csv", "a,b\n");
     fake.objects.put(ZIP, zip(members));
     var failOnce = new AtomicBoolean(true);
-    doAnswer(invocation -> {
-      if (fake.completedKeys.contains(CSV) && failOnce.getAndSet(false)) {
-        throw S3Exception.builder().statusCode(503).message("upload failed").build();
-      }
-      return fake.client().uploadPart(
-          invocation.<java.util.function.Consumer<UploadPartRequest.Builder>>getArgument(0),
-          invocation.getArgument(1, RequestBody.class));
-    }).when(s3).uploadPart(any(java.util.function.Consumer.class), any(RequestBody.class));
+    doAnswer(
+            invocation -> {
+              if (fake.completedKeys.contains(CSV) && failOnce.getAndSet(false)) {
+                throw S3Exception.builder().statusCode(503).message("upload failed").build();
+              }
+              return fake.client()
+                  .uploadPart(
+                      invocation
+                          .<java.util.function.Consumer<UploadPartRequest.Builder>>getArgument(0),
+                      invocation.getArgument(1, RequestBody.class));
+            })
+        .when(s3)
+        .uploadPart(any(java.util.function.Consumer.class), any(RequestBody.class));
 
     assertThrows(S3Exception.class, () -> service.extract(REQUEST, fullContext));
     fake.versions.put(CSV, "replaced-version");
-    var failure = assertThrows(IllegalArgumentException.class,
-        () -> service.extract(REQUEST, fullContext));
+    var failure =
+        assertThrows(IllegalArgumentException.class, () -> service.extract(REQUEST, fullContext));
     assertTrue(failure.getMessage().contains("Completed ZIP member output changed"));
     assertEquals("PENDING", state().path("files").path(ZIP).path("status").asText());
 
-    fake.versions.put(CSV, state().path("files").path(ZIP).path("members")
-        .path(DATASET + ".csv").path("versionId").asText());
+    fake.versions.put(
+        CSV,
+        state()
+            .path("files")
+            .path(ZIP)
+            .path("members")
+            .path(DATASET + ".csv")
+            .path("versionId")
+            .asText());
     members.put(DATASET + ".csv", header() + "\nchanged\n");
     fake.objects.put(ZIP, zip(members));
-    var changedContent = assertThrows(IllegalArgumentException.class,
-        () -> service.extract(REQUEST, fullContext));
+    var changedContent =
+        assertThrows(IllegalArgumentException.class, () -> service.extract(REQUEST, fullContext));
     assertTrue(changedContent.getMessage().contains("Completed ZIP member content changed"));
     assertEquals("PENDING", state().path("files").path(ZIP).path("status").asText());
   }
@@ -450,32 +529,49 @@ final class FullVersionExtractionTest {
     members.put(DATASET + "_multires.csv", "a,b\n");
     fake.objects.put(ZIP, zip(members));
     var failOnce = new AtomicBoolean(true);
-    doAnswer(invocation -> {
-      if (fake.completedKeys.contains(CSV) && failOnce.getAndSet(false)) {
-        throw S3Exception.builder().statusCode(503).message("upload failed").build();
-      }
-      return fake.client().uploadPart(
-          invocation.<java.util.function.Consumer<UploadPartRequest.Builder>>getArgument(0),
-          invocation.getArgument(1, RequestBody.class));
-    }).when(s3).uploadPart(any(java.util.function.Consumer.class), any(RequestBody.class));
+    doAnswer(
+            invocation -> {
+              if (fake.completedKeys.contains(CSV) && failOnce.getAndSet(false)) {
+                throw S3Exception.builder().statusCode(503).message("upload failed").build();
+              }
+              return fake.client()
+                  .uploadPart(
+                      invocation
+                          .<java.util.function.Consumer<UploadPartRequest.Builder>>getArgument(0),
+                      invocation.getArgument(1, RequestBody.class));
+            })
+        .when(s3)
+        .uploadPart(any(java.util.function.Consumer.class), any(RequestBody.class));
 
     assertThrows(S3Exception.class, () -> service.extract(REQUEST, fullContext));
-    String oldVersion = state().path("files").path(ZIP).path("members")
-        .path(DATASET + ".csv").path("versionId").asText();
+    String oldVersion =
+        state()
+            .path("files")
+            .path(ZIP)
+            .path("members")
+            .path(DATASET + ".csv")
+            .path("versionId")
+            .asText();
     fake.objects.remove(CSV);
 
-    assertEquals(ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
+    assertEquals(
+        ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
     String newVersion = fake.versions.get(CSV);
     assertNotEquals(oldVersion, newVersion);
-    assertArrayEquals(members.get(DATASET + ".csv").getBytes(StandardCharsets.UTF_8),
-        fake.objects.get(CSV));
+    assertArrayEquals(
+        members.get(DATASET + ".csv").getBytes(StandardCharsets.UTF_8), fake.objects.get(CSV));
     JsonNode primary = state().path("files").path(ZIP).path("members").path(DATASET + ".csv");
     assertEquals("COMPLETE", primary.path("status").asText());
     assertEquals(newVersion, primary.path("versionId").asText());
-    assertEquals(newVersion, RuntimeSupport.JSON.readTree(
-        fake.objects.get(StreamingS3.checksumKey(CSV))).path("versionId").asText());
-    assertEquals(List.of(CSV, CSV, PREFIX + "downloads/" + DATASET + "/"
-        + DATASET + "_multires.csv"), fake.completedKeys);
+    assertEquals(
+        newVersion,
+        RuntimeSupport.JSON
+            .readTree(fake.objects.get(StreamingS3.checksumKey(CSV)))
+            .path("versionId")
+            .asText());
+    assertEquals(
+        List.of(CSV, CSV, PREFIX + "downloads/" + DATASET + "/" + DATASET + "_multires.csv"),
+        fake.completedKeys);
   }
 
   @Test
@@ -487,14 +583,19 @@ final class FullVersionExtractionTest {
     members.put(DATASET + "_multires.csv", "a,b\n");
     fake.objects.put(ZIP, zip(members));
     var failOnce = new AtomicBoolean(true);
-    doAnswer(invocation -> {
-      if (fake.completedKeys.contains(CSV) && failOnce.getAndSet(false)) {
-        throw S3Exception.builder().statusCode(503).message("upload failed").build();
-      }
-      return fake.client().uploadPart(
-          invocation.<java.util.function.Consumer<UploadPartRequest.Builder>>getArgument(0),
-          invocation.getArgument(1, RequestBody.class));
-    }).when(s3).uploadPart(any(java.util.function.Consumer.class), any(RequestBody.class));
+    doAnswer(
+            invocation -> {
+              if (fake.completedKeys.contains(CSV) && failOnce.getAndSet(false)) {
+                throw S3Exception.builder().statusCode(503).message("upload failed").build();
+              }
+              return fake.client()
+                  .uploadPart(
+                      invocation
+                          .<java.util.function.Consumer<UploadPartRequest.Builder>>getArgument(0),
+                      invocation.getArgument(1, RequestBody.class));
+            })
+        .when(s3)
+        .uploadPart(any(java.util.function.Consumer.class), any(RequestBody.class));
 
     assertThrows(S3Exception.class, () -> service.extract(REQUEST, fullContext));
     var oldState = (com.fasterxml.jackson.databind.node.ObjectNode) state();
@@ -503,11 +604,26 @@ final class FullVersionExtractionTest {
     fake.objects.put(STATE, RuntimeSupport.JSON.writeValueAsBytes(oldState));
     fake.objects.remove(CSV);
 
-    assertEquals(ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
-    assertEquals("COMPLETE", state().path("files").path(ZIP).path("members")
-        .path(DATASET + ".csv").path("status").asText());
-    assertEquals(fake.versions.get(CSV), state().path("files").path(ZIP).path("members")
-        .path(DATASET + ".csv").path("versionId").asText());
+    assertEquals(
+        ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
+    assertEquals(
+        "COMPLETE",
+        state()
+            .path("files")
+            .path(ZIP)
+            .path("members")
+            .path(DATASET + ".csv")
+            .path("status")
+            .asText());
+    assertEquals(
+        fake.versions.get(CSV),
+        state()
+            .path("files")
+            .path(ZIP)
+            .path("members")
+            .path(DATASET + ".csv")
+            .path("versionId")
+            .asText());
   }
 
   @Test
@@ -519,26 +635,38 @@ final class FullVersionExtractionTest {
     members.put(DATASET + "_multires.csv", "a,b\n");
     fake.objects.put(ZIP, zip(members));
     var failOnce = new AtomicBoolean(true);
-    doAnswer(invocation -> {
-      if (fake.completedKeys.contains(CSV) && failOnce.getAndSet(false)) {
-        throw S3Exception.builder().statusCode(503).message("upload failed").build();
-      }
-      return fake.client().uploadPart(
-          invocation.<java.util.function.Consumer<UploadPartRequest.Builder>>getArgument(0),
-          invocation.getArgument(1, RequestBody.class));
-    }).when(s3).uploadPart(any(java.util.function.Consumer.class), any(RequestBody.class));
+    doAnswer(
+            invocation -> {
+              if (fake.completedKeys.contains(CSV) && failOnce.getAndSet(false)) {
+                throw S3Exception.builder().statusCode(503).message("upload failed").build();
+              }
+              return fake.client()
+                  .uploadPart(
+                      invocation
+                          .<java.util.function.Consumer<UploadPartRequest.Builder>>getArgument(0),
+                      invocation.getArgument(1, RequestBody.class));
+            })
+        .when(s3)
+        .uploadPart(any(java.util.function.Consumer.class), any(RequestBody.class));
 
     assertThrows(S3Exception.class, () -> service.extract(REQUEST, fullContext));
     fake.objects.remove(CSV);
     members.put(DATASET + ".csv", header() + "\nother\n");
     fake.objects.put(ZIP, zip(members));
 
-    var failure = assertThrows(IllegalArgumentException.class,
-        () -> service.extract(REQUEST, fullContext));
+    var failure =
+        assertThrows(IllegalArgumentException.class, () -> service.extract(REQUEST, fullContext));
     assertTrue(failure.getMessage().contains("differs from recorded checksum"));
     assertFalse(fake.objects.containsKey(CSV));
-    assertEquals("RECOVERING", state().path("files").path(ZIP).path("members")
-        .path(DATASET + ".csv").path("status").asText());
+    assertEquals(
+        "RECOVERING",
+        state()
+            .path("files")
+            .path(ZIP)
+            .path("members")
+            .path(DATASET + ".csv")
+            .path("status")
+            .asText());
     assertEquals("PENDING", state().path("files").path(ZIP).path("status").asText());
   }
 
@@ -551,36 +679,60 @@ final class FullVersionExtractionTest {
     members.put(DATASET + "_multires.csv", "a,b\n");
     fake.objects.put(ZIP, zip(members));
     var uploadFails = new AtomicBoolean(true);
-    doAnswer(invocation -> {
-      if (fake.completedKeys.contains(CSV) && uploadFails.getAndSet(false)) {
-        throw S3Exception.builder().statusCode(503).message("upload failed").build();
-      }
-      return fake.client().uploadPart(
-          invocation.<java.util.function.Consumer<UploadPartRequest.Builder>>getArgument(0),
-          invocation.getArgument(1, RequestBody.class));
-    }).when(s3).uploadPart(any(java.util.function.Consumer.class), any(RequestBody.class));
+    doAnswer(
+            invocation -> {
+              if (fake.completedKeys.contains(CSV) && uploadFails.getAndSet(false)) {
+                throw S3Exception.builder().statusCode(503).message("upload failed").build();
+              }
+              return fake.client()
+                  .uploadPart(
+                      invocation
+                          .<java.util.function.Consumer<UploadPartRequest.Builder>>getArgument(0),
+                      invocation.getArgument(1, RequestBody.class));
+            })
+        .when(s3)
+        .uploadPart(any(java.util.function.Consumer.class), any(RequestBody.class));
     assertThrows(S3Exception.class, () -> service.extract(REQUEST, fullContext));
     fake.objects.remove(CSV);
 
     String evidenceKey = StreamingS3.checksumKey(CSV);
     var evidenceFails = new AtomicBoolean(true);
-    doAnswer(invocation -> {
-      PutObjectRequest request = invocation.getArgument(0);
-      if (evidenceKey.equals(request.key()) && evidenceFails.getAndSet(false)) {
-        throw S3Exception.builder().statusCode(503).message("evidence failed").build();
-      }
-      return fake.client().putObject(request, invocation.getArgument(1, RequestBody.class));
-    }).when(s3).putObject(any(PutObjectRequest.class), any(RequestBody.class));
+    doAnswer(
+            invocation -> {
+              PutObjectRequest request = invocation.getArgument(0);
+              if (evidenceKey.equals(request.key()) && evidenceFails.getAndSet(false)) {
+                throw S3Exception.builder().statusCode(503).message("evidence failed").build();
+              }
+              return fake.client().putObject(request, invocation.getArgument(1, RequestBody.class));
+            })
+        .when(s3)
+        .putObject(any(PutObjectRequest.class), any(RequestBody.class));
 
     assertThrows(S3Exception.class, () -> service.extract(REQUEST, fullContext));
     assertTrue(fake.objects.containsKey(CSV));
-    assertEquals("RECOVERING", state().path("files").path(ZIP).path("members")
-        .path(DATASET + ".csv").path("status").asText());
-    assertEquals(ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
-    assertEquals("COMPLETE", state().path("files").path(ZIP).path("members")
-        .path(DATASET + ".csv").path("status").asText());
-    assertEquals(fake.versions.get(CSV), RuntimeSupport.JSON.readTree(
-        fake.objects.get(evidenceKey)).path("versionId").asText());
+    assertEquals(
+        "RECOVERING",
+        state()
+            .path("files")
+            .path(ZIP)
+            .path("members")
+            .path(DATASET + ".csv")
+            .path("status")
+            .asText());
+    assertEquals(
+        ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
+    assertEquals(
+        "COMPLETE",
+        state()
+            .path("files")
+            .path(ZIP)
+            .path("members")
+            .path(DATASET + ".csv")
+            .path("status")
+            .asText());
+    assertEquals(
+        fake.versions.get(CSV),
+        RuntimeSupport.JSON.readTree(fake.objects.get(evidenceKey)).path("versionId").asText());
     assertEquals(2, fake.completedKeys.stream().filter(CSV::equals).count());
   }
 
@@ -604,8 +756,11 @@ final class FullVersionExtractionTest {
 
   @Test
   void rejectsArchiveExceedingTotalCompressionRatio() throws Exception {
-    service = component(List.of(policy(DATASET, List.of("_first", "_second"), List.of(),
-        1024 * 1024, 99, 1000, 2)));
+    service =
+        component(
+            List.of(
+                policy(
+                    DATASET, List.of("_first", "_second"), List.of(), 1024 * 1024, 99, 1000, 2)));
     fake.scanStatus.put(ZIP, "NO_THREATS_FOUND");
     var entries = new LinkedHashMap<String, String>();
     entries.put(DATASET + "_first.csv", "a,b\n");
@@ -617,8 +772,7 @@ final class FullVersionExtractionTest {
 
   @Test
   void enforcesEntryRatioIndependentlyOfArchiveRatio() throws Exception {
-    service = component(List.of(policy(DATASET, List.of(), List.of(), 1024 * 1024,
-        99, 2, 1000)));
+    service = component(List.of(policy(DATASET, List.of(), List.of(), 1024 * 1024, 99, 2, 1000)));
     fake.scanStatus.put(ZIP, "NO_THREATS_FOUND");
     fake.objects.put(ZIP, zip(Map.of(DATASET + ".csv", header() + "\n" + "x".repeat(1000))));
 
@@ -628,31 +782,36 @@ final class FullVersionExtractionTest {
 
   @Test
   void allowsCompressionAtConfiguredRatioLimit() throws Exception {
-    service = component(List.of(policy(DATASET, List.of(), List.of(), 1024 * 1024,
-        1, 1, 1)));
+    service = component(List.of(policy(DATASET, List.of(), List.of(), 1024 * 1024, 1, 1, 1)));
     fake.scanStatus.put(ZIP, "NO_THREATS_FOUND");
     fake.objects.put(ZIP, storedZip(DATASET + ".csv", header() + "\n"));
 
-    assertEquals(ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
+    assertEquals(
+        ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
     assertEquals("UNPACKED", state().path("files").path(ZIP).path("status").asText());
   }
 
   @Test
   void acceptsRatiosAboveFormerFixedLimitsWhenConfigured() throws Exception {
-    service = component(List.of(policy(DATASET, List.of(), List.of(), 1024 * 1024,
-        1, 1000, 1000)));
+    service = component(List.of(policy(DATASET, List.of(), List.of(), 1024 * 1024, 1, 1000, 1000)));
     fake.scanStatus.put(ZIP, "NO_THREATS_FOUND");
-    fake.objects.put(ZIP, zip(Map.of(DATASET + ".csv", header() + "\n"
-        + "x".repeat(30_000))));
+    fake.objects.put(ZIP, zip(Map.of(DATASET + ".csv", header() + "\n" + "x".repeat(30_000))));
 
-    assertEquals(ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
+    assertEquals(
+        ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
     assertEquals("UNPACKED", state().path("files").path(ZIP).path("status").asText());
     assertTrue(fake.objects.get(CSV).length > 30_000);
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"notes.txt", "../bad.csv", "nested/add_isl_royalmailaddress.csv",
-      "add_isl_royalmailaddress_notes.json", "dir\\file.csv"})
+  @ValueSource(
+      strings = {
+        "notes.txt",
+        "../bad.csv",
+        "nested/add_isl_royalmailaddress.csv",
+        "add_isl_royalmailaddress_notes.json",
+        "dir\\file.csv"
+      })
   void rejectsUnexpectedOrUnsafeZipEntry(String name) throws Exception {
     fake.scanStatus.put(ZIP, "NO_THREATS_FOUND");
     fake.objects.put(ZIP, zip(Map.of(name, "bad\n")));
@@ -675,9 +834,13 @@ final class FullVersionExtractionTest {
 
   @Test
   void rejectsMoreThanOneHundredEntries() throws Exception {
-    service = component(List.of(policy(
-        IntStream.range(0, 101).mapToObj(index -> "_part" + index).toList(),
-        List.of(), 1024 * 1024)));
+    service =
+        component(
+            List.of(
+                policy(
+                    IntStream.range(0, 101).mapToObj(index -> "_part" + index).toList(),
+                    List.of(),
+                    1024 * 1024)));
     fake.scanStatus.put(ZIP, "NO_THREATS_FOUND");
     var entries = new LinkedHashMap<String, String>();
     for (int i = 0; i < 101; i++) {
@@ -690,8 +853,8 @@ final class FullVersionExtractionTest {
 
   @Test
   void enforcesDatasetEntryCountBelowGlobalFormerLimit() throws Exception {
-    service = component(List.of(policy(DATASET, List.of("_extra"), List.of(), 1024 * 1024,
-        1, 100, 20)));
+    service =
+        component(List.of(policy(DATASET, List.of("_extra"), List.of(), 1024 * 1024, 1, 100, 20)));
     fake.scanStatus.put(ZIP, "NO_THREATS_FOUND");
     var entries = new LinkedHashMap<String, String>();
     entries.put(DATASET + ".csv", header() + "\n");
@@ -705,8 +868,8 @@ final class FullVersionExtractionTest {
   @Test
   void rejectsOversizedStoredEntry() throws Exception {
     fake.scanStatus.put(ZIP, "NO_THREATS_FOUND");
-    fake.objects.put(ZIP, storedZip(DATASET + ".csv", header() + "\n"
-        + "x".repeat(1024 * 1024 + 1)));
+    fake.objects.put(
+        ZIP, storedZip(DATASET + ".csv", header() + "\n" + "x".repeat(1024 * 1024 + 1)));
     assertRejected("INVALID_ZIP");
     assertEquals("PENDING", state().path("files").path(ZIP).path("status").asText());
   }
@@ -726,10 +889,11 @@ final class FullVersionExtractionTest {
   void acceptsDatasetLimitAboveGlobalLimit() throws Exception {
     service = component(List.of(policy(DATASET, 2L * 1024 * 1024)));
     fake.scanStatus.put(ZIP, "NO_THREATS_FOUND");
-    fake.objects.put(ZIP, storedZip(DATASET + ".csv",
-        header() + "\n" + "x".repeat(1024 * 1024 + 1)));
+    fake.objects.put(
+        ZIP, storedZip(DATASET + ".csv", header() + "\n" + "x".repeat(1024 * 1024 + 1)));
 
-    assertEquals(ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
+    assertEquals(
+        ExtractionResult.Status.IN_PROGRESS, service.extract(REQUEST, fullContext).status());
     assertTrue(fake.objects.get(CSV).length > 1024 * 1024);
     assertEquals("UNPACKED", state().path("files").path(ZIP).path("status").asText());
   }
@@ -748,13 +912,17 @@ final class FullVersionExtractionTest {
   void rejectsNonPositiveDatasetLimit() {
     assertThrows(IllegalArgumentException.class, () -> policy(DATASET, 0));
     assertThrows(IllegalArgumentException.class, () -> policy(DATASET, -1));
-    assertThrows(IllegalArgumentException.class,
+    assertThrows(
+        IllegalArgumentException.class,
         () -> policy(DATASET, List.of(), List.of(), 1024, 0, 100, 20));
-    assertThrows(IllegalArgumentException.class,
+    assertThrows(
+        IllegalArgumentException.class,
         () -> policy(DATASET, List.of(), List.of(), 1024, 100, 100, 20));
-    assertThrows(IllegalArgumentException.class,
+    assertThrows(
+        IllegalArgumentException.class,
         () -> policy(DATASET, List.of(), List.of(), 1024, 99, 0, 20));
-    assertThrows(IllegalArgumentException.class,
+    assertThrows(
+        IllegalArgumentException.class,
         () -> policy(DATASET, List.of(), List.of(), 1024, 99, 100, 0));
   }
 
@@ -779,27 +947,33 @@ final class FullVersionExtractionTest {
 
   @Test
   void refusesUnexpectedVersionOrManifest() {
-    var wrongPackage = Map.<String, Object>of("mode", "FULL", "versions",
-        Map.of("data_package", "99999", "version_id", "150450"));
-    assertThrows(IllegalArgumentException.class,
-        () -> service.extract(wrongPackage, fullContext));
-    fake.objects.put(MANIFEST, new String(manifest(), StandardCharsets.UTF_8)
-        .replace("\"previous\":null", "\"previous\":\"150449\"")
-        .getBytes(StandardCharsets.UTF_8));
-    assertThrows(IllegalArgumentException.class,
-        () -> service.extract(REQUEST, fullContext));
+    var wrongPackage =
+        Map.<String, Object>of(
+            "mode", "FULL", "versions", Map.of("data_package", "99999", "version_id", "150450"));
+    assertThrows(IllegalArgumentException.class, () -> service.extract(wrongPackage, fullContext));
+    fake.objects.put(
+        MANIFEST,
+        new String(manifest(), StandardCharsets.UTF_8)
+            .replace("\"previous\":null", "\"previous\":\"150449\"")
+            .getBytes(StandardCharsets.UTF_8));
+    assertThrows(IllegalArgumentException.class, () -> service.extract(REQUEST, fullContext));
     assertFalse(fake.objects.containsKey(STATE));
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"unexpected.txt", "manifest.json", "../other.zip",
-      "nested/add_isl_royalmailaddress.zip"})
+  @ValueSource(
+      strings = {
+        "unexpected.txt",
+        "manifest.json",
+        "../other.zip",
+        "nested/add_isl_royalmailaddress.zip"
+      })
   void rejectsUnexpectedS3Input(String name) {
     String key = PREFIX + "downloads/" + name;
     fake.objects.put(key, "unexpected".getBytes(StandardCharsets.UTF_8));
 
-    var failure = assertThrows(IllegalArgumentException.class,
-        () -> service.extract(REQUEST, fullContext));
+    var failure =
+        assertThrows(IllegalArgumentException.class, () -> service.extract(REQUEST, fullContext));
     assertEquals("Unexpected FULL input: " + key, failure.getMessage());
     assertFalse(fake.objects.containsKey(STATE));
   }
@@ -809,8 +983,8 @@ final class FullVersionExtractionTest {
     fake.objects.remove(ZIP);
     fake.objects.remove(SUMMARY);
 
-    var failure = assertThrows(IllegalArgumentException.class,
-        () -> service.extract(REQUEST, fullContext));
+    var failure =
+        assertThrows(IllegalArgumentException.class, () -> service.extract(REQUEST, fullContext));
     assertEquals("FULL version has no input files", failure.getMessage());
     assertFalse(fake.objects.containsKey(STATE));
   }
@@ -818,8 +992,8 @@ final class FullVersionExtractionTest {
   @Test
   void rejectsUnsupportedCouMode() {
     var request = Map.<String, Object>of("mode", "COU");
-    var failure = assertThrows(IllegalArgumentException.class,
-        () -> service.extract(request, fullContext));
+    var failure =
+        assertThrows(IllegalArgumentException.class, () -> service.extract(request, fullContext));
     assertEquals("Unsupported extraction mode", failure.getMessage());
     assertFalse(fake.objects.containsKey(STATE));
   }
@@ -827,8 +1001,10 @@ final class FullVersionExtractionTest {
   @Test
   void rejectsMissingFullFeedConfiguration() {
     var extractor = new FullVersionExtraction(s3, null, null, service);
-    var failure = assertThrows(IllegalArgumentException.class,
-        () -> extractor.extract(FullExtractionRequest.parse(REQUEST), fullContext));
+    var failure =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> extractor.extract(FullExtractionRequest.parse(REQUEST), fullContext));
     assertEquals("Missing FULL feed configuration", failure.getMessage());
   }
 
@@ -842,15 +1018,16 @@ final class FullVersionExtractionTest {
     entries.put(DATASET + "_multires.csv", "a,b\n");
     entries.put(DATASET + "_rltenty.csv", "skipped\n");
     fake.objects.put(ZIP, zip(entries));
-    assertEquals(ExtractionResult.Status.COMPLETE,
+    assertEquals(
+        ExtractionResult.Status.COMPLETE,
         service.extract(REQUEST, TestContext.withRemainingMillis(900_000)).status());
     String ancillary = PREFIX + "downloads/" + DATASET + "/" + DATASET + "_multires.csv";
     assertArrayEquals("a,b\n".getBytes(StandardCharsets.UTF_8), fake.objects.get(ancillary));
-    assertFalse(fake.objects.containsKey(PREFIX + "downloads/" + DATASET + "/"
-        + DATASET + "_rltenty.csv"));
+    assertFalse(
+        fake.objects.containsKey(PREFIX + "downloads/" + DATASET + "/" + DATASET + "_rltenty.csv"));
     assertEquals(2, state().path("files").path(ZIP).path("outputKeys").size());
-    assertEquals(DATASET + "_rltenty.csv",
-        state().path("files").path(ZIP).path("skipped").get(0).asText());
+    assertEquals(
+        DATASET + "_rltenty.csv", state().path("files").path(ZIP).path("skipped").get(0).asText());
     assertEquals(0, state().path("files").path(SUMMARY).path("skipped").size());
   }
 
@@ -862,10 +1039,12 @@ final class FullVersionExtractionTest {
     fake.scanStatus.put(ZIP, "NO_THREATS_FOUND");
     fake.scanStatus.put(SUMMARY, "NO_THREATS_FOUND");
     String skippedName = DATASET + "_rltenty.csv";
-    String skippedContent = compressed
-        ? IntStream.range(0, 20_000).mapToObj(Integer::toString)
-            .collect(java.util.stream.Collectors.joining(","))
-        : "x".repeat(128 * 1024);
+    String skippedContent =
+        compressed
+            ? IntStream.range(0, 20_000)
+                .mapToObj(Integer::toString)
+                .collect(java.util.stream.Collectors.joining(","))
+            : "x".repeat(128 * 1024);
     var entries = new LinkedHashMap<String, String>();
     entries.put(DATASET + ".csv", header() + "\n");
     entries.put(skippedName, skippedContent);
@@ -874,19 +1053,25 @@ final class FullVersionExtractionTest {
     fake.objects.put(ZIP, archive);
 
     assertEquals(ExtractionResult.Status.COMPLETE, service.extract(REQUEST, fullContext).status());
-    assertArrayEquals("code\n".getBytes(StandardCharsets.UTF_8),
+    assertArrayEquals(
+        "code\n".getBytes(StandardCharsets.UTF_8),
         fake.objects.get(PREFIX + "downloads/" + DATASET + "/" + DATASET + "_otrclass.csv"));
-    assertEquals(skippedContent.length(), state().path("files").path(ZIP).path("members")
-        .path(skippedName).path("bytes").asLong());
+    assertEquals(
+        skippedContent.length(),
+        state().path("files").path(ZIP).path("members").path(skippedName).path("bytes").asLong());
 
     int nameAt = indexOf(archive, skippedName.getBytes(StandardCharsets.UTF_8));
     assertTrue(nameAt >= 30);
-    int extraLength = Short.toUnsignedInt(ByteBuffer.wrap(archive)
-        .order(ByteOrder.LITTLE_ENDIAN).getShort(nameAt - 2));
+    int extraLength =
+        Short.toUnsignedInt(
+            ByteBuffer.wrap(archive).order(ByteOrder.LITTLE_ENDIAN).getShort(nameAt - 2));
     long skippedStart = nameAt + skippedName.length() + extraLength;
-    long skippedEnd = skippedStart
-        + (compressed ? compressedSizeFromCentralDirectory(archive, skippedName)
-            : skippedContent.length()) - 1;
+    long skippedEnd =
+        skippedStart
+            + (compressed
+                ? compressedSizeFromCentralDirectory(archive, skippedName)
+                : skippedContent.length())
+            - 1;
     var requests = org.mockito.ArgumentCaptor.forClass(GetObjectRequest.class);
     verify(s3, atLeastOnce()).getObject(requests.capture());
     for (GetObjectRequest request : requests.getAllValues()) {
@@ -896,7 +1081,8 @@ final class FullVersionExtractionTest {
       String[] bounds = request.range().substring("bytes=".length()).split("-");
       long start = Long.parseLong(bounds[0]);
       long end = Long.parseLong(bounds[1]);
-      assertTrue(end < skippedStart || start > skippedEnd,
+      assertTrue(
+          end < skippedStart || start > skippedEnd,
           "Range overlaps skipped ZIP member payload: " + request.range());
     }
   }
@@ -986,17 +1172,20 @@ final class FullVersionExtractionTest {
 
   @Test
   void rejectsInvalidEntryPolicies() {
-    assertThrows(IllegalArgumentException.class,
+    assertThrows(
+        IllegalArgumentException.class,
         () -> policy(List.of("_multires", "_multires"), List.of(), 1024));
-    assertThrows(IllegalArgumentException.class,
+    assertThrows(
+        IllegalArgumentException.class,
         () -> policy(List.of("_multires"), List.of("_multires"), 1024));
-    assertThrows(IllegalArgumentException.class,
+    assertThrows(
+        IllegalArgumentException.class,
         () -> policy(List.of("_multires"), List.of("_rltenty", "_rltenty"), 1024));
-    assertThrows(IllegalArgumentException.class,
-        () -> policy(List.of("multires"), List.of(), 1024));
-    assertThrows(IllegalArgumentException.class,
-        () -> new ExtractionProperties.DatasetPolicy(DATASET, null, List.of(),
-            1024, 99, 100, 20));
+    assertThrows(
+        IllegalArgumentException.class, () -> policy(List.of("multires"), List.of(), 1024));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new ExtractionProperties.DatasetPolicy(DATASET, null, List.of(), 1024, 99, 100, 20));
   }
 
   private JsonNode state() throws Exception {
@@ -1019,13 +1208,17 @@ final class FullVersionExtractionTest {
 
   private static String header() {
     return DatasetCatalog.tables().stream()
-        .filter(table -> DATASET.equals(table.name())).findFirst().orElseThrow().header();
+        .filter(table -> DATASET.equals(table.name()))
+        .findFirst()
+        .orElseThrow()
+        .header();
   }
 
   private byte[] manifest() {
     return """
-        {"mode":"FULL","packageId":"24833","versionId":"150450","previous":null}
-        """.getBytes(StandardCharsets.UTF_8);
+    {"mode":"FULL","packageId":"24833","versionId":"150450","previous":null}
+    """
+        .getBytes(StandardCharsets.UTF_8);
   }
 
   private static byte[] zip(Map<String, String> members) throws Exception {
@@ -1092,8 +1285,8 @@ final class FullVersionExtractionTest {
     for (int i = nameAt + nameBytes.length; i < archive.length - 46; i++) {
       if (fields.getInt(i) == 0x02014b50
           && i + 46 + nameBytes.length <= archive.length
-          && Arrays.equals(archive, i + 46, i + 46 + nameBytes.length,
-              nameBytes, 0, nameBytes.length)) {
+          && Arrays.equals(
+              archive, i + 46, i + 46 + nameBytes.length, nameBytes, 0, nameBytes.length)) {
         return Integer.toUnsignedLong(fields.getInt(i + 20));
       }
     }

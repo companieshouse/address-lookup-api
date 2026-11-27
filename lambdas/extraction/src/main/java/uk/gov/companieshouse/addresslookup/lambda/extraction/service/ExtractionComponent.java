@@ -16,9 +16,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
@@ -49,6 +49,13 @@ public final class ExtractionComponent {
   private static final int MAX_CSV_HEADER_BYTES = 64 * 1024;
   private static final int DRAIN_BUFFER_BYTES = 1024 * 1024;
   private static final long PROGRESS_INTERVAL_BYTES = 256L * 1024 * 1024;
+  private static final String TOO_MANY_ZIP_ENTRIES = "Too many ZIP entries";
+  private static final String BYTES_FIELD = "bytes";
+  private static final String ACTION_FIELD = "action";
+  private static final String MEMBER_FIELD = "member";
+  private static final String EXPANDED_BYTES_FIELD = "expanded_bytes";
+  private static final String COMPRESSED_BYTES_FIELD = "compressed_bytes";
+  private static final String REMAINING_MS_FIELD = "remaining_ms";
 
   private enum EntryAction {
     LOAD,
@@ -80,16 +87,41 @@ public final class ExtractionComponent {
 
   record Member(String action, long bytes, String outputKey, String versionId, String sha256) {}
 
+  record ZipTask(
+      String sourceKey, String sourceVersion, String dataset, String outputPrefix, String bucket) {}
+
+  private record ZipSession(
+      S3ZipChannel channel,
+      ZipFile zip,
+      ReleaseStore store,
+      String bucket,
+      String prefix,
+      Context context,
+      MemberCheckpoint checkpoint,
+      long max,
+      String expectedHeader) {}
+
+  private record PriorMember(
+      Member member, boolean recovering, boolean previouslyRecovering, boolean checkpointed) {}
+
+  private record ExtractedMember(StreamingS3.Uploaded uploaded, long bytes) {}
+
   interface MemberCheckpoint {
     Member completed(String name);
+
     boolean recovering(String name);
+
     void markRecovering(String name, Member member) throws IOException;
+
     void save(String name, Member member) throws IOException;
+
     Set<String> names();
   }
 
-  public ExtractionComponent(S3Client s3, AcquisitionProperties acquisitionProperties,
-                             ExtractionProperties extractionProperties) {
+  public ExtractionComponent(
+      S3Client s3,
+      AcquisitionProperties acquisitionProperties,
+      ExtractionProperties extractionProperties) {
     this.s3 = s3;
     this.acquisitionProperties = acquisitionProperties;
     this.extractionProperties = extractionProperties;
@@ -97,180 +129,294 @@ public final class ExtractionComponent {
   }
 
   public ExtractionResult extract(Map<String, Object> event, Context context)
-      throws IOException, NoSuchAlgorithmException,
+      throws IOException,
+          NoSuchAlgorithmException,
           StreamingS3.ChecksumMismatchException,
           StreamingS3.ExistingObjectVerificationException {
     return new FullVersionExtraction(s3, acquisitionProperties, extractionProperties, this)
         .extract(FullExtractionRequest.parse(event), context);
   }
 
-  void extractFullZip(String sourceKey, String sourceVersion, String dataset,
-                      String prefix, String bucket,
-                      Context context, List<String> outputs, List<String> skipped,
-                      MemberCheckpoint checkpoint)
-      throws IOException, NoSuchAlgorithmException,
+  void extractFullZip(
+      ZipTask task,
+      Context context,
+      List<String> outputs,
+      List<String> skipped,
+      MemberCheckpoint checkpoint)
+      throws IOException,
+          NoSuchAlgorithmException,
           StreamingS3.ChecksumMismatchException,
           StreamingS3.ExistingObjectVerificationException {
+    String dataset = task.dataset();
+    String bucket = task.bucket();
     String expectedHeader = extractionHeader(dataset);
     var feed = extractionProperties == null ? null : extractionProperties.full();
     check(feed != null && feed.datasetPolicies() != null, "Missing FULL extraction policies");
-    var policies = feed.datasetPolicies().stream()
-        .filter(policy -> dataset.equals(policy.dataset())).toList();
+    var policies =
+        feed.datasetPolicies().stream().filter(policy -> dataset.equals(policy.dataset())).toList();
     check(policies.size() == 1, "Expected one FULL extraction policy for " + dataset);
     var policy = policies.getFirst();
-    long max = policy.maxExtractedBytes();
     var store = new ReleaseStore(s3);
-    try (var channel = new S3ZipChannel(s3, bucket, sourceKey, sourceVersion);
-         var zip = openZip(channel, policy.maxEntries())) {
+    try (var channel = new S3ZipChannel(s3, bucket, task.sourceKey(), task.sourceVersion());
+        var zip = openZip(channel, policy.maxEntries())) {
       var entries = Collections.list(zip.getEntries());
-      check(entries.size() <= policy.maxEntries(),
-          () -> new ArchiveValidationException("Too many ZIP entries"));
+      check(
+          entries.size() <= policy.maxEntries(),
+          () -> new ArchiveValidationException(TOO_MANY_ZIP_ENTRIES));
       entries.sort(Comparator.comparingLong(ZipArchiveEntry::getLocalHeaderOffset));
-      var names = new HashSet<String>();
+      var names = validateArchive(channel, zip, entries, dataset, policy);
+      var session =
+          new ZipSession(
+              channel,
+              zip,
+              store,
+              bucket,
+              task.outputPrefix(),
+              context,
+              checkpoint,
+              policy.maxExtractedBytes(),
+              expectedHeader);
       boolean primary = false;
-      long archiveExpanded = 0;
-      long archiveCompressed = 0;
-      long previousEnd = 0;
-      for (ZipArchiveEntry entry : entries) {
-        EntryAction action = validateEntry(entry, dataset, names, policy);
-        validateLocalHeader(channel, entry);
-        check(entry.getDiskNumberStart() == 0 && !entry.getGeneralPurposeBit().usesEncryption()
-                && (entry.getMethod() == ZipEntry.STORED || entry.getMethod() == ZipEntry.DEFLATED)
-                && zip.canReadEntryData(entry),
-            () -> new ArchiveValidationException("Unsupported ZIP member: " + entry.getName()));
-        long expanded = entry.getSize();
-        long compressed = entry.getCompressedSize();
-        long start = entry.getDataOffset();
-        check(expanded >= 0 && compressed >= 0 && entry.getCrc() >= 0
-                && start >= previousEnd && start <= channel.size()
-                && compressed <= channel.size() - start
-                && (entry.getMethod() != ZipEntry.STORED || expanded == compressed),
-            () -> new ZipException("Invalid ZIP member metadata: " + entry.getName()));
-        previousEnd = start + compressed;
-        check(expanded <= max - archiveExpanded,
-            () -> new ZipException("Expanded archive exceeds maximum allowed size"));
-        archiveExpanded += expanded;
-        check(compressed <= channel.size() - archiveCompressed,
-            () -> new ZipException("Invalid ZIP archive compressed size"));
-        archiveCompressed += compressed;
-        check(!exceedsRatio(expanded, compressed, policy.maxEntryCompressionRatio()),
-            () -> new ZipException("ZIP entry exceeds maximum compression ratio"));
-        check(!exceedsRatio(archiveExpanded, archiveCompressed,
-                policy.maxArchiveCompressionRatio()),
-            () -> new ZipException("ZIP archive exceeds maximum compression ratio"));
-      }
       for (ZipArchiveEntry entry : entries) {
         EntryAction action = actionFor(entry, dataset, policy);
-        String name = entry.getName();
-        String outputKey = prefix + name;
-        Member previous = checkpoint.completed(name);
-        boolean recovering = checkpoint.recovering(name);
-        boolean previouslyRecovering = recovering;
-        boolean checkpointed = previous != null && !recovering;
-        if (previous == null && action != EntryAction.SKIP) {
-          previous = previousOutput(store, bucket, outputKey, action);
-        }
-        if (previous != null) {
-          check(previous.action().equals(action.name())
-                  && previous.bytes() >= 0
-                  && (action == EntryAction.SKIP
-                      ? previous.outputKey() == null && previous.versionId() == null
-                          && previous.sha256() == null
-                      : outputKey.equals(previous.outputKey())
-                          && previous.versionId() != null
-                          && previous.sha256() != null
-                          && previous.sha256().matches("[0-9a-f]{64}")),
-              "Invalid FULL member checkpoint: " + name);
-          if (action != EntryAction.SKIP) {
-            String currentVersion;
-            try {
-              currentVersion = store.version(bucket, outputKey);
-            } catch (S3Exception failure) {
-              if (failure.statusCode() != 404) throw failure;
-              currentVersion = null;
-            }
-            if (currentVersion == null && !recovering) {
-              LOG.error("FULL ZIP member output missing; restarting extraction",
-                  Map.of("bucket", bucket, "key", outputKey, "member", name));
-              checkpoint.markRecovering(name, previous);
-              recovering = true;
-              checkpointed = false;
-            } else if (currentVersion != null && !currentVersion.equals(previous.versionId())) {
-              check(recovering, "Completed ZIP member output changed: " + outputKey);
-              Member current = previousOutput(store, bucket, outputKey, action);
-              if (current != null && currentVersion.equals(current.versionId())) {
-                check(previous.bytes() == current.bytes()
-                    && previous.sha256().equals(current.sha256()),
-                    "Recovered ZIP member output changed: " + outputKey);
-                previous = current;
-                recovering = false;
-              }
-            }
-          }
-        }
-        StreamingS3.Uploaded uploaded = null;
-        long actualBytes = entry.getSize();
-        if (action != EntryAction.SKIP) {
-          channel.readAheadThrough(entry.getDataOffset() + entry.getCompressedSize());
-          try (var limited = new VerifiedEntryInputStream(zip.getInputStream(entry), entry, max)) {
-            var content = new PushbackInputStream(limited, MAX_CSV_HEADER_BYTES);
-            if (action == EntryAction.LOAD) {
-              byte[] header = readHeader(content);
-              validateHeaders(header, expectedHeader);
-              content.unread(header);
-              primary = true;
-            }
-            if (recovering) {
-              Member expected = previous;
-              uploaded = new StreamingS3(s3, context::getRemainingTimeInMillis)
-                  .putRecoverMissingWithProgress(content, bucket, outputKey, max,
-                      expected.versionId(), expected.sha256(), expected.bytes(),
-                      previouslyRecovering,
-                      progress -> logUploadProgress(name, "RECOVER", limited, context, progress));
-            } else if (previous != null) {
-              var digest = MessageDigest.getInstance("SHA-256");
-              drainReplay(new DigestInputStream(content, digest), limited, name, context);
-              check(previous.sha256().equals(HexFormat.of().formatHex(digest.digest())),
-                  "Completed ZIP member content changed: " + name);
-              check(previous.bytes() == limited.entryExpanded,
-                  "Completed ZIP member size changed: " + name);
-            } else {
-              uploaded = new StreamingS3(s3, context::getRemainingTimeInMillis)
-                  .putIdempotentWithProgress(content, bucket, outputKey, max, progress ->
-                      logUploadProgress(name, action.name(), limited, context, progress));
-            }
-            actualBytes = limited.entryExpanded;
-          } finally {
-            channel.stopReadAhead();
-          }
-        } else if (previous != null) {
-          check(previous.bytes() == actualBytes,
-              "Completed ZIP member size changed: " + name);
-        }
-        if (!checkpointed) {
-          Member completed = uploaded == null ? previous
-              : new Member(action.name(), actualBytes,
-                  outputKey, uploaded.version(), uploaded.sha256());
-          if (completed == null) {
-            completed = new Member(action.name(), actualBytes, null, null, null);
-          }
-          checkpoint.save(name, completed);
-        }
-        if (action == EntryAction.SKIP) skipped.add(name);
-        else outputs.add(outputKey);
-        LOG.info("FULL ZIP member complete", Map.of(
-            "member", name, "action", action.name(),
-            "expanded_bytes", actualBytes,
-            "compressed_bytes", entry.getCompressedSize(),
-            "remaining_ms", context.getRemainingTimeInMillis()));
+        processMember(session, entry, action, outputs, skipped);
+        if (action == EntryAction.LOAD) primary = true;
       }
       check(primary, () -> new MissingPrimaryCsvException("CSV_NOT_FOUND"));
       check(names.equals(checkpoint.names()), "FULL ZIP member checkpoint does not match archive");
     }
   }
 
-  private static void validateIndexEntryCount(S3ZipChannel channel, int limit)
+  private static Set<String> validateArchive(
+      S3ZipChannel channel,
+      ZipFile zip,
+      List<ZipArchiveEntry> entries,
+      String dataset,
+      ExtractionProperties.DatasetPolicy policy)
       throws IOException {
+    var names = new HashSet<String>();
+    long archiveExpanded = 0;
+    long archiveCompressed = 0;
+    long previousEnd = 0;
+    for (ZipArchiveEntry entry : entries) {
+      validateEntry(entry, dataset, names, policy);
+      validateLocalHeader(channel, entry);
+      check(
+          entry.getDiskNumberStart() == 0
+              && !entry.getGeneralPurposeBit().usesEncryption()
+              && (entry.getMethod() == ZipEntry.STORED || entry.getMethod() == ZipEntry.DEFLATED)
+              && zip.canReadEntryData(entry),
+          () -> new ArchiveValidationException("Unsupported ZIP member: " + entry.getName()));
+      long expanded = entry.getSize();
+      long compressed = entry.getCompressedSize();
+      long start = entry.getDataOffset();
+      check(
+          expanded >= 0
+              && compressed >= 0
+              && entry.getCrc() >= 0
+              && start >= previousEnd
+              && start <= channel.size()
+              && compressed <= channel.size() - start
+              && (entry.getMethod() != ZipEntry.STORED || expanded == compressed),
+          () -> new ZipException("Invalid ZIP member metadata: " + entry.getName()));
+      previousEnd = start + compressed;
+      check(
+          expanded <= policy.maxExtractedBytes() - archiveExpanded,
+          () -> new ZipException("Expanded archive exceeds maximum allowed size"));
+      archiveExpanded += expanded;
+      check(
+          compressed <= channel.size() - archiveCompressed,
+          () -> new ZipException("Invalid ZIP archive compressed size"));
+      archiveCompressed += compressed;
+      check(
+          !exceedsRatio(expanded, compressed, policy.maxEntryCompressionRatio()),
+          () -> new ZipException("ZIP entry exceeds maximum compression ratio"));
+      check(
+          !exceedsRatio(archiveExpanded, archiveCompressed, policy.maxArchiveCompressionRatio()),
+          () -> new ZipException("ZIP archive exceeds maximum compression ratio"));
+    }
+    return names;
+  }
+
+  private void processMember(
+      ZipSession session,
+      ZipArchiveEntry entry,
+      EntryAction action,
+      List<String> outputs,
+      List<String> skipped)
+      throws IOException,
+          NoSuchAlgorithmException,
+          StreamingS3.ChecksumMismatchException,
+          StreamingS3.ExistingObjectVerificationException {
+    String name = entry.getName();
+    String outputKey = session.prefix() + name;
+    PriorMember prior = resolvePrior(session, name, outputKey, action);
+    ExtractedMember extracted =
+        action == EntryAction.SKIP
+            ? new ExtractedMember(null, entry.getSize())
+            : extractMember(session, entry, action, prior, outputKey);
+    if (action == EntryAction.SKIP && prior.member() != null) {
+      check(
+          prior.member().bytes() == extracted.bytes(),
+          "Completed ZIP member size changed: " + name);
+    }
+    if (!prior.checkpointed()) {
+      Member completed =
+          extracted.uploaded() == null
+              ? prior.member()
+              : new Member(
+                  action.name(),
+                  extracted.bytes(),
+                  outputKey,
+                  extracted.uploaded().version(),
+                  extracted.uploaded().sha256());
+      if (completed == null)
+        completed = new Member(action.name(), extracted.bytes(), null, null, null);
+      session.checkpoint().save(name, completed);
+    }
+    if (action == EntryAction.SKIP) skipped.add(name);
+    else outputs.add(outputKey);
+    LOG.info(
+        "FULL ZIP member complete",
+        Map.of(
+            MEMBER_FIELD,
+            name,
+            ACTION_FIELD,
+            action.name(),
+            EXPANDED_BYTES_FIELD,
+            extracted.bytes(),
+            COMPRESSED_BYTES_FIELD,
+            entry.getCompressedSize(),
+            REMAINING_MS_FIELD,
+            session.context().getRemainingTimeInMillis()));
+  }
+
+  private static PriorMember resolvePrior(
+      ZipSession session, String name, String outputKey, EntryAction action) throws IOException {
+    Member previous = session.checkpoint().completed(name);
+    boolean recovering = session.checkpoint().recovering(name);
+    boolean previouslyRecovering = recovering;
+    boolean checkpointed = previous != null && !recovering;
+    if (previous == null && action != EntryAction.SKIP) {
+      previous = previousOutput(session.store(), session.bucket(), outputKey, action);
+    }
+    if (previous == null)
+      return new PriorMember(null, recovering, previouslyRecovering, checkpointed);
+    validatePrior(previous, action, outputKey, name);
+    if (action == EntryAction.SKIP) {
+      return new PriorMember(previous, recovering, previouslyRecovering, checkpointed);
+    }
+    String currentVersion = currentOutputVersion(session.store(), session.bucket(), outputKey);
+    if (currentVersion == null && !recovering) {
+      LOG.error(
+          "FULL ZIP member output missing; restarting extraction",
+          Map.of("bucket", session.bucket(), "key", outputKey, MEMBER_FIELD, name));
+      session.checkpoint().markRecovering(name, previous);
+      recovering = true;
+      checkpointed = false;
+    } else if (currentVersion != null && !currentVersion.equals(previous.versionId())) {
+      check(recovering, "Completed ZIP member output changed: " + outputKey);
+      Member current = previousOutput(session.store(), session.bucket(), outputKey, action);
+      if (current != null && currentVersion.equals(current.versionId())) {
+        check(
+            previous.bytes() == current.bytes() && previous.sha256().equals(current.sha256()),
+            "Recovered ZIP member output changed: " + outputKey);
+        previous = current;
+        recovering = false;
+      }
+    }
+    return new PriorMember(previous, recovering, previouslyRecovering, checkpointed);
+  }
+
+  private static void validatePrior(
+      Member previous, EntryAction action, String outputKey, String name) {
+    check(
+        previous.action().equals(action.name())
+            && previous.bytes() >= 0
+            && (action == EntryAction.SKIP
+                ? previous.outputKey() == null
+                    && previous.versionId() == null
+                    && previous.sha256() == null
+                : outputKey.equals(previous.outputKey())
+                    && previous.versionId() != null
+                    && previous.sha256() != null
+                    && previous.sha256().matches("[0-9a-f]{64}")),
+        "Invalid FULL member checkpoint: " + name);
+  }
+
+  private static String currentOutputVersion(ReleaseStore store, String bucket, String outputKey) {
+    try {
+      return store.version(bucket, outputKey);
+    } catch (S3Exception failure) {
+      if (failure.statusCode() != 404) throw failure;
+      return null;
+    }
+  }
+
+  private ExtractedMember extractMember(
+      ZipSession session,
+      ZipArchiveEntry entry,
+      EntryAction action,
+      PriorMember prior,
+      String outputKey)
+      throws IOException,
+          NoSuchAlgorithmException,
+          StreamingS3.ChecksumMismatchException,
+          StreamingS3.ExistingObjectVerificationException {
+    String name = entry.getName();
+    session.channel().readAheadThrough(entry.getDataOffset() + entry.getCompressedSize());
+    try (var limited =
+        new VerifiedEntryInputStream(session.zip().getInputStream(entry), entry, session.max())) {
+      var content = new PushbackInputStream(limited, MAX_CSV_HEADER_BYTES);
+      if (action == EntryAction.LOAD) {
+        byte[] header = readHeader(content);
+        validateHeaders(header, session.expectedHeader());
+        content.unread(header);
+      }
+      StreamingS3.Uploaded uploaded = null;
+      if (prior.recovering()) {
+        Member expected = prior.member();
+        uploaded =
+            new StreamingS3(s3, session.context()::getRemainingTimeInMillis)
+                .putRecoverMissingWithProgress(
+                    content,
+                    session.bucket(),
+                    outputKey,
+                    session.max(),
+                    expected.versionId(),
+                    expected.sha256(),
+                    expected.bytes(),
+                    prior.previouslyRecovering(),
+                    progress ->
+                        logUploadProgress(name, "RECOVER", limited, session.context(), progress));
+      } else if (prior.member() != null) {
+        var digest = MessageDigest.getInstance("SHA-256");
+        drainReplay(new DigestInputStream(content, digest), limited, name, session.context());
+        check(
+            prior.member().sha256().equals(HexFormat.of().formatHex(digest.digest())),
+            "Completed ZIP member content changed: " + name);
+        check(
+            prior.member().bytes() == limited.entryExpanded,
+            "Completed ZIP member size changed: " + name);
+      } else {
+        uploaded =
+            new StreamingS3(s3, session.context()::getRemainingTimeInMillis)
+                .putIdempotentWithProgress(
+                    content,
+                    session.bucket(),
+                    outputKey,
+                    session.max(),
+                    progress ->
+                        logUploadProgress(
+                            name, action.name(), limited, session.context(), progress));
+      }
+      return new ExtractedMember(uploaded, limited.entryExpanded);
+    } finally {
+      session.channel().stopReadAhead();
+    }
+  }
+
+  private static void validateIndexEntryCount(S3ZipChannel channel, int limit) throws IOException {
     int maxTail = (int) Math.min(channel.size(), 65_535L + 22);
     if (maxTail < 22) throw new ZipException("Missing ZIP central directory");
     for (int tailLength = 22; ; tailLength = Math.min(maxTail, tailLength * 2)) {
@@ -281,45 +427,56 @@ public final class ExtractionComponent {
       for (int i = tailLength - 22; i >= 0; i--) {
         if (footer.getInt(i) != 0x06054b50
             || i + 22 + Short.toUnsignedInt(footer.getShort(i + 20)) != tailLength) continue;
-        check(footer.getInt(i + 4) == 0
+        check(
+            footer.getInt(i + 4) == 0
                 && Short.toUnsignedInt(footer.getShort(i + 8))
                     == Short.toUnsignedInt(footer.getShort(i + 10)),
             () -> new ZipException("Unsupported multi-disk ZIP"));
         int count = Short.toUnsignedInt(footer.getShort(i + 10));
-        check(count <= limit || count == 0xffff,
-            () -> new ArchiveValidationException("Too many ZIP entries"));
+        check(
+            count <= limit || count == 0xffff,
+            () -> new ArchiveValidationException(TOO_MANY_ZIP_ENTRIES));
         long locatorAt = channel.size() - tailLength + i - 20;
-        if (locatorAt >= 0) {
-          byte[] locatorBytes = new byte[20];
-          channel.position(locatorAt);
-          readFully(channel, locatorBytes);
-          var locator = ByteBuffer.wrap(locatorBytes).order(ByteOrder.LITTLE_ENDIAN);
-          if (locator.getInt(0) == 0x07064b50) {
-            check(locator.getInt(4) == 0 && locator.getInt(16) == 1,
-                () -> new ZipException("Invalid ZIP64 locator"));
-            long zip64At = locator.getLong(8);
-            check(zip64At >= 0 && zip64At <= channel.size() - 56,
-                () -> new ZipException("Invalid ZIP64 index offset"));
-            byte[] zip64Bytes = new byte[56];
-            channel.position(zip64At);
-            readFully(channel, zip64Bytes);
-            var zip64 = ByteBuffer.wrap(zip64Bytes).order(ByteOrder.LITTLE_ENDIAN);
-            check(zip64.getInt(0) == 0x06064b50 && zip64.getLong(4) >= 44
-                    && zip64.getInt(16) == 0 && zip64.getInt(20) == 0
-                    && zip64.getLong(24) == zip64.getLong(32)
-                    && (count == 0xffff || count == zip64.getLong(32)),
-                () -> new ZipException("Invalid ZIP64 index"));
-            check(zip64.getLong(32) >= 0 && zip64.getLong(32) <= limit,
-                () -> new ArchiveValidationException("Too many ZIP entries"));
-            return;
-          }
-        }
+        if (validateZip64EntryCount(channel, locatorAt, count, limit)) return;
         check(count != 0xffff, () -> new ZipException("Missing ZIP64 locator"));
         return;
       }
       if (tailLength == maxTail) break;
     }
     throw new ZipException("Missing ZIP central directory");
+  }
+
+  private static boolean validateZip64EntryCount(
+      S3ZipChannel channel, long locatorAt, int count, int limit) throws IOException {
+    if (locatorAt < 0) return false;
+    byte[] locatorBytes = new byte[20];
+    channel.position(locatorAt);
+    readFully(channel, locatorBytes);
+    var locator = ByteBuffer.wrap(locatorBytes).order(ByteOrder.LITTLE_ENDIAN);
+    if (locator.getInt(0) != 0x07064b50) return false;
+    check(
+        locator.getInt(4) == 0 && locator.getInt(16) == 1,
+        () -> new ZipException("Invalid ZIP64 locator"));
+    long zip64At = locator.getLong(8);
+    check(
+        zip64At >= 0 && zip64At <= channel.size() - 56,
+        () -> new ZipException("Invalid ZIP64 index offset"));
+    byte[] zip64Bytes = new byte[56];
+    channel.position(zip64At);
+    readFully(channel, zip64Bytes);
+    var zip64 = ByteBuffer.wrap(zip64Bytes).order(ByteOrder.LITTLE_ENDIAN);
+    check(
+        zip64.getInt(0) == 0x06064b50
+            && zip64.getLong(4) >= 44
+            && zip64.getInt(16) == 0
+            && zip64.getInt(20) == 0
+            && zip64.getLong(24) == zip64.getLong(32)
+            && (count == 0xffff || count == zip64.getLong(32)),
+        () -> new ZipException("Invalid ZIP64 index"));
+    check(
+        zip64.getLong(32) >= 0 && zip64.getLong(32) <= limit,
+        () -> new ArchiveValidationException(TOO_MANY_ZIP_ENTRIES));
+    return true;
   }
 
   private static ZipFile openZip(S3ZipChannel channel, int maxEntries) throws IOException {
@@ -332,49 +489,80 @@ public final class ExtractionComponent {
     }
   }
 
-  private static void logUploadProgress(String name, String action,
-                                        VerifiedEntryInputStream limited, Context context,
-                                        StreamingS3.PartProgress progress) {
-    LOG.info("FULL ZIP member progress", Map.of(
-        "member", name, "action", action,
-        "part", progress.partNumber(),
-        "expanded_bytes", progress.bytes(),
-        "compressed_bytes", limited.entryCompressed,
-        "read_inflate_ms", millis(progress.readNanos()),
-        "digest_ms", millis(progress.digestNanos()),
-        "upload_ms", millis(progress.uploadNanos()),
-        "elapsed_ms", millis(progress.elapsedNanos()),
-        "remaining_ms", context.getRemainingTimeInMillis()));
+  private static void logUploadProgress(
+      String name,
+      String action,
+      VerifiedEntryInputStream limited,
+      Context context,
+      StreamingS3.PartProgress progress) {
+    LOG.info(
+        "FULL ZIP member progress",
+        Map.of(
+            MEMBER_FIELD,
+            name,
+            ACTION_FIELD,
+            action,
+            "part",
+            progress.partNumber(),
+            EXPANDED_BYTES_FIELD,
+            progress.bytes(),
+            COMPRESSED_BYTES_FIELD,
+            limited.entryCompressed,
+            "read_inflate_ms",
+            millis(progress.readNanos()),
+            "digest_ms",
+            millis(progress.digestNanos()),
+            "upload_ms",
+            millis(progress.uploadNanos()),
+            "elapsed_ms",
+            millis(progress.elapsedNanos()),
+            REMAINING_MS_FIELD,
+            context.getRemainingTimeInMillis()));
   }
 
-  private static Member previousOutput(ReleaseStore store, String bucket, String outputKey,
-                                       EntryAction action) throws IOException {
+  private static Member previousOutput(
+      ReleaseStore store, String bucket, String outputKey, EntryAction action) throws IOException {
     var evidence = store.read(bucket, StreamingS3.checksumKey(outputKey));
     if (evidence == null) return null;
-    check(bucket.equals(required(evidence, "bucket"))
+    check(
+        bucket.equals(required(evidence, "bucket"))
             && outputKey.equals(required(evidence, "key"))
-            && evidence.path("bytes").isIntegralNumber()
-            && evidence.path("bytes").longValue() > 0,
+            && evidence.path(BYTES_FIELD).isIntegralNumber()
+            && evidence.path(BYTES_FIELD).longValue() > 0,
         "Invalid existing output evidence: " + outputKey);
-    return new Member(action.name(), evidence.path("bytes").longValue(), outputKey,
-        required(evidence, "versionId"), required(evidence, "sha256"));
+    return new Member(
+        action.name(),
+        evidence.path(BYTES_FIELD).longValue(),
+        outputKey,
+        required(evidence, "versionId"),
+        required(evidence, "sha256"));
   }
 
-  private static void drainReplay(InputStream content, VerifiedEntryInputStream limited,
-                                  String name, Context context)
+  private static void drainReplay(
+      InputStream content, VerifiedEntryInputStream limited, String name, Context context)
       throws IOException {
     byte[] buffer = new byte[DRAIN_BUFFER_BYTES];
     long started = System.nanoTime();
     long nextProgress = PROGRESS_INTERVAL_BYTES;
     while (content.read(buffer) != -1) {
       if (limited.entryExpanded >= nextProgress) {
-        LOG.info("FULL ZIP member progress", Map.of(
-            "member", name, "action", "REPLAY",
-            "expanded_bytes", limited.entryExpanded,
-            "compressed_bytes", limited.entryCompressed,
-            "read_inflate_ms", millis(System.nanoTime() - started),
-            "upload_ms", 0,
-            "remaining_ms", context.getRemainingTimeInMillis()));
+        LOG.info(
+            "FULL ZIP member progress",
+            Map.of(
+                MEMBER_FIELD,
+                name,
+                ACTION_FIELD,
+                "REPLAY",
+                EXPANDED_BYTES_FIELD,
+                limited.entryExpanded,
+                COMPRESSED_BYTES_FIELD,
+                limited.entryCompressed,
+                "read_inflate_ms",
+                millis(System.nanoTime() - started),
+                "upload_ms",
+                0,
+                REMAINING_MS_FIELD,
+                context.getRemainingTimeInMillis()));
         nextProgress = limited.entryExpanded + PROGRESS_INTERVAL_BYTES;
       }
     }
@@ -384,13 +572,15 @@ public final class ExtractionComponent {
     return TimeUnit.NANOSECONDS.toMillis(nanos);
   }
 
-  private static EntryAction validateEntry(ZipEntry entry, String dataset, Set<String> names,
-                                           ExtractionProperties.DatasetPolicy policy)
+  private static EntryAction validateEntry(
+      ZipEntry entry, String dataset, Set<String> names, ExtractionProperties.DatasetPolicy policy)
       throws ArchiveValidationException {
     String name = entry.getName();
-    check(names.size() < policy.maxEntries() && names.add(name),
+    check(
+        names.size() < policy.maxEntries() && names.add(name),
         () -> new ArchiveValidationException("Too many or duplicate ZIP entries"));
-    check(!entry.isDirectory() && !name.contains("/") && !name.contains("\\") && !name.contains(".."),
+    check(
+        !entry.isDirectory() && !name.contains("/") && !name.contains("\\") && !name.contains(".."),
         () -> new ArchiveValidationException("Unexpected ZIP member path"));
     if (name.equals(dataset + ".csv")) return EntryAction.LOAD;
     for (String suffix : policy.extractOnly()) {
@@ -403,8 +593,8 @@ public final class ExtractionComponent {
     throw new ArchiveValidationException("Unexpected ZIP member: " + name);
   }
 
-  private static EntryAction actionFor(ZipEntry entry, String dataset,
-                                       ExtractionProperties.DatasetPolicy policy) {
+  private static EntryAction actionFor(
+      ZipEntry entry, String dataset, ExtractionProperties.DatasetPolicy policy) {
     if (entry.getName().equals(dataset + ".csv")) return EntryAction.LOAD;
     for (String suffix : policy.extractOnly()) {
       if (entry.getName().equals(dataset + suffix + ".csv")) return EntryAction.EXTRACT_ONLY;
@@ -415,7 +605,8 @@ public final class ExtractionComponent {
   private static void validateLocalHeader(S3ZipChannel channel, ZipArchiveEntry entry)
       throws IOException {
     long offset = entry.getLocalHeaderOffset();
-    check(offset >= 0 && offset <= channel.size() - 30,
+    check(
+        offset >= 0 && offset <= channel.size() - 30,
         () -> new ZipException("Invalid ZIP local header offset: " + entry.getName()));
     byte[] header = new byte[30];
     channel.position(offset);
@@ -424,7 +615,8 @@ public final class ExtractionComponent {
     int nameLength = Short.toUnsignedInt(fields.getShort(26));
     int extraLength = Short.toUnsignedInt(fields.getShort(28));
     byte[] name = entry.getRawName();
-    check(fields.getInt(0) == 0x04034b50
+    check(
+        fields.getInt(0) == 0x04034b50
             && Short.toUnsignedInt(fields.getShort(6)) == entry.getRawFlag()
             && Short.toUnsignedInt(fields.getShort(8)) == entry.getMethod()
             && nameLength == name.length
@@ -433,7 +625,8 @@ public final class ExtractionComponent {
         () -> new ZipException("ZIP local header differs from index: " + entry.getName()));
     byte[] localName = new byte[nameLength];
     readFully(channel, localName);
-    check(Arrays.equals(name, localName),
+    check(
+        Arrays.equals(name, localName),
         () -> new ZipException("ZIP member name differs from index: " + entry.getName()));
   }
 
@@ -444,15 +637,21 @@ public final class ExtractionComponent {
     }
   }
 
-  private static void validateHeaders(byte[] header, String expectedHeader)
-      throws IOException, CsvHeaderException {
+  private static void validateHeaders(byte[] header, String expectedHeader) throws IOException {
     try (CSVParser parser =
-        CSVParser.parse(new String(header, StandardCharsets.UTF_8),
-            CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true)
-                .setIgnoreEmptyLines(false).setTrim(false).get())) {
+        CSVParser.parse(
+            new String(header, StandardCharsets.UTF_8),
+            CSVFormat.DEFAULT
+                .builder()
+                .setHeader()
+                .setSkipHeaderRecord(true)
+                .setIgnoreEmptyLines(false)
+                .setTrim(false)
+                .get())) {
       List<String> headers = parser.getHeaderNames();
       List<String> expectedFields = parseExpectedHeader(expectedHeader);
-      check(headers.size() == expectedFields.size(),
+      check(
+          headers.size() == expectedFields.size(),
           () -> new CsvHeaderException("Header size mismatch"));
       check(headers.equals(expectedFields), () -> new CsvHeaderException("Header mismatch"));
     }
@@ -471,11 +670,11 @@ public final class ExtractionComponent {
     return header.toByteArray();
   }
 
-  private static List<String> parseExpectedHeader(String expectedHeader)
-      throws IOException, CsvHeaderException {
+  private static List<String> parseExpectedHeader(String expectedHeader) throws IOException {
     try (CSVParser parser = CSVParser.parse(expectedHeader, CSVFormat.DEFAULT)) {
       var records = parser.getRecords();
-      check(records.size() == 1,
+      check(
+          records.size() == 1,
           () -> new CsvHeaderException("Expected schema header must contain one CSV record"));
       return records.getFirst().toList();
     }
@@ -486,7 +685,7 @@ public final class ExtractionComponent {
     private final long expandedLimit;
     private final CRC32 crc = new CRC32();
     private long entryExpanded;
-    private long entryCompressed;
+    private final long entryCompressed;
 
     private VerifiedEntryInputStream(InputStream input, ZipArchiveEntry entry, long max) {
       super(input);

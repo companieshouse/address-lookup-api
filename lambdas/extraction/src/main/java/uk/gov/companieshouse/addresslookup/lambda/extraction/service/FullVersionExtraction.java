@@ -1,10 +1,10 @@
 package uk.gov.companieshouse.addresslookup.lambda.extraction.service;
 
-import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
-import static uk.gov.companieshouse.release.model.DatasetCatalog.extractionHeader;
 import static uk.gov.companieshouse.addresslookup.lambda.extraction.service.ExtractionResult.Status.COMPLETE;
 import static uk.gov.companieshouse.addresslookup.lambda.extraction.service.ExtractionResult.Status.IN_PROGRESS;
 import static uk.gov.companieshouse.addresslookup.lambda.extraction.service.ExtractionResult.Status.NEEDS_ATTENTION;
+import static uk.gov.companieshouse.addresslookup.lambda.shared.runtime.RuntimeSupport.*;
+import static uk.gov.companieshouse.release.model.DatasetCatalog.extractionHeader;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -39,7 +39,13 @@ final class FullVersionExtraction {
   private static final String PENDING = "PENDING";
   private static final String STATE_COMPLETE = "complete";
   private static final String MEMBER_COMPLETE = "COMPLETE";
+  private static final String MEMBER_RECOVERING = "RECOVERING";
+  private static final String MEMBER_SKIP = "SKIP";
+  private static final String ACTION = "action";
+  private static final String BYTES = "bytes";
+  private static final String OUTPUT_KEY = "outputKey";
   private static final String VERSION_ID = "versionId";
+  private static final String SHA256 = "sha256";
   private static final String FEATURE_TYPE = "featureType";
   private static final String STATUS = "status";
   private static final String OUTPUT_KEYS = "outputKeys";
@@ -54,8 +60,11 @@ final class FullVersionExtraction {
   private final ExtractionProperties extraction;
   private final ExtractionComponent zipExtractor;
 
-  FullVersionExtraction(S3Client s3, AcquisitionProperties acquisition,
-                        ExtractionProperties extraction, ExtractionComponent zipExtractor) {
+  FullVersionExtraction(
+      S3Client s3,
+      AcquisitionProperties acquisition,
+      ExtractionProperties extraction,
+      ExtractionComponent zipExtractor) {
     this.s3 = s3;
     this.acquisition = acquisition;
     this.extraction = extraction;
@@ -63,7 +72,8 @@ final class FullVersionExtraction {
   }
 
   ExtractionResult extract(FullExtractionRequest request, Context context)
-      throws IOException, NoSuchAlgorithmException,
+      throws IOException,
+          NoSuchAlgorithmException,
           StreamingS3.ChecksumMismatchException,
           StreamingS3.ExistingObjectVerificationException {
     var feed = extraction == null ? null : extraction.full();
@@ -71,7 +81,8 @@ final class FullVersionExtraction {
       throw new IllegalArgumentException("Missing FULL feed configuration");
     }
     String packageId = AcquisitionProperties.required(feed.packageId(), "FULL_PACKAGE_ID");
-    String control = prefix(AcquisitionProperties.required(feed.controlPrefix(), "FULL_CONTROL_PREFIX"));
+    String control =
+        prefix(AcquisitionProperties.required(feed.controlPrefix(), "FULL_CONTROL_PREFIX"));
     String landing = prefix(feed.landingPrefix());
 
     check(!control.equals(landing), "Control and Landing prefixes must differ");
@@ -90,10 +101,15 @@ final class FullVersionExtraction {
     return extractFiles(request, context, store, versionPrefix, stateKey, state);
   }
 
-  private ExtractionResult extractFiles(FullExtractionRequest request, Context context,
-                                        ReleaseStore store, String versionPrefix,
-                                        String stateKey, State state)
-      throws IOException, NoSuchAlgorithmException,
+  private ExtractionResult extractFiles(
+      FullExtractionRequest request,
+      Context context,
+      ReleaseStore store,
+      String versionPrefix,
+      String stateKey,
+      State state)
+      throws IOException,
+          NoSuchAlgorithmException,
           StreamingS3.ChecksumMismatchException,
           StreamingS3.ExistingObjectVerificationException {
     String bucket = acquisition.controlBucket();
@@ -122,8 +138,9 @@ final class FullVersionExtraction {
       try {
         state = unpackAndMarkFile(file, context, store, bucket, versionPrefix, stateKey, state);
       } catch (ExtractionComponent.CsvHeaderException
-               | ExtractionComponent.MissingPrimaryCsvException
-               | ExtractionComponent.ArchiveValidationException | ZipException e) {
+          | ExtractionComponent.MissingPrimaryCsvException
+          | ExtractionComponent.ArchiveValidationException
+          | ZipException e) {
         return rejected(request, entries, file.key(), rejectionCode(e), e);
       }
 
@@ -139,7 +156,8 @@ final class FullVersionExtraction {
     JsonNode entry = entries.path(file.key());
     String status = required(entry, STATUS);
     if (UNPACKED.equals(status)) {
-      check(entry.path(OUTPUT_KEYS).isArray() && !entry.path(OUTPUT_KEYS).isEmpty(),
+      check(
+          entry.path(OUTPUT_KEYS).isArray() && !entry.path(OUTPUT_KEYS).isEmpty(),
           "Unpacked file has no output keys");
       return true;
     }
@@ -147,18 +165,26 @@ final class FullVersionExtraction {
     return false;
   }
 
-  private static ExtractionResult scanRejected(FullExtractionRequest request, JsonNode entries,
-                                               String key, String scan) {
+  private static ExtractionResult scanRejected(
+      FullExtractionRequest request, JsonNode entries, String key, String scan) {
     String code = "THREATS_FOUND".equals(scan) ? "THREATS_FOUND" : "SCAN_INCONCLUSIVE";
-    LOG.error("FULL file scan requires attention",
+    LOG.error(
+        "FULL file scan requires attention",
         Map.of("key", key, "scan_status", scan, "reason_code", code));
-    return result(NEEDS_ATTENTION, request.versionId(), entries,
-        new ExtractionResult.Failure(key, code));
+    return result(
+        NEEDS_ATTENTION, request.versionId(), entries, new ExtractionResult.Failure(key, code));
   }
 
-  private State unpackAndMarkFile(InputFile file, Context context, ReleaseStore store,
-                                 String bucket, String versionPrefix, String stateKey, State state)
-      throws IOException, NoSuchAlgorithmException,
+  private State unpackAndMarkFile(
+      InputFile file,
+      Context context,
+      ReleaseStore store,
+      String bucket,
+      String versionPrefix,
+      String stateKey,
+      State state)
+      throws IOException,
+          NoSuchAlgorithmException,
           StreamingS3.ChecksumMismatchException,
           StreamingS3.ExistingObjectVerificationException {
     String key = file.key();
@@ -170,11 +196,16 @@ final class FullVersionExtraction {
 
     String outputPrefix = versionPrefix + DOWNLOADS_PREFIX + file.featureType() + "/";
     if ("ZIP".equals(file.type())) {
-      zipExtractor.extractFullZip(key, versionId, file.featureType(), outputPrefix,
-          bucket, context, outputs, skipped, checkpoint);
+      zipExtractor.extractFullZip(
+          new ExtractionComponent.ZipTask(key, versionId, file.featureType(), outputPrefix, bucket),
+          context,
+          outputs,
+          skipped,
+          checkpoint);
     } else {
-      try (var input = s3.getObject(GetObjectRequest.builder()
-          .bucket(bucket).key(key).versionId(versionId).build())) {
+      try (var input =
+          s3.getObject(
+              GetObjectRequest.builder().bucket(bucket).key(key).versionId(versionId).build())) {
         String output = outputPrefix + file.featureType() + ORDER_SUMMARY_SUFFIX;
         new StreamingS3(s3, context::getRemainingTimeInMillis)
             .putIdempotent(input, bucket, output, MAX_SUMMARY_BYTES);
@@ -211,7 +242,8 @@ final class FullVersionExtraction {
 
     @Override
     public Set<String> names() {
-      return members().isMissingNode() ? Set.of()
+      return members().isMissingNode()
+          ? Set.of()
           : members().properties().stream().map(Map.Entry::getKey).collect(Collectors.toSet());
     }
 
@@ -219,40 +251,48 @@ final class FullVersionExtraction {
     public ExtractionComponent.Member completed(String name) {
       JsonNode member = members().path(name);
       if (member.isMissingNode()) return null;
-      check(member.isObject() && member.path("bytes").isIntegralNumber(),
+      check(
+          member.isObject() && member.path(BYTES).isIntegralNumber(),
           "Invalid FULL member checkpoint: " + name);
-      check(MEMBER_COMPLETE.equals(required(member, STATUS))
-              || "RECOVERING".equals(required(member, STATUS)),
+      check(
+          MEMBER_COMPLETE.equals(required(member, STATUS))
+              || MEMBER_RECOVERING.equals(required(member, STATUS)),
           "Invalid FULL member status: " + name);
-      String action = required(member, "action");
-      if ("SKIP".equals(action)) {
-        check(!member.has("outputKey") && !member.has("versionId") && !member.has("sha256"),
+      String action = required(member, ACTION);
+      if (MEMBER_SKIP.equals(action)) {
+        check(
+            !member.has(OUTPUT_KEY) && !member.has(VERSION_ID) && !member.has(SHA256),
             "Invalid skipped FULL member checkpoint: " + name);
       }
-      String outputKey = "SKIP".equals(action) ? null : required(member, "outputKey");
-      String versionId = "SKIP".equals(action) ? null : required(member, "versionId");
-      String sha256 = "SKIP".equals(action) ? null : required(member, "sha256");
-      return new ExtractionComponent.Member(action, member.path("bytes").longValue(),
-          outputKey, versionId, sha256);
+      String outputKey = MEMBER_SKIP.equals(action) ? null : required(member, OUTPUT_KEY);
+      String versionId = MEMBER_SKIP.equals(action) ? null : required(member, VERSION_ID);
+      String sha256 = MEMBER_SKIP.equals(action) ? null : required(member, SHA256);
+      return new ExtractionComponent.Member(
+          action, member.path(BYTES).longValue(), outputKey, versionId, sha256);
     }
 
     @Override
     public boolean recovering(String name) {
-      return "RECOVERING".equals(members().path(name).path(STATUS).asText());
+      return MEMBER_RECOVERING.equals(members().path(name).path(STATUS).asText());
     }
 
     @Override
-    public void markRecovering(String name, ExtractionComponent.Member member)
-        throws IOException {
-      check(member.outputKey() != null && !recovering(name),
-          "Invalid FULL member recovery: " + name);
+    public void markRecovering(String name, ExtractionComponent.Member member) throws IOException {
+      check(
+          member.outputKey() != null && !recovering(name), "Invalid FULL member recovery: " + name);
       ObjectNode zip = (ObjectNode) state.value().path(FILES).path(zipKey);
-      ObjectNode checkpoints = zip.path(MEMBERS).isMissingNode()
-          ? zip.putObject(MEMBERS) : (ObjectNode) zip.path(MEMBERS);
+      ObjectNode checkpoints =
+          zip.path(MEMBERS).isMissingNode()
+              ? zip.putObject(MEMBERS)
+              : (ObjectNode) zip.path(MEMBERS);
       ObjectNode recorded = checkpoints.putObject(name);
-      recorded.put(STATUS, "RECOVERING").put("action", member.action())
-          .put("bytes", member.bytes()).put("outputKey", member.outputKey())
-          .put("versionId", member.versionId()).put("sha256", member.sha256());
+      recorded
+          .put(STATUS, MEMBER_RECOVERING)
+          .put(ACTION, member.action())
+          .put(BYTES, member.bytes())
+          .put(OUTPUT_KEY, member.outputKey())
+          .put(VERSION_ID, member.versionId())
+          .put(SHA256, member.sha256());
       state = saveState(bucket, stateKey, state);
     }
 
@@ -266,15 +306,19 @@ final class FullVersionExtraction {
         check(zip.path(MEMBERS).isObject(), "Invalid FULL member checkpoints");
         checkpoints = (ObjectNode) zip.path(MEMBERS);
       }
-      check(!checkpoints.has(name) || recovering(name),
-          "Duplicate FULL member checkpoint: " + name);
-      var recorded = checkpoints.putObject(name).put(STATUS, MEMBER_COMPLETE)
-          .put("action", member.action())
-          .put("bytes", member.bytes());
+      check(
+          !checkpoints.has(name) || recovering(name), "Duplicate FULL member checkpoint: " + name);
+      var recorded =
+          checkpoints
+              .putObject(name)
+              .put(STATUS, MEMBER_COMPLETE)
+              .put(ACTION, member.action())
+              .put(BYTES, member.bytes());
       if (member.outputKey() != null) {
-        recorded.put("outputKey", member.outputKey())
-            .put("versionId", member.versionId())
-            .put("sha256", member.sha256());
+        recorded
+            .put(OUTPUT_KEY, member.outputKey())
+            .put(VERSION_ID, member.versionId())
+            .put(SHA256, member.sha256());
       }
       state = saveState(bucket, stateKey, state);
     }
@@ -296,67 +340,85 @@ final class FullVersionExtraction {
     throw new IllegalArgumentException("Unexpected file rejection", cause);
   }
 
-  private static ExtractionResult rejected(FullExtractionRequest request, JsonNode entries,
-                                           String key, String code, IOException cause) {
+  private static ExtractionResult rejected(
+      FullExtractionRequest request, JsonNode entries, String key, String code, IOException cause) {
     LOG.error("FULL file rejected", cause, Map.of("key", key, "reason_code", code));
 
-    return result(NEEDS_ATTENTION, request.versionId(), entries,
-        new ExtractionResult.Failure(key, code));
+    return result(
+        NEEDS_ATTENTION, request.versionId(), entries, new ExtractionResult.Failure(key, code));
   }
 
-  private static ExtractionResult result(ExtractionResult.Status status, String version,
-                                         JsonNode entries, ExtractionResult.Failure failure) {
+  private static ExtractionResult result(
+      ExtractionResult.Status status,
+      String version,
+      JsonNode entries,
+      ExtractionResult.Failure failure) {
     int done = 0;
     for (var entry : entries.properties()) {
       if (UNPACKED.equals(entry.getValue().path(STATUS).asText())) done++;
     }
 
-    return new ExtractionResult(status, "FULL", version, done, entries.size() - done,
+    return new ExtractionResult(
+        status,
+        "FULL",
+        version,
+        done,
+        entries.size() - done,
         failure == null ? List.of() : List.of(failure));
   }
 
-  private static JsonNode loadAndValidateManifest(ReleaseStore store, String bucket,
-                                                  String versionPrefix, FullExtractionRequest request)
+  private static JsonNode loadAndValidateManifest(
+      ReleaseStore store, String bucket, String versionPrefix, FullExtractionRequest request)
       throws IOException {
     JsonNode manifest = store.read(bucket, versionPrefix + "manifest/data_package_manifest.json");
     if (manifest == null) return null;
-    check("FULL".equals(required(manifest, "mode"))
+    check(
+        "FULL".equals(required(manifest, "mode"))
             && request.packageId().equals(required(manifest, "packageId"))
             && request.versionId().equals(required(manifest, VERSION_ID))
-            && manifest.has("previous") && manifest.get("previous").isNull(),
+            && manifest.has("previous")
+            && manifest.get("previous").isNull(),
         "FULL version manifest does not match request");
 
     return manifest;
   }
 
-  private State loadOrInitaliseState(ReleaseStore store, String bucket, String versionPrefix,
-                                     String stateKey, JsonNode manifest) throws IOException {
+  private State loadOrInitaliseState(
+      ReleaseStore store, String bucket, String versionPrefix, String stateKey, JsonNode manifest)
+      throws IOException {
     String manifestSha = sha(manifest.toString().getBytes(StandardCharsets.UTF_8));
     State state = readState(bucket, stateKey);
 
     if (state == null) {
       List<InputFile> files = getDownloadFiles(store, bucket, versionPrefix);
-      var initial = JSON.createObjectNode().put("manifestSha256", manifestSha)
-          .put(STATE_COMPLETE, false);
+      var initial =
+          JSON.createObjectNode().put("manifestSha256", manifestSha).put(STATE_COMPLETE, false);
       var entries = initial.putObject(FILES);
 
       for (InputFile file : files) {
-        entries.putObject(file.key())
-                .put(VERSION_ID, file.versionId())
-                .put(FEATURE_TYPE, file.featureType())
-                .put("type", file.type())
-                .put(STATUS, PENDING)
-                .putArray(OUTPUT_KEYS);
+        entries
+            .putObject(file.key())
+            .put(VERSION_ID, file.versionId())
+            .put(FEATURE_TYPE, file.featureType())
+            .put("type", file.type())
+            .put(STATUS, PENDING)
+            .putArray(OUTPUT_KEYS);
       }
 
-      s3.putObject(PutObjectRequest.builder().bucket(bucket).key(stateKey)
-                      .ifNoneMatch("*").contentType("application/json").build(),
-              RequestBody.fromString(initial.toString()));
+      s3.putObject(
+          PutObjectRequest.builder()
+              .bucket(bucket)
+              .key(stateKey)
+              .ifNoneMatch("*")
+              .contentType("application/json")
+              .build(),
+          RequestBody.fromString(initial.toString()));
       state = requireState(bucket, stateKey);
     }
 
-    check(manifestSha.equals(required(state.value(), "manifestSha256")),
-            "FULL unpack state does not match version manifest");
+    check(
+        manifestSha.equals(required(state.value(), "manifestSha256")),
+        "FULL unpack state does not match version manifest");
     check(state.value().path(STATE_COMPLETE).isBoolean(), "Invalid FULL completion flag");
 
     return state;
@@ -374,20 +436,24 @@ final class FullVersionExtraction {
       String featureType = required(entry, FEATURE_TYPE);
       String type = required(entry, "type");
 
-      String filename = switch (type) {
-        case "ZIP" -> featureType + ".zip";
-        case ORDER_SUMMARY -> featureType + ORDER_SUMMARY_SUFFIX;
-        default -> throw new IllegalArgumentException("Unexpected FULL file type: " + type);
-      };
+      String filename =
+          switch (type) {
+            case "ZIP" -> featureType + ".zip";
+            case ORDER_SUMMARY -> featureType + ORDER_SUMMARY_SUFFIX;
+            default -> throw new IllegalArgumentException("Unexpected FULL file type: " + type);
+          };
 
-      check(!versionId.isBlank() && key.equals(versionPrefix + DOWNLOADS_PREFIX + filename), "Invalid FULL file entry");
+      check(
+          !versionId.isBlank() && key.equals(versionPrefix + DOWNLOADS_PREFIX + filename),
+          "Invalid FULL file entry");
       extractionHeader(featureType);
 
       String status = required(entry, STATUS);
       check(PENDING.equals(status) || UNPACKED.equals(status), "Unknown unpacked status");
       check(entry.path(OUTPUT_KEYS).isArray(), "Invalid FULL output keys");
       check(!entry.has(SKIPPED) || entry.path(SKIPPED).isArray(), "Invalid FULL skipped entries");
-      check(!entry.has(MEMBERS) || ("ZIP".equals(type) && entry.path(MEMBERS).isObject()),
+      check(
+          !entry.has(MEMBERS) || ("ZIP".equals(type) && entry.path(MEMBERS).isObject()),
           "Invalid FULL member checkpoints");
 
       if (UNPACKED.equals(status)) {
@@ -398,8 +464,9 @@ final class FullVersionExtraction {
     }
 
     if (state.path(STATE_COMPLETE).asBoolean()) {
-      check(files.stream().allMatch(file ->
-                      UNPACKED.equals(entries.path(file.key()).path(STATUS).asText())),
+      check(
+          files.stream()
+              .allMatch(file -> UNPACKED.equals(entries.path(file.key()).path(STATUS).asText())),
           "FULL unpack state is marked complete but has pending files");
     }
 
@@ -409,8 +476,11 @@ final class FullVersionExtraction {
   private static String prefix(String configured) {
     check(configured != null, "Missing feed prefix");
     if (configured.isEmpty()) return "";
-    check(!configured.startsWith("/") && !configured.contains("..")
-        && !configured.contains("//") && configured.matches("[a-zA-Z0-9_/-]+"),
+    check(
+        !configured.startsWith("/")
+            && !configured.contains("..")
+            && !configured.contains("//")
+            && configured.matches("[a-zA-Z0-9_/-]+"),
         "Invalid feed prefix");
     return configured.endsWith("/") ? configured : configured + "/";
   }
@@ -418,7 +488,7 @@ final class FullVersionExtraction {
   private record InputFile(String key, String versionId, String featureType, String type) {}
 
   private static List<InputFile> getDownloadFiles(
-          ReleaseStore store, String bucket, String versionPrefix) {
+      ReleaseStore store, String bucket, String versionPrefix) {
     var files = new ArrayList<InputFile>();
     String inputPrefix = versionPrefix + DOWNLOADS_PREFIX;
 
@@ -452,8 +522,9 @@ final class FullVersionExtraction {
   private record State(ObjectNode value, String stateTag) {}
 
   private State readState(String bucket, String key) throws IOException {
-    var objects = s3.listObjectsV2(ListObjectsV2Request.builder()
-        .bucket(bucket).prefix(key).maxKeys(1).build());
+    var objects =
+        s3.listObjectsV2(
+            ListObjectsV2Request.builder().bucket(bucket).prefix(key).maxKeys(1).build());
     if (objects.contents().stream().noneMatch(object -> key.equals(object.key()))) return null;
     try (var input = s3.getObject(GetObjectRequest.builder().bucket(bucket).key(key).build())) {
       byte[] bytes = input.readNBytes(1024 * 1024 + 1);
@@ -466,10 +537,14 @@ final class FullVersionExtraction {
     }
   }
 
-  private State saveState(String bucket, String key, State state)
-      throws IOException {
-    s3.putObject(PutObjectRequest.builder().bucket(bucket).key(key).ifMatch(state.stateTag())
-            .contentType("application/json").build(),
+  private State saveState(String bucket, String key, State state) throws IOException {
+    s3.putObject(
+        PutObjectRequest.builder()
+            .bucket(bucket)
+            .key(key)
+            .ifMatch(state.stateTag())
+            .contentType("application/json")
+            .build(),
         RequestBody.fromString(state.value().toString()));
     return requireState(bucket, key);
   }

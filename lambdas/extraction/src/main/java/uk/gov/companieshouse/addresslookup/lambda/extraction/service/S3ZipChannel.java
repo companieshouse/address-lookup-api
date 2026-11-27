@@ -30,8 +30,9 @@ final class S3ZipChannel implements SeekableByteChannel {
     this.bucket = bucket;
     this.key = key;
     this.version = version;
-    var head = s3.headObject(HeadObjectRequest.builder()
-        .bucket(bucket).key(key).versionId(version).build());
+    var head =
+        s3.headObject(
+            HeadObjectRequest.builder().bucket(bucket).key(key).versionId(version).build());
     this.size = head.contentLength();
     if (!version.equals(head.versionId()))
       throw new IllegalStateException("Pinned FULL ZIP version changed: " + key);
@@ -59,12 +60,22 @@ final class S3ZipChannel implements SeekableByteChannel {
     int total = 0;
     while (dst.hasRemaining() && position < size) {
       if (bufferStart < 0 || position < bufferStart || position >= bufferStart + buffer.length) {
-        int length = (int) Math.min(size - position,
-            readAheadEnd < 0 ? dst.remaining() : Math.min(BUFFER_BYTES, readAheadEnd - position));
+        int length =
+            (int)
+                Math.min(
+                    size - position,
+                    readAheadEnd < 0
+                        ? dst.remaining()
+                        : Math.min(BUFFER_BYTES, readAheadEnd - position));
         if (length <= 0) throw new EOFException("ZIP member read exceeded compressed size");
         long end = position + length - 1;
-        var request = GetObjectRequest.builder().bucket(bucket).key(key).versionId(version)
-            .range("bytes=" + position + "-" + end).build();
+        var request =
+            GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .versionId(version)
+                .range("bytes=" + position + "-" + end)
+                .build();
         try (var input = s3.getObject(request)) {
           String expectedRange = "bytes " + position + "-" + end + "/" + size;
           if (!expectedRange.equals(input.response().contentRange())

@@ -3,10 +3,18 @@ package uk.gov.companieshouse.addresslookup.lambda.extraction.service;
 import java.util.List;
 import java.util.Objects;
 
-public record ExtractionResult(Status status, String mode, String version,
-                               Integer filesDone, Integer filesRemaining, List<Failure> failed) {
+public record ExtractionResult(
+    Status status,
+    String mode,
+    String version,
+    Integer filesDone,
+    Integer filesRemaining,
+    List<Failure> failed) {
   public enum Status {
-    IN_PROGRESS, COMPLETE, NOTHING_NEW, NEEDS_ATTENTION
+    IN_PROGRESS,
+    COMPLETE,
+    NOTHING_NEW,
+    NEEDS_ATTENTION
   }
 
   public record Failure(String key, String code) {}
